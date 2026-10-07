@@ -1,0 +1,18 @@
+{
+  "client_id": "northline-supply",
+  "name": "Northline Supply Co.",
+  "owner_email": "ops@northlinesupply.example",
+  "status": "demo",
+  "sources_in": ["Google Sheets", "CSV"],
+  "sources_out": null,
+  "screens": ["Executive summary", "Sales pipeline", "Inventory snapshot"],
+  "dashboard_url": null,
+  "file_url": null,
+  "setup_fee": 1500,
+  "setup_status": "not_invoiced",
+  "monthly_fee": 249,
+  "monthly_includes": null,
+  "mrr_start": null,
+  "card_version": 1,
+  "updated_at": "2025-10-01T12:00:00.000Z"
+}
