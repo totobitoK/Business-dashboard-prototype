@@ -1,3 +1,5 @@
+export const MARKETING = "/";
+
 export const ADMIN = "/admin";
 
 export const adminRoutes = {
@@ -9,6 +11,10 @@ export const adminRoutes = {
   clientsArchived: `${ADMIN}/clients?filter=archived`,
   onboarding: `${ADMIN}/onboarding`,
   activity: `${ADMIN}/activity`,
+} as const;
+
+export const marketingRoutes = {
+  home: MARKETING,
 } as const;
 
 export const clientRoutes = {

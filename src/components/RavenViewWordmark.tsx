@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { branding } from "@/lib/branding";
 
-type WordmarkSize = "sm" | "md";
+type WordmarkSize = "sm" | "md" | "lg" | "xl";
 
 const sizeClasses: Record<WordmarkSize, string> = {
   sm: "text-sm",
   md: "text-lg",
+  lg: "text-2xl",
+  xl: "text-3xl sm:text-4xl",
 };
 
 export function RavenViewWordmark({
