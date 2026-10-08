@@ -72,6 +72,8 @@ interface ClientStoreContextValue {
     status: ConnectionDemoStatus
   ) => void;
   setPaymentOnlyPrepConfirmed: (id: string, confirmed: boolean) => void;
+  submitCustomerPreviewFeedback: (id: string, feedback: string) => void;
+  approveCustomerPreview: (id: string) => void;
   resetToDemoData: () => void;
 }
 
@@ -79,6 +81,13 @@ const ClientStoreContext = createContext<ClientStoreContextValue | null>(null);
 
 function generateId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function mergeMissingDemoClients(loaded: Client[]): Client[] {
+  const ids = new Set(loaded.map((c) => c.id));
+  const missing = demoClients.filter((c) => !ids.has(c.id));
+  if (missing.length === 0) return loaded;
+  return [...loaded, ...missing];
 }
 
 function syncSetupPayment(client: Client): Client {
@@ -167,7 +176,8 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setClients(normalizeClients(JSON.parse(stored) as Client[]));
+        const parsed = JSON.parse(stored) as Client[];
+        setClients(normalizeClients(mergeMissingDemoClients(parsed)));
       } else {
         setClients(normalizeClients(demoClients));
       }
@@ -530,6 +540,52 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const submitCustomerPreviewFeedback = useCallback(
+    (id: string, feedback: string) => {
+      const trimmed = feedback.trim();
+      if (!trimmed) return;
+      setClients((prev) =>
+        prev.map((c) => {
+          if (c.id !== id) return c;
+          const note: Note = {
+            id: generateId("note"),
+            date: new Date().toISOString(),
+            content: `Customer preview feedback: ${trimmed}`,
+          };
+          return {
+            ...c,
+            previewChangeRequest: trimmed,
+            previewApprovedAt: undefined,
+            notes: [note, ...c.notes],
+          };
+        })
+      );
+    },
+    []
+  );
+
+  const approveCustomerPreview = useCallback((id: string) => {
+    setClients((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) return c;
+        const admin = new Set(c.adminCompletedMilestones ?? []);
+        admin.add("client-review");
+        const note: Note = {
+          id: generateId("note"),
+          date: new Date().toISOString(),
+          content: "Customer approved dashboard preview (portal — no payment recorded).",
+        };
+        return {
+          ...c,
+          previewApprovedAt: new Date().toISOString(),
+          previewChangeRequest: undefined,
+          adminCompletedMilestones: [...admin],
+          notes: [note, ...c.notes],
+        };
+      })
+    );
+  }, []);
+
   const resetToDemoData = useCallback(() => {
     setClients(normalizeClients(demoClients));
     localStorage.removeItem(STORAGE_KEY);
@@ -552,6 +608,8 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       toggleAdminMilestone,
       updateGuidedConnectionDemoStatus,
       setPaymentOnlyPrepConfirmed,
+      submitCustomerPreviewFeedback,
+      approveCustomerPreview,
       resetToDemoData,
     }),
     [
@@ -570,6 +628,8 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       toggleAdminMilestone,
       updateGuidedConnectionDemoStatus,
       setPaymentOnlyPrepConfirmed,
+      submitCustomerPreviewFeedback,
+      approveCustomerPreview,
       resetToDemoData,
     ]
   );

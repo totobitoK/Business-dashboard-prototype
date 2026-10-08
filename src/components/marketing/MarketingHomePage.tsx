@@ -15,7 +15,12 @@ import {
   MARKETING_DATA_SOURCES,
   marketingConnectionsHref,
 } from "@/lib/marketing-data-sources";
-import { adminRoutes, clientRoutes, marketingRoutes } from "@/lib/routes";
+import {
+  adminRoutes,
+  clientRoutes,
+  dashboardRoutes,
+  marketingRoutes,
+} from "@/lib/routes";
 
 const navLinkClass =
   "text-base font-semibold text-ink transition-colors hover:text-purple lg:text-lg";
@@ -339,6 +344,9 @@ export function MarketingHomePage() {
         <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-4 px-5 sm:flex-row sm:items-center sm:px-8">
           <RavenViewWordmark size="lg" />
           <div className="flex flex-wrap gap-4 text-sm font-medium text-ink">
+            <Link href={dashboardRoutes.home} className="hover:text-purple">
+              Customer portal (demo)
+            </Link>
             <Link href={adminRoutes.dashboard} className="hover:text-purple">
               Admin (prototype)
             </Link>

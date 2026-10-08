@@ -22,3 +22,13 @@ export const clientRoutes = {
   onboarding: (clientId: string) => `/onboarding/${clientId}`,
   onboardingPayment: (clientId: string) => `/onboarding/${clientId}/payment`,
 } as const;
+
+export const DASHBOARD = "/dashboard";
+
+export const dashboardRoutes = {
+  home: DASHBOARD,
+  connections: `${DASHBOARD}/connections`,
+  settings: `${DASHBOARD}/settings`,
+} as const;
+
+export const portalRoutes = dashboardRoutes;

@@ -159,6 +159,10 @@ export interface Client {
   paymentOnlyPrepConfirmed?: boolean;
   /** Bump when normalizeClient milestone repair runs; stops re-inferring admin milestones. */
   milestoneMigrationVersion?: number;
+  /** Customer portal — preview approved locally; does not activate or charge. */
+  previewApprovedAt?: string;
+  /** Latest customer preview feedback (also copied to notes for admin). */
+  previewChangeRequest?: string;
 }
 
 export type ClientFilter = "all" | ClientStatus;
