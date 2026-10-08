@@ -8,6 +8,11 @@ import { ManageDrawer } from "@/components/ManageDrawer";
 import { ProgressBar } from "@/components/ProgressBar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useClientStore } from "@/lib/client-store";
+import {
+  CUSTOMER_PORTAL_STAGE_LABELS,
+  getCustomerPortalStage,
+} from "@/lib/customer-portal-stage";
+import { getWorkspaceForClientId } from "@/lib/customer-workspaces";
 import { getNextStepLabel, getOnboardingProgress } from "@/lib/onboarding";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import type { Client, ClientFilter } from "@/lib/types";
@@ -140,6 +145,7 @@ export function ClientsPageContent() {
               <th className="px-5 py-3 font-medium text-navy-muted">
                 Onboarding
               </th>
+              <th className="px-5 py-3 font-medium text-navy-muted">Portal</th>
               <th className="px-5 py-3 font-medium text-navy-muted">
                 <span className="sr-only">Actions</span>
               </th>
@@ -149,7 +155,7 @@ export function ClientsPageContent() {
             {filteredClients.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-5 py-8 text-center text-navy-muted"
                 >
                   No clients match this filter.
@@ -233,6 +239,9 @@ function ClientRow({
         )}
       </td>
       <td className="px-5 py-3.5">
+        <ClientPortalStageBadge client={client} />
+      </td>
+      <td className="px-5 py-3.5">
         <button
           type="button"
           onClick={() => onManage(client.id)}
@@ -274,6 +283,9 @@ function ClientCard({
           <CurrencyAmount amount={client.monthlyFee} />
         </span>
       </div>
+      <div className="mt-3">
+        <ClientPortalStageBadge client={client} />
+      </div>
       {client.status === "pending" && (
         <div className="mt-3">
           <ProgressBar value={progress} label="Onboarding" />
@@ -292,6 +304,19 @@ function ClientCard({
         Manage
       </button>
     </div>
+  );
+}
+
+function ClientPortalStageBadge({ client }: { client: Client }) {
+  const workspace = getWorkspaceForClientId(client.id);
+  if (!workspace) {
+    return <span className="text-xs text-navy-muted">—</span>;
+  }
+  const stage = getCustomerPortalStage(client);
+  return (
+    <span className="inline-block max-w-[9rem] rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-dark">
+      {CUSTOMER_PORTAL_STAGE_LABELS[stage]}
+    </span>
   );
 }
 

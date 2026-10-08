@@ -2,25 +2,33 @@
 
 import { useEffect, useState } from "react";
 import { CurrencyAmount } from "./CurrencyAmount";
+import { AdminCustomerPortalSnapshot } from "./admin/AdminCustomerPortalSnapshot";
 import { AdminMilestones } from "./AdminMilestones";
 import { ComingSoon } from "./ComingSoon";
 import { OnboardingStepsDisplay } from "./OnboardingSteps";
 import { StatusBadge } from "./StatusBadge";
 import { useClientStore } from "@/lib/client-store";
 import {
-  canActivateClient,
   getOnboardingFormStatusLabel,
   getSetupRemaining,
   isScopePricingConfirmed,
 } from "@/lib/onboarding";
+import { getActivationEligibility } from "@/lib/client-activation";
+import { buildCustomerPortalPreviewUrl } from "@/lib/customer-portal-context";
+import { getWorkspaceForClientId } from "@/lib/customer-workspaces";
 import { formatToolsList } from "@/lib/metrics";
 import { clientRoutes } from "@/lib/routes";
 import {
   CONNECTION_STATUS_LABELS,
   getDepositAmount,
   isFinalBalancePaid,
+  isMilestoneComplete,
 } from "@/lib/client-milestones";
 import { canAcceptScopeCard } from "@/lib/scope-card-export";
+import {
+  parseOfflinePaymentAmount,
+  todayDateInputValue,
+} from "@/lib/offline-payment-input";
 import type {
   ClientOnboardingSubmission,
   ClientStatus,
@@ -47,6 +55,7 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
     acceptScopeCard,
     updateGuidedConnectionDemoStatus,
     setPaymentOnlyPrepConfirmed,
+    markPreviewReadyForReview,
   } = useClientStore();
 
   const client = clients.find((c) => c.id === clientId) ?? null;
@@ -54,6 +63,13 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentType, setPaymentType] = useState<PaymentType>("setup");
   const [paymentNote, setPaymentNote] = useState("");
+  const [paymentDate, setPaymentDate] = useState("");
+  const [paymentMethodRef, setPaymentMethodRef] = useState("");
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState<{
+    type: "error" | "success";
+    text: string;
+  } | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -64,6 +80,8 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
     if (clientId) {
       document.addEventListener("keydown", onKeyDown);
       document.body.style.overflow = "hidden";
+      setPaymentDate(todayDateInputValue());
+      setPaymentMessage(null);
     }
     return () => {
       document.removeEventListener("keydown", onKeyDown);
@@ -75,7 +93,9 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
 
   const setupRemaining = getSetupRemaining(client);
   const depositDue = getDepositAmount(client);
-  const canActivate = canActivateClient(client);
+  const activation = getActivationEligibility(client);
+  const canActivate = activation.canActivate;
+  const portalWorkspace = getWorkspaceForClientId(client.id);
 
   function handleAddNote() {
     if (!noteText.trim()) return;
@@ -84,11 +104,35 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
   }
 
   function handleAddPayment() {
-    const amount = parseFloat(paymentAmount);
-    if (!amount || amount <= 0) return;
-    addPayment(client!.id, amount, paymentType, paymentNote.trim() || undefined);
+    if (paymentSaving) return;
+    setPaymentMessage(null);
+    const parsed = parseOfflinePaymentAmount(paymentAmount);
+    if (!parsed.ok) {
+      setPaymentMessage({ type: "error", text: parsed.error });
+      return;
+    }
+    setPaymentSaving(true);
+    const result = addPayment(client!.id, parsed.amount, paymentType, {
+      note: paymentNote.trim() || undefined,
+      dateReceived: paymentDate || todayDateInputValue(),
+      methodReference: paymentMethodRef.trim() || undefined,
+    });
+    setPaymentSaving(false);
+    if (!result.ok) {
+      setPaymentMessage({
+        type: "error",
+        text: result.error ?? "Could not save payment to browser storage.",
+      });
+      return;
+    }
+    setPaymentMessage({
+      type: "success",
+      text: "Offline payment recorded and saved locally.",
+    });
     setPaymentAmount("");
     setPaymentNote("");
+    setPaymentMethodRef("");
+    setPaymentDate(todayDateInputValue());
   }
 
   async function handleAcceptScopeCard() {
@@ -147,6 +191,8 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+          <AdminCustomerPortalSnapshot client={client} />
+
           {/* Status */}
           <Section title="Status">
             <select
@@ -160,9 +206,22 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
               <option value="active">Active</option>
               <option value="archived">Archived</option>
             </select>
-            {client.status === "pending" && !canActivate && (
+            {(client.status === "pending" ||
+              (client.status === "archived" && !client.launchedAt)) &&
+              !canActivate && (
+              <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
+                <p className="font-semibold">Activation blocked</p>
+                <ul className="mt-1 list-inside list-disc">
+                  {activation.blockedReasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {client.status === "archived" && client.launchedAt && (
               <p className="mt-2 text-xs text-navy-muted">
-                Complete onboarding and setup payment before activating.
+                Previously launched {new Date(client.launchedAt).toLocaleDateString()}.
+                Reactivation does not require repeating onboarding in this demo.
               </p>
             )}
             {client.status === "active" && (
@@ -333,10 +392,31 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
               disabled={client.status === "archived"}
               placeholder="https://..."
             />
+            {isMilestoneComplete(client, "building") && client.status === "pending" && (
+              <div className="mt-3 rounded-lg border border-baby-200 bg-baby-50/50 p-3">
+                <p className="text-xs font-semibold text-navy">Dashboard preview review</p>
+                <p className="mt-1 text-xs text-navy-muted">
+                  After incorporating feedback, bump revision so customer approval applies
+                  to the revised preview.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => markPreviewReadyForReview(client.id)}
+                  className="mt-2 rounded-lg border border-purple bg-white px-3 py-1.5 text-xs font-semibold text-purple hover:bg-purple-50 disabled:opacity-50"
+                >
+                  Mark revised preview ready for review
+                </button>
+                {client.previewChangeRequest && (
+                  <p className="mt-2 text-xs text-navy">
+                    Latest feedback: {client.previewChangeRequest}
+                  </p>
+                )}
+              </div>
+            )}
             {(client.guidedConnections?.length ?? 0) > 0 && (
               <div className="mt-3 space-y-2">
                 <p className="text-xs font-medium text-navy-muted">
-                  Simulated connection progress (demo)
+                  Simulated connection progress (demo — not a real provider link)
                 </p>
                 {client.guidedConnections!.map((conn) => (
                   <label key={conn.id} className="block text-sm">
@@ -433,6 +513,20 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
             >
               Open client onboarding ↗
             </a>
+            {portalWorkspace ? (
+              <a
+                href={buildCustomerPortalPreviewUrl(portalWorkspace.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-purple hover:text-purple-dark"
+              >
+                Open customer portal preview ↗
+              </a>
+            ) : (
+              <p className="mt-2 text-xs text-navy-muted">
+                Customer portal preview unavailable — no demo workspace linked.
+              </p>
+            )}
           </Section>
 
           <Section title="Scope card export">
@@ -566,6 +660,16 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
                       <span className="font-medium capitalize text-navy">
                         {p.type}
                       </span>
+                      <span className="ml-2 text-xs text-navy-muted">
+                        {p.recordSource === "online"
+                          ? "Online (processor)"
+                          : "Offline / manual"}
+                      </span>
+                      {p.methodReference && (
+                        <span className="ml-2 text-xs text-navy-muted">
+                          Ref: {p.methodReference}
+                        </span>
+                      )}
                       {p.note && (
                         <span className="ml-2 text-xs text-navy-muted">
                           {p.note}
@@ -587,44 +691,91 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
 
             {client.status !== "archived" && (
               <div className="mt-3 space-y-2 rounded-lg border border-baby-200 bg-baby-50/50 p-3">
-                <p className="text-xs font-medium text-navy-muted">
-                  Record manual payment (demo — not live checkout)
+                <p className="text-sm font-semibold text-navy">
+                  Record offline payment
+                </p>
+                <p className="text-xs text-navy-muted">
+                  Record money already received outside online checkout. This does
+                  not charge the customer. Future online payments will only be
+                  recorded after verified processor confirmation.
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="Amount"
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    className={inputClass}
-                  />
-                  <select
-                    value={paymentType}
-                    onChange={(e) =>
-                      setPaymentType(e.target.value as PaymentType)
-                    }
-                    className={inputClass}
-                  >
-                    <option value="setup">Setup</option>
-                    <option value="subscription">Subscription</option>
-                    <option value="refund">Refund</option>
-                  </select>
+                  <label className="block text-xs text-navy-muted">
+                    Amount (USD)
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      className={inputClass + " mt-0.5"}
+                    />
+                  </label>
+                  <label className="block text-xs text-navy-muted">
+                    Payment type
+                    <select
+                      value={paymentType}
+                      onChange={(e) =>
+                        setPaymentType(e.target.value as PaymentType)
+                      }
+                      className={inputClass + " mt-0.5"}
+                    >
+                      <option value="setup">Setup</option>
+                      <option value="subscription">Subscription</option>
+                      <option value="refund">Refund</option>
+                    </select>
+                  </label>
+                  <label className="block text-xs text-navy-muted">
+                    Date received
+                    <input
+                      type="date"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      className={inputClass + " mt-0.5"}
+                    />
+                  </label>
+                  <label className="block text-xs text-navy-muted">
+                    Method / reference (optional)
+                    <input
+                      type="text"
+                      placeholder="Check #, wire ref…"
+                      value={paymentMethodRef}
+                      onChange={(e) => setPaymentMethodRef(e.target.value)}
+                      className={inputClass + " mt-0.5"}
+                    />
+                  </label>
                 </div>
-                <input
-                  type="text"
-                  placeholder="Note (optional)"
-                  value={paymentNote}
-                  onChange={(e) => setPaymentNote(e.target.value)}
-                  className={inputClass}
-                />
+                <label className="block text-xs text-navy-muted">
+                  Note (optional)
+                  <input
+                    type="text"
+                    value={paymentNote}
+                    onChange={(e) => setPaymentNote(e.target.value)}
+                    className={inputClass + " mt-0.5"}
+                  />
+                </label>
+                {paymentMessage && (
+                  <p
+                    className={`text-xs ${
+                      paymentMessage.type === "error"
+                        ? "text-amber-900"
+                        : "text-emerald-800"
+                    }`}
+                    role={paymentMessage.type === "error" ? "alert" : "status"}
+                  >
+                    {paymentMessage.text}
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={handleAddPayment}
-                  className={secondaryBtnClass + " w-full"}
+                  disabled={paymentSaving}
+                  className={
+                    secondaryBtnClass +
+                    " w-full disabled:cursor-not-allowed disabled:opacity-60"
+                  }
                 >
-                  Add payment
+                  {paymentSaving ? "Saving…" : "Record offline payment"}
                 </button>
               </div>
             )}
@@ -758,13 +909,24 @@ export function ManageDrawer({ clientId, onClose }: ManageDrawerProps) {
             </button>
           )}
           {client.status === "archived" && (
-            <button
-              type="button"
-              onClick={() => setClientStatus(client.id, "active")}
-              className={primaryBtnClass + " w-full"}
-            >
-              Reactivate client
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setClientStatus(client.id, "active")}
+                disabled={!canActivate}
+                className={
+                  primaryBtnClass +
+                  " w-full disabled:cursor-not-allowed disabled:opacity-50"
+                }
+              >
+                {canActivate ? "Reactivate client" : "Reactivate client — requirements not met"}
+              </button>
+              {!canActivate && (
+                <p className="mt-2 text-xs text-navy-muted">
+                  {activation.blockedReasons.join(" ")}
+                </p>
+              )}
+            </>
           )}
         </div>
       </aside>

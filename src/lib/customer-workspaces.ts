@@ -28,6 +28,14 @@ export function getWorkspaceById(id: string): CustomerWorkspaceMeta | undefined 
   return CUSTOMER_DEMO_WORKSPACES.find((w) => w.id === id);
 }
 
+export function getWorkspaceForClientId(clientId: string): CustomerWorkspaceMeta | undefined {
+  return CUSTOMER_DEMO_WORKSPACES.find((w) => w.clientId === clientId);
+}
+
+export function isValidWorkspaceId(id: string): boolean {
+  return CUSTOMER_DEMO_WORKSPACES.some((w) => w.id === id);
+}
+
 export function getDefaultWorkspaceId(): string {
   return WORKSPACE_ALPINE_HVAC;
 }

@@ -1,4 +1,5 @@
-import { canActivateClientFromMilestones, canShowDepositPreview } from "./client-milestones";
+import { canShowDepositPreview } from "./client-milestones";
+import { canActivateClient as canActivateFromRules } from "./client-activation";
 import type {
   Client,
   OnboardingPath,
@@ -12,13 +13,11 @@ export const FULL_ONBOARDING_STEPS: FullOnboardingStep[] = [
   "scope-pricing-confirmed",
   "setup-payment-received",
   "dashboard-ready",
-  "active",
 ];
 
 export const PAYMENT_ONLY_ONBOARDING_STEPS: PaymentOnlyOnboardingStep[] = [
   "setup-payment-received",
   "dashboard-ready",
-  "active",
 ];
 
 export const STEP_LABELS: Record<OnboardingStep, string> = {
@@ -58,8 +57,11 @@ export function getNextStep(client: Client): OnboardingStep | null {
 }
 
 export function getNextStepLabel(client: Client): string | null {
+  if (client.status === "active") return null;
   const step = getNextStep(client);
-  if (!step) return null;
+  if (!step) {
+    return isOnboardingComplete(client) ? "Ready to activate" : null;
+  }
 
   if (
     step === "setup-payment-received" &&
@@ -83,12 +85,13 @@ export function getStepState(
 }
 
 export function isOnboardingComplete(client: Client): boolean {
+  if (client.status === "active") return true;
   const steps = getStepsForPath(client.onboardingPath);
   return steps.every((s) => client.completedSteps.includes(s));
 }
 
 export function canActivateClient(client: Client): boolean {
-  return canActivateClientFromMilestones(client);
+  return canActivateFromRules(client);
 }
 
 export function getSetupRemaining(client: Client): number {

@@ -1,6 +1,7 @@
 "use client";
 
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { CustomerSetupPaymentPanel } from "@/components/customer/CustomerSetupPaymentPanel";
 import { ClientOnboardingForm } from "@/components/onboarding/ClientOnboardingForm";
 import {
   canShowDepositPreview,
@@ -249,14 +250,9 @@ function DepositPhase({ client }: { client: Client }) {
         </p>
       </div>
       {isDepositPaid(client) ? (
-        <p className="text-xs text-emerald-700">Deposit received — thank you.</p>
+        <p className="text-xs text-emerald-700">Deposit recorded toward setup — thank you.</p>
       ) : (
-        <>
-          <PreviewCheckout label={`Pay deposit — ${formatUsd(deposit)}`} />
-          <p className="text-xs text-ink-subtle">
-            Payment preview only — checkout is not connected in this prototype.
-          </p>
-        </>
+        <CustomerSetupPaymentPanel client={client} mode="deposit" />
       )}
     </div>
   );
@@ -280,9 +276,7 @@ function FinalLaunchPhase({ client }: { client: Client }) {
         {client.status === "active" ? (
           <p className="text-sm text-ink-muted">Your dashboard is live.</p>
         ) : (
-          <p className="text-sm text-ink-muted">
-            Launch pending — our team will activate your subscription when ready.
-          </p>
+          <p className="text-sm font-medium text-ink">Awaiting launch</p>
         )}
       </div>
     );
@@ -304,10 +298,7 @@ function FinalLaunchPhase({ client }: { client: Client }) {
           <CurrencyAmount amount={remaining} />
         </div>
       </div>
-      <PreviewCheckout label={`Pay remaining balance — ${formatUsd(remaining)}`} />
-      <p className="text-xs text-ink-subtle">
-        Preview only — this will not activate your account or subscription.
-      </p>
+      <CustomerSetupPaymentPanel client={client} mode="final-balance" />
     </div>
   );
 }
@@ -380,22 +371,3 @@ function GuidedSetupPhase({ client }: { client: Client }) {
   );
 }
 
-function PreviewCheckout({ label }: { label: string }) {
-  return (
-    <button
-      type="button"
-      disabled
-      className="w-full cursor-not-allowed rounded-lg bg-purple/40 px-4 py-2.5 text-sm font-medium text-white"
-    >
-      {label} (preview)
-    </button>
-  );
-}
-
-function formatUsd(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}

@@ -11,6 +11,12 @@ import {
   type ReactNode,
 } from "react";
 import { normalizeClients } from "./client-migration";
+import {
+  CLIENT_DEMO_STORAGE_KEY,
+  loadPersistedClients,
+  mergeMissingDemoClients,
+  mutatePersistedClientList,
+} from "./client-store-persistence";
 import { demoClients, DEFAULT_MONTHLY_FEE, DEFAULT_SETUP_FEE } from "./demo-data";
 import { toFullAnswers } from "./onboarding-form";
 import { syncGuidedConnectionsFromScope } from "./client-milestones";
@@ -28,8 +34,12 @@ import type {
   Payment,
   PaymentType,
 } from "./types";
+import { canActivateClient } from "./client-activation";
 import {
-  canActivateClient,
+  buildPreviewInvalidationPatch,
+  getCurrentPreviewRevision,
+} from "./preview-review";
+import {
   getStepsForPath,
   isOnboardingComplete,
 } from "./onboarding";
@@ -45,8 +55,6 @@ import {
   touchesScopeCardFields,
 } from "./scope-card-sync";
 
-const STORAGE_KEY = "client-operations-demo-data";
-
 interface ClientStoreContextValue {
   clients: Client[];
   addClient: (data: ClientFormData) => Client;
@@ -58,8 +66,13 @@ interface ClientStoreContextValue {
     id: string,
     amount: number,
     type: PaymentType,
-    note?: string
-  ) => void;
+    options?: {
+      note?: string;
+      dateReceived?: string;
+      methodReference?: string;
+      recordSource?: Payment["recordSource"];
+    }
+  ) => { ok: boolean; error?: string };
   addNote: (id: string, content: string) => void;
   activateClient: (id: string) => void;
   saveOnboardingDraft: (id: string, draft: ClientOnboardingDraft) => void;
@@ -72,8 +85,9 @@ interface ClientStoreContextValue {
     status: ConnectionDemoStatus
   ) => void;
   setPaymentOnlyPrepConfirmed: (id: string, confirmed: boolean) => void;
-  submitCustomerPreviewFeedback: (id: string, feedback: string) => void;
-  approveCustomerPreview: (id: string) => void;
+  submitCustomerPreviewFeedback: (id: string, feedback: string) => boolean;
+  approveCustomerPreview: (id: string) => { ok: boolean; error?: string };
+  markPreviewReadyForReview: (id: string) => void;
   resetToDemoData: () => void;
 }
 
@@ -81,13 +95,6 @@ const ClientStoreContext = createContext<ClientStoreContextValue | null>(null);
 
 function generateId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function mergeMissingDemoClients(loaded: Client[]): Client[] {
-  const ids = new Set(loaded.map((c) => c.id));
-  const missing = demoClients.filter((c) => !ids.has(c.id));
-  if (missing.length === 0) return loaded;
-  return [...loaded, ...missing];
 }
 
 function syncSetupPayment(client: Client): Client {
@@ -120,11 +127,29 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
     clientsRef.current = clients;
   }, [clients]);
 
+  const applyClientsUpdate = useCallback(
+    (updater: (base: Client[]) => Client[]): { ok: boolean; error?: string } => {
+      const result = mutatePersistedClientList(
+        demoClients,
+        updater,
+        () => localStorage.getItem(CLIENT_DEMO_STORAGE_KEY),
+        (json) => localStorage.setItem(CLIENT_DEMO_STORAGE_KEY, json)
+      );
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
+      clientsRef.current = result.clients;
+      setClients(result.clients);
+      return { ok: true };
+    },
+    []
+  );
+
   const persistScopeCardResult = useCallback(
     (id: string, result: ScopeCardExportResult) => {
       if (!result.ok || !result.card) return;
-      setClients((prev) =>
-        prev.map((c) =>
+      applyClientsUpdate((base) =>
+        base.map((c) =>
           c.id === id
             ? {
                 ...c,
@@ -135,7 +160,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         )
       );
     },
-    []
+    [applyClientsUpdate]
   );
 
   const exportScopeCardForClient = useCallback(
@@ -173,29 +198,33 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Client[];
-        setClients(normalizeClients(mergeMissingDemoClients(parsed)));
-      } else {
-        setClients(normalizeClients(demoClients));
-      }
-    } catch {
-      setClients(normalizeClients(demoClients));
-    }
+    const loaded = loadPersistedClients(demoClients);
+    clientsRef.current = loaded;
+    setClients(loaded);
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
-  }, [clients, hydrated]);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== CLIENT_DEMO_STORAGE_KEY || event.newValue == null) return;
+      try {
+        const parsed = JSON.parse(event.newValue) as Client[];
+        const next = normalizeClients(mergeMissingDemoClients(parsed, demoClients));
+        clientsRef.current = next;
+        setClients(next);
+      } catch {
+        /* ignore malformed cross-tab payload */
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [hydrated]);
 
   const updateClient = useCallback(
     (id: string, updates: Partial<Client>) => {
-      setClients((prev) =>
-        prev.map((c) => {
+      applyClientsUpdate((base) =>
+        base.map((c) => {
           if (c.id !== id) return c;
           let next: Client = { ...c, ...updates };
           if ("acceptedSourcesIn" in updates) {
@@ -204,6 +233,32 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
               guidedConnections: syncGuidedConnectionsFromScope(next),
             };
           }
+          const scopeChanged =
+            "acceptedSourcesIn" in updates ||
+            "agreedScopeSummary" in updates ||
+            "dashboardScope" in updates;
+          const buildReopened =
+            "adminCompletedMilestones" in updates &&
+            !(updates.adminCompletedMilestones ?? []).includes("building") &&
+            (c.adminCompletedMilestones ?? []).includes("building");
+          if (scopeChanged || buildReopened) {
+            next = {
+              ...next,
+              ...buildPreviewInvalidationPatch(
+                next,
+                scopeChanged
+                  ? "Preview approval cleared — agreed scope changed."
+                  : "Preview approval cleared — build marked incomplete."
+              ),
+            };
+          }
+          if (
+            c.status === "active" &&
+            !c.launchedAt &&
+            updates.status === undefined
+          ) {
+            next = { ...next, launchedAt: c.createdAt };
+          }
           return next;
         })
       );
@@ -211,7 +266,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         queueScopeCardSync(id);
       }
     },
-    [queueScopeCardSync]
+    [applyClientsUpdate, queueScopeCardSync]
   );
 
   const addClient = useCallback((data: ClientFormData): Client => {
@@ -249,22 +304,23 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       files: [],
       createdAt: new Date().toISOString(),
     };
-    setClients((prev) => [...prev, newClient]);
+    applyClientsUpdate((base) => [...base, newClient]);
     return newClient;
-  }, []);
+  }, [applyClientsUpdate]);
 
   const setClientStatus = useCallback(
     (id: string, status: ClientStatus) => {
-      setClients((prev) =>
-        prev.map((c) => {
+      applyClientsUpdate((base) =>
+        base.map((c) => {
           if (c.id !== id) return c;
           if (status === "active") {
-            if (!canActivateClient(c) && c.status === "pending") return c;
+            if (!canActivateClient(c)) return c;
             return {
               ...c,
               status: "active",
               subscriptionActive: true,
               completedSteps: getStepsForPath(c.onboardingPath),
+              launchedAt: c.launchedAt ?? new Date().toISOString(),
             };
           }
           if (status === "archived") {
@@ -283,12 +339,12 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       );
       queueScopeCardSync(id);
     },
-    [queueScopeCardSync]
+    [applyClientsUpdate, queueScopeCardSync]
   );
 
   const setOnboardingPath = useCallback((id: string, path: OnboardingPath) => {
-    setClients((prev) =>
-      prev.map((c) => {
+    applyClientsUpdate((base) =>
+      base.map((c) => {
         if (c.id !== id || c.status !== "pending") return c;
         const validSteps = getStepsForPath(path);
         return {
@@ -302,11 +358,11 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         };
       })
     );
-  }, []);
+  }, [applyClientsUpdate]);
 
   const toggleStep = useCallback((id: string, step: OnboardingStep) => {
-    setClients((prev) =>
-      prev.map((c) => {
+    applyClientsUpdate((base) =>
+      base.map((c) => {
         if (c.id !== id || c.status !== "pending") return c;
         const steps = getStepsForPath(c.onboardingPath);
         if (!steps.includes(step)) return c;
@@ -349,19 +405,34 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         };
       })
     );
-  }, []);
+  }, [applyClientsUpdate]);
 
   const addPayment = useCallback(
-    (id: string, amount: number, type: PaymentType, note?: string) => {
+    (
+      id: string,
+      amount: number,
+      type: PaymentType,
+      options?: {
+        note?: string;
+        dateReceived?: string;
+        methodReference?: string;
+        recordSource?: Payment["recordSource"];
+      }
+    ) => {
+      const dateIso = options?.dateReceived
+        ? `${options.dateReceived}T12:00:00.000Z`
+        : new Date().toISOString();
       const payment: Payment = {
         id: generateId("pay"),
-        date: new Date().toISOString(),
+        date: dateIso,
         amount,
         type,
-        note,
+        note: options?.note,
+        methodReference: options?.methodReference?.trim() || undefined,
+        recordSource: options?.recordSource ?? "offline",
       };
-      setClients((prev) =>
-        prev.map((c) => {
+      const result = applyClientsUpdate((base) =>
+        base.map((c) => {
           if (c.id !== id) return c;
           return syncSetupPayment({
             ...c,
@@ -369,9 +440,10 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
           });
         })
       );
-      queueScopeCardSync(id);
+      if (result.ok) queueScopeCardSync(id);
+      return result;
     },
-    [queueScopeCardSync]
+    [applyClientsUpdate, queueScopeCardSync]
   );
 
   const addNote = useCallback((id: string, content: string) => {
@@ -380,35 +452,36 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       date: new Date().toISOString(),
       content,
     };
-    setClients((prev) =>
-      prev.map((c) =>
+    applyClientsUpdate((base) =>
+      base.map((c) =>
         c.id === id ? { ...c, notes: [...c.notes, note] } : c
       )
     );
-  }, []);
+  }, [applyClientsUpdate]);
 
   const activateClient = useCallback(
     (id: string) => {
-      setClients((prev) =>
-        prev.map((c) => {
+      applyClientsUpdate((base) =>
+        base.map((c) => {
           if (c.id !== id || !canActivateClient(c)) return c;
           return {
             ...c,
             status: "active",
             subscriptionActive: true,
             completedSteps: getStepsForPath(c.onboardingPath),
+            launchedAt: c.launchedAt ?? new Date().toISOString(),
           };
         })
       );
       queueScopeCardSync(id);
     },
-    [queueScopeCardSync]
+    [applyClientsUpdate, queueScopeCardSync]
   );
 
   const saveOnboardingDraft = useCallback(
     (id: string, draft: ClientOnboardingDraft) => {
-      setClients((prev) =>
-        prev.map((c) =>
+      applyClientsUpdate((base) =>
+        base.map((c) =>
           c.id === id
             ? {
                 ...c,
@@ -419,7 +492,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         )
       );
     },
-    []
+    [applyClientsUpdate]
   );
 
   const submitOnboarding = useCallback(
@@ -428,8 +501,8 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       const submittedAt = new Date().toISOString();
       let submittedClient: Client | undefined;
 
-      setClients((prev) =>
-        prev.map((c) => {
+      applyClientsUpdate((base) =>
+        base.map((c) => {
           if (c.id !== id) return c;
           const completedSteps: OnboardingStep[] = c.completedSteps.includes(
             "requirements-submitted"
@@ -448,7 +521,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
             onboardingSubmission: { ...full, submittedAt },
             completedSteps,
           };
-          return submittedClient;
+          return submittedClient!;
         })
       );
 
@@ -456,14 +529,14 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         void exportScopeCardForClient(submittedClient);
       }
     },
-    [exportScopeCardForClient]
+    [applyClientsUpdate, exportScopeCardForClient]
   );
 
   const acceptScopeCard = useCallback(async (id: string): Promise<ScopeCardExportResult> => {
     let clientToExport: Client | undefined;
 
-    setClients((prev) =>
-      prev.map((c) => {
+    applyClientsUpdate((base) =>
+      base.map((c) => {
         if (c.id !== id) return c;
         if (!canAcceptScopeCard(c) && !c.completedSteps.includes("scope-pricing-confirmed")) {
           return c;
@@ -497,98 +570,164 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
     const exportResult = await exportScopeCardForClient(clientToExport);
     if (exportResult) return exportResult;
     return { ok: true, unchanged: true };
-  }, [exportScopeCardForClient]);
+  }, [applyClientsUpdate, exportScopeCardForClient]);
 
   const toggleAdminMilestone = useCallback(
     (id: string, milestone: ClientMilestone) => {
-      setClients((prev) =>
-        prev.map((c) => {
+      applyClientsUpdate((base) =>
+        base.map((c) => {
           if (c.id !== id) return c;
           const current = new Set(c.adminCompletedMilestones ?? []);
+          const hadBuilding = current.has("building");
           if (current.has(milestone)) current.delete(milestone);
           else current.add(milestone);
-          return { ...c, adminCompletedMilestones: [...current] };
+          let next: Client = { ...c, adminCompletedMilestones: [...current] };
+          const buildReopened =
+            milestone === "building" && hadBuilding && !current.has("building");
+          if (buildReopened) {
+            next = {
+              ...next,
+              ...buildPreviewInvalidationPatch(
+                next,
+                "Preview approval cleared — build marked incomplete."
+              ),
+            };
+          }
+          return next;
         })
       );
     },
-    []
+    [applyClientsUpdate]
   );
 
   const updateGuidedConnectionDemoStatus = useCallback(
     (id: string, connectionId: string, status: ConnectionDemoStatus) => {
-      setClients((prev) =>
-        prev.map((c) => {
+      applyClientsUpdate((base) =>
+        base.map((c) => {
           if (c.id !== id) return c;
-          const guidedConnections = (c.guidedConnections ?? []).map((conn) =>
-            conn.id === connectionId ? { ...conn, demoStatus: status } : conn
-          );
+          const guidedConnections = (c.guidedConnections ?? []).map((conn) => {
+            if (conn.id !== connectionId) return conn;
+            const next = { ...conn, demoStatus: status };
+            if (status === "needs-attention" && !next.errorDetail) {
+              next.errorDetail =
+                "Simulated sync error — token refresh failed (demo only).";
+            }
+            if (status === "data-validated" && !next.lastSuccessfulSyncAt) {
+              next.lastSuccessfulSyncAt = "2026-03-12T06:00:00.000Z";
+            }
+            return next;
+          });
           return { ...c, guidedConnections };
         })
       );
     },
-    []
+    [applyClientsUpdate]
   );
 
   const setPaymentOnlyPrepConfirmed = useCallback(
     (id: string, confirmed: boolean) => {
-      setClients((prev) =>
-        prev.map((c) =>
+      applyClientsUpdate((base) =>
+        base.map((c) =>
           c.id === id ? { ...c, paymentOnlyPrepConfirmed: confirmed } : c
         )
       );
     },
-    []
+    [applyClientsUpdate]
   );
 
   const submitCustomerPreviewFeedback = useCallback(
     (id: string, feedback: string) => {
       const trimmed = feedback.trim();
-      if (!trimmed) return;
-      setClients((prev) =>
-        prev.map((c) => {
+      if (!trimmed) return false;
+      const saved = applyClientsUpdate((base) =>
+        base.map((c) => {
           if (c.id !== id) return c;
           const note: Note = {
             id: generateId("note"),
             date: new Date().toISOString(),
             content: `Customer preview feedback: ${trimmed}`,
           };
+          const admin = new Set(c.adminCompletedMilestones ?? []);
+          admin.delete("client-review");
           return {
             ...c,
             previewChangeRequest: trimmed,
             previewApprovedAt: undefined,
+            previewApprovedRevision: undefined,
+            previewFeedbackUnresolved: true,
+            adminCompletedMilestones: [...admin],
+            notes: [note, ...c.notes],
+          };
+        })
+      );
+      return saved.ok;
+    },
+    [applyClientsUpdate]
+  );
+
+  const approveCustomerPreview = useCallback(
+    (id: string) => {
+      return applyClientsUpdate((base) =>
+        base.map((c) => {
+          if (c.id !== id) return c;
+          const rev = getCurrentPreviewRevision(c);
+          const note: Note = {
+            id: generateId("note"),
+            date: new Date().toISOString(),
+            content: `Customer approved dashboard preview (revision ${rev}; no payment recorded).`,
+          };
+          const admin = new Set(c.adminCompletedMilestones ?? []);
+          admin.add("client-review");
+          return {
+            ...c,
+            previewApprovedAt: new Date().toISOString(),
+            previewApprovedRevision: rev,
+            previewChangeRequest: undefined,
+            previewFeedbackUnresolved: false,
+            adminCompletedMilestones: [...admin],
             notes: [note, ...c.notes],
           };
         })
       );
     },
-    []
+    [applyClientsUpdate]
   );
 
-  const approveCustomerPreview = useCallback((id: string) => {
-    setClients((prev) =>
-      prev.map((c) => {
+  const markPreviewReadyForReview = useCallback((id: string) => {
+    applyClientsUpdate((base) =>
+      base.map((c) => {
         if (c.id !== id) return c;
-        const admin = new Set(c.adminCompletedMilestones ?? []);
-        admin.add("client-review");
+        const nextRev = getCurrentPreviewRevision(c) + 1;
         const note: Note = {
           id: generateId("note"),
           date: new Date().toISOString(),
-          content: "Customer approved dashboard preview (portal — no payment recorded).",
+          content: `Revised preview ready for customer review (revision ${nextRev}).`,
         };
+        const admin = new Set(c.adminCompletedMilestones ?? []);
+        admin.delete("client-review");
         return {
           ...c,
-          previewApprovedAt: new Date().toISOString(),
+          previewRevisionVersion: nextRev,
+          previewApprovedAt: undefined,
+          previewApprovedRevision: undefined,
+          previewFeedbackUnresolved: false,
           previewChangeRequest: undefined,
           adminCompletedMilestones: [...admin],
           notes: [note, ...c.notes],
         };
       })
     );
-  }, []);
+  }, [applyClientsUpdate]);
 
   const resetToDemoData = useCallback(() => {
-    setClients(normalizeClients(demoClients));
-    localStorage.removeItem(STORAGE_KEY);
+    const next = normalizeClients(demoClients);
+    try {
+      localStorage.removeItem(CLIENT_DEMO_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    clientsRef.current = next;
+    setClients(next);
   }, []);
 
   const value = useMemo(
@@ -610,6 +749,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       setPaymentOnlyPrepConfirmed,
       submitCustomerPreviewFeedback,
       approveCustomerPreview,
+      markPreviewReadyForReview,
       resetToDemoData,
     }),
     [
@@ -630,6 +770,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       setPaymentOnlyPrepConfirmed,
       submitCustomerPreviewFeedback,
       approveCustomerPreview,
+      markPreviewReadyForReview,
       resetToDemoData,
     ]
   );

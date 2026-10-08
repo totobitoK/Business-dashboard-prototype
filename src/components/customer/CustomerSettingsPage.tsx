@@ -1,13 +1,36 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { LAYOUT_CUSTOMIZE_THEMES } from "@/lib/layout-customize-themes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import type { WorkspaceThemeId } from "@/lib/customer-portal-context";
 import { dashboardRoutes } from "@/lib/routes";
+import {
+  DASHBOARD_WIDGET_IDS,
+  type DashboardWidgetId,
+} from "@/lib/workspace-widget-layout";
+
+const WIDGET_LABELS: Record<DashboardWidgetId, string> = {
+  metrics: "KPI metrics row",
+  trend: "Payments trend chart",
+  appointments: "Appointment list",
+  invoices: "Open invoices table",
+};
 
 export function CustomerSettingsPage() {
-  const { workspace, settings, updateSettings, theme } = useCustomerPortal();
+  const {
+    workspace,
+    settings,
+    updateSettings,
+    resetLayoutToDefaults,
+    moveWidget,
+    toggleWidgetHidden,
+    theme,
+  } = useCustomerPortal();
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  if (!workspace) return null;
 
   return (
     <div className="space-y-8">
@@ -17,7 +40,8 @@ export function CustomerSettingsPage() {
         </p>
         <h1 className="mt-1 text-2xl font-semibold text-ink">Appearance & layout</h1>
         <p className="mt-2 max-w-2xl text-sm text-ink-muted">
-          Planned customization controls — saved per demo workspace in your browser only.
+          Saved per demo workspace in your browser only — does not change CRM records,
+          connection permissions, or financial source data.
         </p>
       </div>
 
@@ -55,12 +79,95 @@ export function CustomerSettingsPage() {
           className="mt-1 h-4 w-4 rounded border-purple-200 text-purple"
         />
         <span>
-          <span className="block text-sm font-semibold text-ink">Compact metric row</span>
+          <span className="block text-sm font-semibold text-ink">Compact layout</span>
           <span className="mt-1 block text-sm text-ink-muted">
-            Tighter KPI layout on dashboard previews (demo preference).
+            Tighter spacing and smaller KPI type on the sample dashboard.
           </span>
         </span>
       </label>
+
+      <fieldset className="rounded-xl border border-purple-100 bg-white p-5 shadow-soft">
+        <legend className="px-1 text-sm font-semibold text-ink">Dashboard widgets</legend>
+        <p className="mt-1 text-sm text-ink-muted">
+          Reorder optional sections or hide them. Order applies on the home preview.
+        </p>
+        <ul className="mt-4 space-y-2">
+          {settings.widgetOrder.map((id, index) => {
+            const hidden = settings.hiddenWidgets.includes(id);
+            return (
+              <li
+                key={id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-purple-50 px-3 py-2"
+              >
+                <span className={`text-sm font-medium ${hidden ? "text-ink-muted line-through" : "text-ink"}`}>
+                  {WIDGET_LABELS[id]}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={index === 0}
+                    onClick={() => moveWidget(id, "up")}
+                    className="rounded border border-purple-100 px-2 py-1 text-xs font-semibold disabled:opacity-40"
+                  >
+                    Move up
+                  </button>
+                  <button
+                    type="button"
+                    disabled={index === settings.widgetOrder.length - 1}
+                    onClick={() => moveWidget(id, "down")}
+                    className="rounded border border-purple-100 px-2 py-1 text-xs font-semibold disabled:opacity-40"
+                  >
+                    Move down
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleWidgetHidden(id)}
+                    className="rounded border border-purple-100 px-2 py-1 text-xs font-semibold"
+                  >
+                    {hidden ? "Show" : "Hide"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-2 text-xs text-ink-muted">
+          All widgets: {DASHBOARD_WIDGET_IDS.join(", ")}
+        </p>
+      </fieldset>
+
+      <div className="rounded-xl border border-purple-100 bg-white p-5 shadow-soft">
+        <p className="text-sm font-semibold text-ink">Restore default layout</p>
+        {!confirmReset ? (
+          <button
+            type="button"
+            onClick={() => setConfirmReset(true)}
+            className="mt-3 rounded-lg border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-50"
+          >
+            Reset this workspace…
+          </button>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                resetLayoutToDefaults();
+                setConfirmReset(false);
+              }}
+              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Confirm reset
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmReset(false)}
+              className="rounded-lg border border-purple-100 px-4 py-2 text-sm font-semibold"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className={`rounded-xl border p-4 text-sm ${theme.card}`}>
         <p className="font-semibold text-ink">Preview swatch</p>

@@ -6,6 +6,11 @@ import {
   isMilestoneComplete,
 } from "./client-milestones";
 import { isScopePricingConfirmed } from "./onboarding";
+import {
+  getCurrentPreviewRevision,
+  hasUnresolvedPreviewFeedback,
+  isPreviewApprovedForCurrentRevision,
+} from "./preview-review";
 import type { Client } from "./types";
 
 export type CustomerPortalStage =
@@ -24,17 +29,24 @@ export const CUSTOMER_PORTAL_STAGE_LABELS: Record<CustomerPortalStage, string> =
   "guided-connections": "Guided connection setup",
   building: "Building your dashboard",
   "preview-ready": "Preview ready for review",
-  "approved-balance-due": "Approved — balance due",
-  "approved-awaiting-launch": "Approved — awaiting launch",
+  "approved-balance-due": "Preview approved",
+  "approved-awaiting-launch": "Awaiting launch",
   live: "Live",
 };
 
 export function getCustomerPortalStage(client: Client): CustomerPortalStage {
   if (client.status === "active") return "live";
 
-  if (client.previewApprovedAt) {
+  if (isPreviewApprovedForCurrentRevision(client)) {
     if (!isFinalBalancePaid(client)) return "approved-balance-due";
     return "approved-awaiting-launch";
+  }
+
+  if (
+    hasUnresolvedPreviewFeedback(client) &&
+    isMilestoneComplete(client, "building")
+  ) {
+    return "preview-ready";
   }
 
   if (
@@ -76,8 +88,14 @@ export function showCustomerDashboardPreview(client: Client): boolean {
     stage === "preview-ready" ||
     stage === "approved-balance-due" ||
     stage === "approved-awaiting-launch" ||
-    stage === "live"
+    stage === "live" ||
+    (isMilestoneComplete(client, "building") &&
+      (hasUnresolvedPreviewFeedback(client) || !!client.previewChangeRequest))
   );
+}
+
+export function getPreviewRevisionLabel(client: Client): string {
+  return `Revision ${getCurrentPreviewRevision(client)}`;
 }
 
 export function getCustomerPortalProgress(client: Client): {

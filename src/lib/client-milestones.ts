@@ -5,6 +5,7 @@ import type {
   GuidedConnection,
 } from "./types";
 import { isScopePricingConfirmed } from "./onboarding";
+import { isPreviewApprovedForCurrentRevision } from "./preview-review";
 
 export const MILESTONE_LABELS: Record<ClientMilestone, string> = {
   intake: "Intake",
@@ -21,9 +22,10 @@ export const MILESTONE_LABELS: Record<ClientMilestone, string> = {
 export const CONNECTION_STATUS_LABELS: Record<ConnectionDemoStatus, string> = {
   "not-started": "Not started",
   "awaiting-authorization": "Awaiting authorization",
-  connected: "Connected",
-  "needs-attention": "Needs attention",
+  authorized: "Authorized",
+  syncing: "Syncing",
   "data-validated": "Data validated",
+  "needs-attention": "Needs attention",
 };
 
 const ADMIN_TOGGLABLE: ClientMilestone[] = [
@@ -51,11 +53,16 @@ export function isDepositPaid(client: Client): boolean {
 }
 
 export function isFinalBalancePaid(client: Client): boolean {
-  if (client.setupFee <= 0) return false;
+  if (client.setupFee <= 0) return true;
   return client.setupPaidAmount >= client.setupFee;
 }
 
-function hasIntakeComplete(client: Client): boolean {
+export function isSetupPaymentFullyReceived(client: Client): boolean {
+  if (client.setupFee <= 0) return true;
+  return client.setupPaidAmount >= client.setupFee;
+}
+
+export function hasIntakeComplete(client: Client): boolean {
   if (client.onboardingPath === "payment-only") return true;
   return (
     client.onboardingFormStatus === "submitted" ||
@@ -63,14 +70,14 @@ function hasIntakeComplete(client: Client): boolean {
   );
 }
 
-function hasScopeConfirmed(client: Client): boolean {
+export function hasScopeConfirmed(client: Client): boolean {
   return (
     isScopePricingConfirmed(client) ||
     client.adminCompletedMilestones?.includes("scope-confirmed") === true
   );
 }
 
-function hasDiscoveryComplete(client: Client): boolean {
+export function hasDiscoveryComplete(client: Client): boolean {
   return client.adminCompletedMilestones?.includes("discovery") === true;
 }
 
@@ -78,6 +85,7 @@ function hasAdminMilestone(client: Client, m: ClientMilestone): boolean {
   return client.adminCompletedMilestones?.includes(m) === true;
 }
 
+/** Journey milestones only — activation (`active` status) is completion, not a step. */
 export function getMilestonesForPath(client: Client): ClientMilestone[] {
   if (client.onboardingPath === "payment-only") {
     return [
@@ -88,7 +96,6 @@ export function getMilestonesForPath(client: Client): ClientMilestone[] {
       "building",
       "client-review",
       "final-balance",
-      "active",
     ];
   }
   return [
@@ -100,7 +107,6 @@ export function getMilestonesForPath(client: Client): ClientMilestone[] {
     "building",
     "client-review",
     "final-balance",
-    "active",
   ];
 }
 
@@ -120,8 +126,12 @@ export function isMilestoneComplete(client: Client, milestone: ClientMilestone):
       return client.status === "active";
     case "guided-data-setup":
     case "building":
-    case "client-review":
       return hasAdminMilestone(client, milestone);
+    case "client-review":
+      return (
+        isPreviewApprovedForCurrentRevision(client) ||
+        hasAdminMilestone(client, milestone)
+      );
     default:
       return false;
   }
@@ -138,8 +148,62 @@ export function getMilestoneProgress(client: Client): {
   total: number;
 } {
   const path = getMilestonesForPath(client);
+  const total = path.length;
+  if (client.status === "active") {
+    return { completed: total, total };
+  }
   const completed = path.filter((m) => isMilestoneComplete(client, m)).length;
-  return { completed, total: path.length };
+  return { completed, total };
+}
+
+export function isClientJourneyComplete(client: Client): boolean {
+  const path = getMilestonesForPath(client);
+  return path.every((m) => isMilestoneComplete(client, m));
+}
+
+/** Last completed and next upcoming milestone labels (portal progress copy). */
+export function getPortalJourneyBookends(client: Client): {
+  lastCompletedLabel: string | null;
+  nextLabel: string | null;
+} {
+  const path = getMilestonesForPath(client);
+
+  if (client.status === "active") {
+    const lastMilestone = path[path.length - 1];
+    return {
+      lastCompletedLabel: lastMilestone
+        ? MILESTONE_LABELS[lastMilestone]
+        : null,
+      nextLabel: "Active",
+    };
+  }
+
+  let lastCompleted: ClientMilestone | null = null;
+  let next: ClientMilestone | null = null;
+
+  for (const milestone of path) {
+    if (isMilestoneComplete(client, milestone)) {
+      lastCompleted = milestone;
+    } else if (!next) {
+      next = milestone;
+    }
+  }
+
+  if (isClientJourneyComplete(client)) {
+    return {
+      lastCompletedLabel: lastCompleted
+        ? MILESTONE_LABELS[lastCompleted]
+        : null,
+      nextLabel: "Launch",
+    };
+  }
+
+  return {
+    lastCompletedLabel: lastCompleted
+      ? MILESTONE_LABELS[lastCompleted]
+      : null,
+    nextLabel: next ? MILESTONE_LABELS[next] : null,
+  };
 }
 
 export function canShowDepositPreview(client: Client): boolean {
@@ -162,16 +226,6 @@ export function canShowFinalPaymentPreview(client: Client): boolean {
 
 export function canShowGuidedDataSetup(client: Client): boolean {
   return isDepositPaid(client) && hasScopeConfirmed(client);
-}
-
-export function canActivateClientFromMilestones(client: Client): boolean {
-  return (
-    client.status === "pending" &&
-    isFinalBalancePaid(client) &&
-    isMilestoneComplete(client, "guided-data-setup") &&
-    isMilestoneComplete(client, "building") &&
-    isMilestoneComplete(client, "client-review")
-  );
 }
 
 export function syncGuidedConnectionsFromScope(client: Client): GuidedConnection[] {

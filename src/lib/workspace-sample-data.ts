@@ -145,6 +145,6 @@ const BY_WORKSPACE: Record<string, WorkspaceSampleData> = {
   [WORKSPACE_MERIDIAN_RETAIL]: meridianRetail,
 };
 
-export function getWorkspaceSampleData(workspaceId: string): WorkspaceSampleData {
-  return BY_WORKSPACE[workspaceId] ?? alpineHvac;
+export function getWorkspaceSampleData(workspaceId: string): WorkspaceSampleData | undefined {
+  return BY_WORKSPACE[workspaceId];
 }

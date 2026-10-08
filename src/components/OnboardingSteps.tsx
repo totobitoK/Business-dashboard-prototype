@@ -15,6 +15,9 @@ export function OnboardingStepsDisplay({
   onToggleStep?: (step: ReturnType<typeof getStepsForPath>[number]) => void;
 }) {
   const steps = getStepsForPath(client.onboardingPath);
+  const journeyComplete =
+    client.status === "active" ||
+    steps.every((s) => client.completedSteps.includes(s));
 
   return (
     <ol className="space-y-0">
@@ -73,6 +76,27 @@ export function OnboardingStepsDisplay({
           </li>
         );
       })}
+      {journeyComplete && (
+        <li className="relative flex gap-3 pt-1">
+          <StepIndicator
+            state={client.status === "active" ? "completed" : "current"}
+          />
+          <div className="min-w-0 flex-1 pt-0.5">
+            <p
+              className={`text-sm font-medium ${
+                client.status === "active" ? "text-navy-muted" : "text-navy"
+              }`}
+            >
+              {client.status === "active" ? "Active" : "Launch"}
+            </p>
+            <p className="mt-0.5 text-xs text-navy-muted">
+              {client.status === "active"
+                ? "Completed — dashboard live"
+                : "Current — activate when milestones are met"}
+            </p>
+          </div>
+        </li>
+      )}
     </ol>
   );
 }

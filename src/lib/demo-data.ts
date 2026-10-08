@@ -303,12 +303,22 @@ export const demoClients: Client[] = [
       {
         id: "conn-alpine-qbo",
         label: "QuickBooks Online",
-        demoStatus: "connected",
+        demoStatus: "authorized",
+        provider: "QuickBooks Online",
+        externalAccountId: "qbo-demo-alpine-8842",
+        selectedAccountLabel: "Alpine Comfort HVAC — Company file",
+        accessMode: "Read-only",
+        lastSuccessfulSyncAt: "2026-03-12T06:00:00.000Z",
       },
       {
         id: "conn-alpine-cal",
         label: "Google Calendar",
         demoStatus: "data-validated",
+        provider: "Google Calendar",
+        externalAccountId: "gcal-demo-alpine-field",
+        selectedAccountLabel: "Field schedule calendar",
+        accessMode: "Read-only",
+        lastSuccessfulSyncAt: "2026-03-12T05:30:00.000Z",
       },
     ],
     buildStatusNote:

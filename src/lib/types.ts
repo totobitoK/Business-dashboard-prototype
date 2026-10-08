@@ -58,12 +58,18 @@ export interface ClientOnboardingDraft {
   updatedAt: string;
 }
 
+/** Offline = admin-recorded; online = future processor-confirmed only */
+export type PaymentRecordSource = "offline" | "online";
+
 export interface Payment {
   id: string;
   date: string;
   amount: number;
   type: PaymentType;
   note?: string;
+  recordSource?: PaymentRecordSource;
+  /** Check number, transfer ref, etc. (offline recordings) */
+  methodReference?: string;
 }
 
 export interface Note {
@@ -93,14 +99,21 @@ export type ClientMilestone =
 export type ConnectionDemoStatus =
   | "not-started"
   | "awaiting-authorization"
-  | "connected"
-  | "needs-attention"
-  | "data-validated";
+  | "authorized"
+  | "syncing"
+  | "data-validated"
+  | "needs-attention";
 
 export interface GuidedConnection {
   id: string;
   label: string;
   demoStatus: ConnectionDemoStatus;
+  provider?: string;
+  externalAccountId?: string;
+  selectedAccountLabel?: string;
+  accessMode?: string;
+  lastSuccessfulSyncAt?: string;
+  errorDetail?: string;
 }
 
 export type ActivityCategory = "payments" | "notes" | "onboarding";
@@ -163,6 +176,11 @@ export interface Client {
   previewApprovedAt?: string;
   /** Latest customer preview feedback (also copied to notes for admin). */
   previewChangeRequest?: string;
+  previewRevisionVersion?: number;
+  previewApprovedRevision?: number;
+  previewFeedbackUnresolved?: boolean;
+  /** Set when admin activates — used for archived reactivation without bypassing never-launched clients. */
+  launchedAt?: string;
 }
 
 export type ClientFilter = "all" | ClientStatus;

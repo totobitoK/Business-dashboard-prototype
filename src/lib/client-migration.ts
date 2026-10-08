@@ -121,10 +121,39 @@ export function normalizeClient(client: Client): Client {
     ...milestonePatch,
   };
 
+  const guidedConnections = migrateConnectionStatuses(
+    syncGuidedConnectionsFromScope(merged)
+  );
+
   return {
     ...merged,
-    guidedConnections: syncGuidedConnectionsFromScope(merged),
+    guidedConnections,
+    launchedAt:
+      merged.launchedAt ??
+      (merged.status === "active" ? merged.createdAt : undefined),
   };
+}
+
+function migrateConnectionStatuses(
+  connections: NonNullable<Client["guidedConnections"]>
+): NonNullable<Client["guidedConnections"]> {
+  return connections.map((conn) => {
+    const legacy = conn.demoStatus as string;
+    if (legacy === "connected") {
+      return {
+        ...conn,
+        demoStatus: "authorized",
+        provider: conn.provider ?? conn.label,
+        externalAccountId: conn.externalAccountId ?? `demo-ext-${conn.id}`,
+        selectedAccountLabel:
+          conn.selectedAccountLabel ?? `${conn.label} — primary (simulated)`,
+        accessMode: conn.accessMode ?? "Read-only",
+        lastSuccessfulSyncAt:
+          conn.lastSuccessfulSyncAt ?? "2026-03-12T06:00:00.000Z",
+      };
+    }
+    return conn;
+  });
 }
 
 export function normalizeClients(clients: Client[]): Client[] {

@@ -3,7 +3,8 @@
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 
 export function CustomerPortalBanner() {
-  const { workspaces, workspaceId, setWorkspaceId } = useCustomerPortal();
+  const { workspaces, workspaceId, setWorkspaceId, workspaceInvalid } =
+    useCustomerPortal();
 
   return (
     <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-ink sm:px-6">
@@ -20,11 +21,14 @@ export function CustomerPortalBanner() {
             Demo workspace
           </span>
           <select
-            value={workspaceId}
+            value={workspaceInvalid ? "" : workspaceId}
             onChange={(e) => setWorkspaceId(e.target.value)}
             className="max-w-[14rem] rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-sm font-medium text-ink"
             aria-label="Select demo workspace"
           >
+            {workspaceInvalid && (
+              <option value="">Invalid — choose workspace</option>
+            )}
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.label}
