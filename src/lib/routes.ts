@@ -27,6 +27,8 @@ export const DASHBOARD = "/dashboard";
 
 export const dashboardRoutes = {
   home: DASHBOARD,
+  revenue: `${DASHBOARD}/revenue`,
+  schedule: `${DASHBOARD}/schedule`,
   connections: `${DASHBOARD}/connections`,
   settings: `${DASHBOARD}/settings`,
 } as const;

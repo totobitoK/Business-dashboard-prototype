@@ -58,7 +58,10 @@ import {
 interface ClientStoreContextValue {
   clients: Client[];
   addClient: (data: ClientFormData) => Client;
-  updateClient: (id: string, updates: Partial<Client>) => void;
+  updateClient: (
+    id: string,
+    updates: Partial<Client>
+  ) => { ok: boolean; error?: string };
   setClientStatus: (id: string, status: ClientStatus) => void;
   setOnboardingPath: (id: string, path: OnboardingPath) => void;
   toggleStep: (id: string, step: OnboardingStep) => void;
@@ -198,10 +201,23 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const loaded = loadPersistedClients(demoClients);
-    clientsRef.current = loaded;
-    setClients(loaded);
-    setHydrated(true);
+    try {
+      const loaded = loadPersistedClients(demoClients);
+      clientsRef.current = loaded;
+      setClients(loaded);
+    } catch (err) {
+      console.error("Failed to load demo data from storage; using defaults.", err);
+      const fallback = normalizeClients(demoClients);
+      clientsRef.current = fallback;
+      setClients(fallback);
+      try {
+        localStorage.removeItem(CLIENT_DEMO_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      setHydrated(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -223,7 +239,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
 
   const updateClient = useCallback(
     (id: string, updates: Partial<Client>) => {
-      applyClientsUpdate((base) =>
+      const result = applyClientsUpdate((base) =>
         base.map((c) => {
           if (c.id !== id) return c;
           let next: Client = { ...c, ...updates };
@@ -262,9 +278,10 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
           return next;
         })
       );
-      if (touchesScopeCardFields(updates)) {
+      if (result.ok && touchesScopeCardFields(updates)) {
         queueScopeCardSync(id);
       }
+      return result;
     },
     [applyClientsUpdate, queueScopeCardSync]
   );

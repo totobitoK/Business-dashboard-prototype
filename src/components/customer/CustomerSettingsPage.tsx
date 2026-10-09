@@ -8,15 +8,8 @@ import type { WorkspaceThemeId } from "@/lib/customer-portal-context";
 import { dashboardRoutes } from "@/lib/routes";
 import {
   DASHBOARD_WIDGET_IDS,
-  type DashboardWidgetId,
+  WIDGET_LABELS,
 } from "@/lib/workspace-widget-layout";
-
-const WIDGET_LABELS: Record<DashboardWidgetId, string> = {
-  metrics: "KPI metrics row",
-  trend: "Payments trend chart",
-  appointments: "Appointment list",
-  invoices: "Open invoices table",
-};
 
 export function CustomerSettingsPage() {
   const {

@@ -15,7 +15,7 @@ export const MILESTONE_LABELS: Record<ClientMilestone, string> = {
   "guided-data-setup": "Guided data setup",
   building: "Building",
   "client-review": "Client review",
-  "final-balance": "Final balance",
+  "final-balance": "Final payment",
   active: "Active",
 };
 

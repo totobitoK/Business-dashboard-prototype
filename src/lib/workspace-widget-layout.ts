@@ -1,11 +1,25 @@
 export const DASHBOARD_WIDGET_IDS = [
   "metrics",
-  "trend",
+  "collections_chart",
+  "needs_attention",
+  "job_activity",
   "appointments",
   "invoices",
 ] as const;
 
 export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
+
+const LEGACY_WIDGET_MAP: Record<string, DashboardWidgetId> = {
+  trend: "collections_chart",
+};
+
+export function migrateWidgetId(id: string): DashboardWidgetId | null {
+  if (LEGACY_WIDGET_MAP[id]) return LEGACY_WIDGET_MAP[id];
+  if ((DASHBOARD_WIDGET_IDS as readonly string[]).includes(id)) {
+    return id as DashboardWidgetId;
+  }
+  return null;
+}
 
 export interface WorkspaceLayoutSettings {
   themeId: string;
@@ -24,19 +38,31 @@ export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutSettings = {
 export function normalizeLayoutSettings(
   partial?: Partial<WorkspaceLayoutSettings>
 ): WorkspaceLayoutSettings {
-  const order = partial?.widgetOrder?.length
-    ? [...partial.widgetOrder]
+  const rawOrder = partial?.widgetOrder?.length
+    ? partial.widgetOrder.map((id) => migrateWidgetId(id)).filter(Boolean)
     : [...DEFAULT_WORKSPACE_LAYOUT.widgetOrder];
-  const hidden = partial?.hiddenWidgets ?? [];
+  const order = [...new Set(rawOrder)] as DashboardWidgetId[];
+
+  const hidden = (partial?.hiddenWidgets ?? [])
+    .map((id) => migrateWidgetId(id))
+    .filter(Boolean) as DashboardWidgetId[];
+
   const visibleOrder = order.filter((id) => !hidden.includes(id));
   const missing = DASHBOARD_WIDGET_IDS.filter(
     (id) => !visibleOrder.includes(id) && !hidden.includes(id)
   );
+
+  const mergedOrder = [
+    ...visibleOrder,
+    ...missing,
+    ...hidden.filter((h) => !order.includes(h)),
+  ];
+
   return {
     themeId: partial?.themeId ?? DEFAULT_WORKSPACE_LAYOUT.themeId,
     showCompactMetrics:
       partial?.showCompactMetrics ?? DEFAULT_WORKSPACE_LAYOUT.showCompactMetrics,
-    widgetOrder: [...visibleOrder, ...missing, ...hidden.filter((h) => !order.includes(h))],
+    widgetOrder: mergedOrder,
     hiddenWidgets: hidden,
   };
 }
@@ -54,3 +80,12 @@ export function moveWidget(
   [next[idx], next[swap]] = [next[swap], next[idx]];
   return next;
 }
+
+export const WIDGET_LABELS: Record<DashboardWidgetId, string> = {
+  metrics: "KPI summary",
+  collections_chart: "Collections trend",
+  needs_attention: "Needs attention",
+  job_activity: "Job activity",
+  appointments: "Upcoming appointments",
+  invoices: "Invoice table",
+};

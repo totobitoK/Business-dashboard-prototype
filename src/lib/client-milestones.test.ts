@@ -15,6 +15,6 @@ describe("getPortalJourneyBookends", () => {
     const live = demoClients.find((c) => c.status === "active")!;
     const { nextLabel, lastCompletedLabel } = getPortalJourneyBookends(live);
     expect(nextLabel).toBe("Active");
-    expect(lastCompletedLabel).toBe("Final balance");
+    expect(lastCompletedLabel).toBe("Final payment");
   });
 });

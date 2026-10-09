@@ -4,11 +4,19 @@ import { useState } from "react";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { useClientStore } from "@/lib/client-store";
 import {
+  getDemoCheckoutOffer,
+  getOutstandingDepositAmount,
+} from "@/lib/customer-demo-checkout";
+import {
   getDepositAmount,
   getSetupBalanceRemaining,
   isDepositPaid,
   isFinalBalancePaid,
 } from "@/lib/client-milestones";
+import {
+  DEMO_CHECKOUT_NOTE,
+  formatPaymentRecordSource,
+} from "@/lib/payment-record-source";
 import type { Client } from "@/lib/types";
 
 export type CustomerPaymentPanelMode = "deposit" | "final-balance" | "auto";
@@ -31,7 +39,11 @@ export function CustomerPaymentHistoryList({ client }: { client: Client }) {
         >
           <span className="text-ink">
             {new Date(p.date).toLocaleDateString()}
-            {p.note ? ` — ${p.note}` : ""}
+            <span className="text-ink-muted">
+              {" "}
+              · {formatPaymentRecordSource(p.recordSource)}
+            </span>
+            {p.note && p.note !== DEMO_CHECKOUT_NOTE ? ` — ${p.note}` : ""}
           </span>
           <CurrencyAmount
             amount={p.amount}
@@ -96,7 +108,13 @@ export function CustomerPaymentCompactSummary({
         <div className="sm:col-span-2">
           <dt className="text-ink-muted">Deposit due (50%)</dt>
           <dd className="font-semibold text-ink">
-            <CurrencyAmount amount={depositDue} />
+            <CurrencyAmount amount={getOutstandingDepositAmount(client)} />
+            {client.setupPaidAmount > 0 && (
+              <span className="text-xs font-normal text-ink-muted">
+                {" "}
+                of <CurrencyAmount amount={depositDue} className="inline" /> target
+              </span>
+            )}
           </dd>
         </div>
       )}
@@ -126,39 +144,61 @@ function formatUsd(amount: number): string {
 function CustomerDemoCheckoutModal({
   open,
   onClose,
-  client,
-  amount,
+  clientId,
   paymentLabel,
 }: {
   open: boolean;
   onClose: () => void;
-  client: Client;
-  amount: number;
+  clientId: string;
   paymentLabel: string;
 }) {
-  const { addPayment } = useClientStore();
+  const { clients, addPayment } = useClientStore();
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [paidAmount, setPaidAmount] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!open) return null;
+  const client = clients.find((c) => c.id === clientId);
+  const offer = client ? getDemoCheckoutOffer(client) : null;
+  const displayAmount =
+    offer && offer.ok ? offer.amount : paidAmount ?? 0;
+
+  if (!open || !client) return null;
 
   function handleClose() {
     if (submitting) return;
     setDone(false);
+    setError(null);
+    setPaidAmount(null);
     onClose();
   }
 
   function handlePay(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
+    setError(null);
+    const fresh = clients.find((c) => c.id === clientId);
+    if (!fresh) {
+      setError("Could not load your account. Refresh and try again.");
+      return;
+    }
+    const freshOffer = getDemoCheckoutOffer(fresh);
+    if (!freshOffer.ok) {
+      setError(freshOffer.reason);
+      return;
+    }
     setSubmitting(true);
-    const result = addPayment(client.id, amount, "setup", {
-      recordSource: "online",
-      note: "Demo checkout",
+    const result = addPayment(fresh.id, freshOffer.amount, "setup", {
+      recordSource: "demo",
+      note: DEMO_CHECKOUT_NOTE,
     });
     setSubmitting(false);
-    if (result.ok) {
-      setDone(true);
+    if (!result.ok) {
+      setError(result.error ?? "Could not save payment to browser storage.");
+      return;
     }
+    setPaidAmount(freshOffer.amount);
+    setDone(true);
   }
 
   return (
@@ -186,8 +226,8 @@ function CustomerDemoCheckoutModal({
         {done ? (
           <div className="space-y-4 px-5 py-6">
             <p className="text-sm font-medium text-emerald-800">
-              Payment recorded for {formatUsd(amount)}. Your portal will update
-              automatically.
+              Simulated payment recorded for {formatUsd(displayAmount)}. Your
+              portal will update automatically.
             </p>
             <button
               type="button"
@@ -199,7 +239,17 @@ function CustomerDemoCheckoutModal({
           </div>
         ) : (
           <form onSubmit={handlePay} className="space-y-4 px-5 py-5">
-            <p className="text-2xl font-semibold text-ink">{formatUsd(amount)}</p>
+            {error && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="alert">
+                {error}
+              </p>
+            )}
+            {!offer?.ok && (
+              <p className="text-sm text-ink-muted">{offer?.reason}</p>
+            )}
+            <p className="text-2xl font-semibold text-ink">
+              {offer?.ok ? formatUsd(offer.amount) : "—"}
+            </p>
             <div className="space-y-3">
               <label className="block text-sm">
                 <span className="text-ink-muted">Card number</span>
@@ -239,10 +289,14 @@ function CustomerDemoCheckoutModal({
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !offer?.ok}
                 className="flex-1 rounded-lg bg-purple px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-dark disabled:opacity-50"
               >
-                {submitting ? "Processing…" : `Pay ${formatUsd(amount)}`}
+                {submitting
+                  ? "Processing…"
+                  : offer?.ok
+                    ? `Pay ${formatUsd(offer.amount)}`
+                    : "Pay"}
               </button>
             </div>
           </form>
@@ -254,19 +308,19 @@ function CustomerDemoCheckoutModal({
 
 export function CustomerCompletePaymentButton({ client }: { client: Client }) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const offer = getDemoCheckoutOffer(client);
 
   if (client.setupFee <= 0 || isFinalBalancePaid(client)) {
     return null;
   }
 
-  const depositPaid = isDepositPaid(client);
-  const depositDue = getDepositAmount(client);
-  const remaining = getSetupBalanceRemaining(client);
-  const amount = !depositPaid ? depositDue : remaining;
-  const label = !depositPaid
-    ? `Pay deposit — ${formatUsd(amount)}`
-    : `Complete setup payment — ${formatUsd(amount)}`;
-  const modalTitle = !depositPaid ? "Pay setup deposit" : "Complete setup payment";
+  if (!offer.ok) {
+    return (
+      <p className="mt-4 rounded-lg border border-purple-100 bg-purple-50/40 px-3 py-2 text-sm text-ink-muted">
+        {offer.reason}
+      </p>
+    );
+  }
 
   return (
     <div className="mt-4">
@@ -275,14 +329,13 @@ export function CustomerCompletePaymentButton({ client }: { client: Client }) {
         onClick={() => setCheckoutOpen(true)}
         className="w-full rounded-lg bg-purple px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-dark"
       >
-        {label}
+        {offer.label}
       </button>
       <CustomerDemoCheckoutModal
         open={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
-        client={client}
-        amount={amount}
-        paymentLabel={modalTitle}
+        clientId={client.id}
+        paymentLabel={offer.modalTitle}
       />
     </div>
   );

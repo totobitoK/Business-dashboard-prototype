@@ -58,8 +58,8 @@ export interface ClientOnboardingDraft {
   updatedAt: string;
 }
 
-/** Offline = admin-recorded; online = future processor-confirmed only */
-export type PaymentRecordSource = "offline" | "online";
+/** Offline = admin-recorded; online = processor-confirmed; demo = local simulation only */
+export type PaymentRecordSource = "offline" | "online" | "demo";
 
 export interface Payment {
   id: string;
