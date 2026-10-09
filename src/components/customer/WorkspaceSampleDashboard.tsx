@@ -37,6 +37,7 @@ import {
 import { DashboardWorkspaceNav } from "@/components/customer/DashboardWorkspaceNav";
 import { dashboardSectionHref } from "@/lib/dashboard-section-routes";
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
+import { ReportingPeriodCustomRange } from "@/components/customer/ReportingPeriodCustomRange";
 import { getOperationsListDensity } from "@/lib/operations-list-density";
 import { dashboardRoutes } from "@/lib/routes";
 import type { DashboardWidgetId } from "@/lib/workspace-widget-layout";
@@ -50,9 +51,6 @@ const REPORTING_PERIOD_OPTIONS: { value: ReportingPeriodPreset; label: string }[
   { value: "prev_month", label: "Previous month" },
   { value: "custom", label: "Custom" },
 ];
-
-const headerFieldClass =
-  "rounded-lg border border-white/30 bg-white/95 px-2.5 py-1.5 text-sm font-medium text-ink shadow-sm outline-none transition focus:border-white focus:ring-2 focus:ring-white/40";
 
 function formatShortDate(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", {
@@ -486,9 +484,11 @@ export function WorkspaceSampleDashboard({
   return (
     <div
       key={`${workspaceId}-${workspaceSessionKey}`}
-      className={`overflow-hidden rounded-2xl shadow-card ${theme.card}`}
+      className={`rounded-2xl shadow-card ${theme.card}`}
     >
-      <div className={`flex flex-col gap-2 px-4 py-3 sm:px-5 ${theme.header} ${theme.headerText}`}>
+      <div
+        className={`relative z-10 flex flex-col gap-2 overflow-visible rounded-t-2xl px-4 py-3 sm:px-5 ${theme.header} ${theme.headerText}`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold">
             {mode === "revenue"
@@ -502,66 +502,57 @@ export function WorkspaceSampleDashboard({
           </span>
         </div>
         <DashboardWorkspaceNav embedded />
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">
-              Reporting period
-            </p>
-            <div
-              role="group"
-              aria-label="Reporting period"
-              className="mt-1.5 flex flex-wrap gap-0.5 rounded-xl border border-white/25 bg-white/10 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
-            >
-              {REPORTING_PERIOD_OPTIONS.map(({ value, label }) => {
-                const active = preset === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setPreset(value)}
-                    className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all sm:px-3 sm:py-2 sm:text-sm ${
-                      active
-                        ? "bg-white text-purple-dark shadow-md ring-1 ring-white/90"
-                        : "text-white/95 hover:bg-white/15"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">
+            Reporting period
+          </p>
+          <div className="relative z-20 mt-1.5 rounded-xl border border-white/25 bg-white/10 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <div
+                role="group"
+                aria-label="Reporting period"
+                className="flex min-w-0 flex-1 flex-wrap gap-0.5 p-0.5"
+              >
+                {REPORTING_PERIOD_OPTIONS.map(({ value, label }) => {
+                  const active = preset === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setPreset(value)}
+                      className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all sm:px-3 sm:py-2 sm:text-sm ${
+                        active
+                          ? "bg-white text-purple-dark shadow-md ring-1 ring-white/90"
+                          : "text-white/95 hover:bg-white/15"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              {computed.range && (
+                <p className="shrink-0 px-1 text-xs font-medium leading-none text-white/90 sm:pr-2 sm:text-sm">
+                  {formatRangeForDisplay(computed.range)}
+                </p>
+              )}
             </div>
+            {preset === "custom" && (
+              <>
+                <div className="mx-1 border-t border-white/20" aria-hidden />
+                <ReportingPeriodCustomRange
+                  embedded
+                  customStart={customStart}
+                  customEnd={customEnd}
+                  maxDate={DEMO_AS_OF_DATE}
+                  onStartChange={setCustomStart}
+                  onEndChange={setCustomEnd}
+                />
+              </>
+            )}
           </div>
-          {computed.range && (
-            <p className="shrink-0 text-xs font-medium text-white/90 sm:pb-2 sm:text-sm">
-              {formatRangeForDisplay(computed.range)}
-            </p>
-          )}
         </div>
-        {preset === "custom" && (
-          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-white/20 bg-white/10 px-3 py-2.5">
-            <label className="flex flex-col gap-1 text-[10px] font-semibold uppercase tracking-wider text-white/80">
-              Start
-              <input
-                type="date"
-                max={DEMO_AS_OF_DATE}
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className={headerFieldClass}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-[10px] font-semibold uppercase tracking-wider text-white/80">
-              End
-              <input
-                type="date"
-                max={DEMO_AS_OF_DATE}
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className={headerFieldClass}
-              />
-            </label>
-          </div>
-        )}
         {rangeError && (
           <p className="rounded bg-white/20 px-2 py-1 text-xs" role="alert">
             {rangeError}
@@ -569,13 +560,14 @@ export function WorkspaceSampleDashboard({
         )}
       </div>
 
-      {changesRequestedNote && (
-        <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-ink">
-          {changesRequestedNote}
-        </p>
-      )}
+      <div className="overflow-hidden rounded-b-2xl">
+        {changesRequestedNote && (
+          <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-ink">
+            {changesRequestedNote}
+          </p>
+        )}
 
-      {renderWidgetRows(visibleWidgets, widgetBlocks)}
+        {renderWidgetRows(visibleWidgets, widgetBlocks)}
 
       {(selectedInvoice || selectedJob || selectedAppointment) && (
         <div className="border-t border-purple-100/80 bg-white/90 px-4 py-4 sm:px-5">
@@ -636,6 +628,7 @@ export function WorkspaceSampleDashboard({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
