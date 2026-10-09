@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { WORKSPACE_ALPINE_HVAC, WORKSPACE_MERIDIAN_RETAIL } from "./customer-workspaces";
 import { getWorkspaceBusinessData } from "./workspace-business-data";
+import { daysBetweenInclusive } from "./workspace-reporting-period";
 import {
   buildCollectionsTrend,
   countCompletedJobsInRange,
@@ -56,6 +57,26 @@ describe("workspace analytics", () => {
     expect(trend.every((b) => b.start === b.end)).toBe(true);
   });
 
+  it("uses Mon–Sun weekly buckets for ranges longer than 31 days", () => {
+    const range = {
+      start: "2026-01-01",
+      end: "2026-03-12",
+      preset: "custom" as const,
+    };
+    const trend = buildCollectionsTrend(alpine.payments, range);
+    expect(trend[0]).toEqual(
+      expect.objectContaining({ start: "2026-01-01", end: "2026-01-04" })
+    );
+    expect(trend[1]).toEqual(
+      expect.objectContaining({ start: "2026-01-05", end: "2026-01-11" })
+    );
+    expect(
+      trend.every((b) => daysBetweenInclusive(b.start, b.end) <= 7)
+    ).toBe(true);
+    const kpi = sumPaymentsInRange(alpine.payments, range);
+    expect(trend.reduce((s, b) => s + b.amount, 0)).toBe(kpi);
+  });
+
   it("counts completed jobs only in range", () => {
     const range = resolveReportingRange("last7");
     if (!range.ok) throw new Error("range");
@@ -85,6 +106,26 @@ describe("workspace analytics", () => {
     list = sortInvoices(list, "balance", "desc");
     expect(list.length).toBeGreaterThan(0);
     list.forEach((inv) => expect(inv.status).toBe("Past due"));
+  });
+
+  it("invoice search matches flexible due date formats", () => {
+    const sample = alpine.invoices.find((inv) => inv.dueDate === "2026-03-14");
+    expect(sample).toBeDefined();
+    if (!sample) return;
+
+    const byShort = filterInvoices({
+      invoices: alpine.invoices,
+      search: "Mar 14",
+      status: "all",
+    });
+    expect(byShort.some((inv) => inv.id === sample.id)).toBe(true);
+
+    const bySlash = filterInvoices({
+      invoices: alpine.invoices,
+      search: "3/14/26",
+      status: "all",
+    });
+    expect(bySlash.some((inv) => inv.id === sample.id)).toBe(true);
   });
 
   it("has sufficient alpine sample volume", () => {

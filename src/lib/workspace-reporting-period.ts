@@ -156,15 +156,42 @@ export function mtdComparisonRange(asOf: string = DEMO_AS_OF_DATE): ReportingDat
   return { start, end, preset: "mtd" };
 }
 
+/** Calendar YYYY-MM-DD → display label (day does not shift with viewer timezone). */
+export function formatCalendarDateDisplay(
+  iso: string,
+  style: "short" | "withWeekday" = "short"
+): string {
+  const { y, m, d } = parseIsoDate(iso);
+  const utcNoon = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  return utcNoon.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    ...(style === "withWeekday" ? { weekday: "short" as const } : {}),
+    timeZone: "UTC",
+  });
+}
+
+function formatWallClockTime(hour: number, minute: number): string {
+  const h12 = hour % 12 || 12;
+  const ap = hour >= 12 ? "PM" : "AM";
+  return `${h12}:${String(minute).padStart(2, "0")} ${ap}`;
+}
+
+/** Demo timestamps omit TZ — treat as business wall clock (date + time from string). */
+export function formatNaiveBusinessDateTime(naive: string): { date: string; time: string } {
+  const datePart = naive.slice(0, 10);
+  const match = naive.match(/T(\d{2}):(\d{2})/);
+  return {
+    date: formatCalendarDateDisplay(datePart, "withWeekday"),
+    time: match
+      ? formatWallClockTime(Number(match[1]), Number(match[2]))
+      : "",
+  };
+}
+
 export function formatRangeForDisplay(range: ReportingDateRange): string {
-  const fmt = (iso: string) =>
-    new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      timeZone: BUSINESS_TIMEZONE,
-    });
-  return `${fmt(range.start)} – ${fmt(range.end)}`;
+  return `${formatCalendarDateDisplay(range.start)} – ${formatCalendarDateDisplay(range.end)}`;
 }
 
 export function formatComparisonDelta(

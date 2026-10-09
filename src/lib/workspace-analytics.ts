@@ -6,7 +6,9 @@ import {
   type BusinessPayment,
   type WorkspaceBusinessData,
 } from "./workspace-business-data";
+import { anyCalendarDateMatchesSearch } from "./calendar-date-search";
 import {
+  compareIsoDates,
   isDateInRange,
   isDateOnOrBeforeDemo,
   mtdComparisonRange,
@@ -158,9 +160,7 @@ export function buildCollectionsTrend(
         new Date(`${range.start}T12:00:00Z`).getTime()) /
         86400000
     ) + 1;
-  const useWeekly = daySpan > 31;
-
-  if (!useWeekly) {
+  if (daySpan <= 31) {
     const buckets: TrendBucket[] = [];
     let cursor = range.start;
     while (cursor <= range.end) {
@@ -181,18 +181,25 @@ export function buildCollectionsTrend(
     return buckets;
   }
 
+  return buildMondaySundayWeeklyBuckets(inRange, range);
+}
+
+/** Calendar weeks Mon–Sun; first/last buckets may be partial within the range. */
+function buildMondaySundayWeeklyBuckets(
+  inRange: BusinessPayment[],
+  range: ReportingDateRange
+): TrendBucket[] {
   const buckets: TrendBucket[] = [];
   let weekStart = range.start;
-  while (weekStart <= range.end) {
-    let weekEnd = addDays(weekStart, 6);
-    if (weekEnd > range.end) weekEnd = range.end;
+  while (compareIsoDates(weekStart, range.end) <= 0) {
+    const sunday = endOfCalendarWeek(weekStart);
+    const weekEnd =
+      compareIsoDates(sunday, range.end) > 0 ? range.end : sunday;
     const amount = inRange
-      .filter(
-        (p) => p.date >= weekStart && p.date <= weekEnd
-      )
+      .filter((p) => p.date >= weekStart && p.date <= weekEnd)
       .reduce((s, p) => s + p.amount, 0);
     buckets.push({
-      label: `${formatShort(weekStart)}–${formatShort(weekEnd)}`,
+      label: `${weekStart}–${weekEnd}`,
       start: weekStart,
       end: weekEnd,
       amount,
@@ -202,11 +209,16 @@ export function buildCollectionsTrend(
   return buckets;
 }
 
-function formatShort(iso: string): string {
-  return new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+function utcDayOfWeek(iso: string): number {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
+}
+
+/** Sunday at the end of the Mon–Sun week containing `iso`. */
+function endOfCalendarWeek(iso: string): string {
+  const dow = utcDayOfWeek(iso);
+  const daysUntilSunday = dow === 0 ? 0 : 7 - dow;
+  return addDays(iso, daysUntilSunday);
 }
 
 function addDays(iso: string, n: number): string {
@@ -267,7 +279,8 @@ export function filterInvoices({
         inv.customer.toLowerCase().includes(q) ||
         inv.lineSummary.toLowerCase().includes(q) ||
         inv.id.toLowerCase().includes(q) ||
-        inv.invoiceNumber.toLowerCase().includes(q)
+        inv.invoiceNumber.toLowerCase().includes(q) ||
+        anyCalendarDateMatchesSearch([inv.issueDate, inv.dueDate], q)
     );
   }
   if (status !== "all") {
@@ -323,6 +336,19 @@ export function filterJobsInRange({
     if (category !== "all" && j.category !== category) return false;
     return true;
   });
+}
+
+export function appointmentAssigneeBreakdown(
+  appointments: BusinessAppointment[]
+): { assignee: string; count: number }[] {
+  const map = new Map<string, number>();
+  for (const appt of appointments) {
+    if (appt.status === "canceled") continue;
+    map.set(appt.assignee, (map.get(appt.assignee) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([assignee, count]) => ({ assignee, count }))
+    .sort((a, b) => b.count - a.count || a.assignee.localeCompare(b.assignee));
 }
 
 export function serviceCategoryBreakdown(

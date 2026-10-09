@@ -88,7 +88,7 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
   const [workspaceId, setWorkspaceIdState] = useState(getDefaultWorkspaceId);
   const [workspaceInvalid, setWorkspaceInvalid] = useState(false);
   const [settingsMap, setSettingsMap] = useState<SettingsMap>({});
-  const [ready, setReady] = useState(false);
+  const [portalSynced, setPortalSynced] = useState(false);
   const [workspaceSessionKey, setWorkspaceSessionKey] = useState(0);
 
   useEffect(() => {
@@ -113,18 +113,18 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
       }
     }
     setSettingsMap(loadSettings());
-    setReady(true);
+    setPortalSynced(true);
   }, []);
 
   useEffect(() => {
-    if (!ready || workspaceInvalid || !workspaceId) return;
+    if (!portalSynced || workspaceInvalid || !workspaceId) return;
     localStorage.setItem(WORKSPACE_STORAGE_KEY, workspaceId);
-  }, [workspaceId, ready, workspaceInvalid]);
+  }, [workspaceId, portalSynced, workspaceInvalid]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!portalSynced) return;
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settingsMap));
-  }, [settingsMap, ready]);
+  }, [settingsMap, portalSynced]);
 
   const workspace = workspaceInvalid
     ? null
@@ -247,14 +247,6 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
       theme,
     ]
   );
-
-  if (!ready) {
-    return (
-      <div className="flex min-h-[12rem] items-center justify-center">
-        <p className="text-sm text-ink-muted">Loading workspace…</p>
-      </div>
-    );
-  }
 
   return (
     <CustomerPortalContext.Provider value={value}>

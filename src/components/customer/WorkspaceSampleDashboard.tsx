@@ -1,11 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+  type ReactNode,
+} from "react";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import {
-  BUSINESS_TIMEZONE,
+  formatCalendarDateDisplay,
+  formatNaiveBusinessDateTime,
   formatRangeForDisplay,
   type ReportingPeriodPreset,
 } from "@/lib/workspace-reporting-period";
@@ -28,6 +37,7 @@ import {
   oldestUnpaidInvoiceDaysOverdue,
   paymentsForInvoice,
   resolveReportingRange,
+  appointmentAssigneeBreakdown,
   serviceCategoryBreakdown,
   sortInvoices,
   sumOverdueInvoices,
@@ -37,12 +47,119 @@ import {
 import { DashboardWorkspaceNav } from "@/components/customer/DashboardWorkspaceNav";
 import { dashboardSectionHref } from "@/lib/dashboard-section-routes";
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
+import { DashboardSection } from "@/components/customer/DashboardSection";
+import {
+  DashboardChipGroup,
+  DashboardControlBar,
+  DashboardSearchInput,
+  DashboardSecondaryButton,
+  DashboardSelect,
+} from "@/components/customer/dashboard-controls";
 import { ReportingPeriodCustomRange } from "@/components/customer/ReportingPeriodCustomRange";
+import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import { getOperationsListDensity } from "@/lib/operations-list-density";
 import { dashboardRoutes } from "@/lib/routes";
 import type { DashboardWidgetId } from "@/lib/workspace-widget-layout";
 
 const INVOICE_PAGE_SIZE = 8;
+
+const JOB_STATUS_OPTIONS = [
+  { value: "all" as const, label: "All" },
+  { value: "completed" as const, label: "Done" },
+  { value: "scheduled" as const, label: "Scheduled" },
+  { value: "in_progress" as const, label: "Active" },
+  { value: "canceled" as const, label: "Canceled" },
+];
+
+const INVOICE_STATUS_OPTIONS = [
+  { value: "all" as const, label: "All" },
+  { value: "Open" as const, label: "Open" },
+  { value: "Past due" as const, label: "Past due" },
+  { value: "Paid" as const, label: "Paid" },
+];
+
+const INVOICE_SORT_OPTIONS = [
+  { value: "dueDate" as const, label: "Due date" },
+  { value: "balance" as const, label: "Balance" },
+];
+
+const widgetListShellClass =
+  "overflow-hidden rounded-xl border border-purple-200/90 bg-gradient-to-b from-white via-white to-purple-50/40 shadow-sm ring-1 ring-purple-100/60";
+
+const widgetListRowClass =
+  "transition-all hover:bg-white/90 hover:shadow-[inset_3px_0_0_0_rgb(124,58,237)]";
+
+/** Job activity + Next 7 days lists — subtle hover only (no left accent). */
+const operationsListRowBase =
+  "transition-colors bg-white/70 hover:bg-purple-50/65";
+const operationsListRowSelected = "bg-purple-50/85";
+
+const operationsSummaryStripClass = "mt-2 flex flex-wrap gap-1";
+
+const operationsSummaryChipClass =
+  "rounded-full border border-purple-100 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-ink-muted shadow-sm";
+
+/** Minimum time the dim state stays on (mostly for search deferral). */
+const FILTER_PANEL_MIN_PENDING_MS = 240;
+/** Invoice status chips — brief beat before rows swap (latest chip always wins). */
+const INVOICE_STATUS_CHIP_TRANSITION_MS = 280;
+
+function filterPanelContentClass(pending: boolean) {
+  return `transition-[opacity,filter] duration-[400ms] ease-out ${
+    pending ? "opacity-[0.45] saturate-[0.75] blur-[0.35px]" : "opacity-100 saturate-100 blur-0"
+  }`;
+}
+
+function filterPanelVeilClass(pending: boolean) {
+  return `pointer-events-none absolute inset-0 z-[1] rounded-xl transition-opacity duration-[400ms] ease-out ${
+    pending ? "bg-white/45 opacity-100" : "opacity-0"
+  }`;
+}
+
+type InvoiceStatusFilter = "all" | "Open" | "Past due" | "Paid";
+type JobStatusFilter = "all" | "completed" | "scheduled" | "canceled" | "in_progress";
+
+function invoiceStatusFilterKey(
+  status: InvoiceStatusFilter,
+  insightFocus: "none" | "overdue"
+): InvoiceStatusFilter {
+  return insightFocus === "overdue" ? "Past due" : status;
+}
+
+function parseJobFilterSignature(signature: string) {
+  const [status = "all", category = "all"] = signature.split("|");
+  return {
+    status: status as JobStatusFilter,
+    category,
+  };
+}
+
+/** Keeps the dimmed state long enough for the CSS opacity transition to read. */
+function useMinFilterPending(pending: boolean, minMs = FILTER_PANEL_MIN_PENDING_MS) {
+  const [visible, setVisible] = useState(false);
+  const pendingSince = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (pending) {
+      if (pendingSince.current === null) pendingSince.current = Date.now();
+      setVisible(true);
+      return;
+    }
+    if (!visible) {
+      pendingSince.current = null;
+      return;
+    }
+    const since = pendingSince.current ?? Date.now();
+    const wait = Math.max(0, minMs - (Date.now() - since));
+    const timer = window.setTimeout(() => {
+      pendingSince.current = null;
+      setVisible(false);
+    }, wait);
+    return () => window.clearTimeout(timer);
+  }, [pending, visible, minMs]);
+
+  return visible;
+}
 
 const REPORTING_PERIOD_OPTIONS: { value: ReportingPeriodPreset; label: string }[] = [
   { value: "last7", label: "7 days" },
@@ -53,36 +170,31 @@ const REPORTING_PERIOD_OPTIONS: { value: ReportingPeriodPreset; label: string }[
 ];
 
 function formatShortDate(iso: string): string {
-  return new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: BUSINESS_TIMEZONE,
-  });
+  return formatCalendarDateDisplay(iso);
 }
 
-function formatDateTime(iso: string): { date: string; time: string } {
-  const d = new Date(iso);
-  return {
-    date: d.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      timeZone: BUSINESS_TIMEZONE,
-    }),
-    time: d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: BUSINESS_TIMEZONE,
-    }),
-  };
+function formatJobRowWhen(job: BusinessJob): { date: string; time: string | null } {
+  const dateIso =
+    job.status === "completed" && job.completedDate
+      ? job.completedDate
+      : job.scheduledDate;
+  const date = formatCalendarDateDisplay(dateIso, "withWeekday");
+  if (job.status === "completed") {
+    return { date, time: null };
+  }
+  const { time } = formatNaiveBusinessDateTime(job.scheduledAt);
+  return { date, time: time || null };
+}
+
+function formatAppointmentDateTime(iso: string): { date: string; time: string } {
+  return formatNaiveBusinessDateTime(iso);
 }
 
 const REVENUE_WIDGETS: DashboardWidgetId[] = [
   "metrics",
   "collections_chart",
-  "needs_attention",
   "invoices",
+  "needs_attention",
 ];
 
 export function WorkspaceSampleDashboard({
@@ -105,6 +217,9 @@ export function WorkspaceSampleDashboard({
   const [invoiceSort, setInvoiceSort] = useState<"dueDate" | "balance">("dueDate");
   const [invoiceLimit, setInvoiceLimit] = useState(INVOICE_PAGE_SIZE);
   const [insightFocus, setInsightFocus] = useState<"none" | "overdue">("none");
+  const [appliedInvoiceStatusKey, setAppliedInvoiceStatusKey] =
+    useState<InvoiceStatusFilter>("all");
+  const appliedInvoiceStatusRef = useRef<InvoiceStatusFilter>("all");
 
   const [jobStatus, setJobStatus] = useState<"all" | "completed" | "scheduled" | "canceled" | "in_progress">("all");
   const [jobCategory, setJobCategory] = useState("all");
@@ -117,6 +232,8 @@ export function WorkspaceSampleDashboard({
     setInvoiceSearch("");
     setInvoiceStatus("all");
     setInsightFocus("none");
+    setAppliedInvoiceStatusKey("all");
+    appliedInvoiceStatusRef.current = "all";
     setSelectedInvoiceId(null);
     setSelectedJobId(null);
     setSelectedAppointmentId(null);
@@ -137,7 +254,37 @@ export function WorkspaceSampleDashboard({
     setRangeError(rangeResult.error);
   }, [rangeResult.error]);
 
-  const computed = useMemo(() => {
+  const deferredInvoiceSearch = useDeferredValue(invoiceSearch);
+  const requestedInvoiceStatusKey = invoiceStatusFilterKey(invoiceStatus, insightFocus);
+
+  useEffect(() => {
+    appliedInvoiceStatusRef.current = appliedInvoiceStatusKey;
+  }, [appliedInvoiceStatusKey]);
+
+  useEffect(() => {
+    const next = requestedInvoiceStatusKey;
+    if (appliedInvoiceStatusRef.current === next) return;
+
+    const timer = window.setTimeout(() => {
+      appliedInvoiceStatusRef.current = next;
+      setAppliedInvoiceStatusKey(next);
+    }, INVOICE_STATUS_CHIP_TRANSITION_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [requestedInvoiceStatusKey]);
+
+  const invoiceStatusChipPending = appliedInvoiceStatusKey !== requestedInvoiceStatusKey;
+  const invoiceSearchPending = invoiceSearch !== deferredInvoiceSearch;
+  const invoiceTablePending = useMinFilterPending(
+    invoiceStatusChipPending || invoiceSearchPending
+  );
+
+  const jobFilterSignature = `${jobStatus}|${jobCategory}`;
+  const deferredJobFilterSignature = useDeferredValue(jobFilterSignature);
+  const jobFilterPendingRaw = jobFilterSignature !== deferredJobFilterSignature;
+  const jobFilterPending = useMinFilterPending(jobFilterPendingRaw);
+
+  const analyticsCore = useMemo(() => {
     if (!data || !rangeResult.range) return null;
     const range = rangeResult.range;
     const compareRange = getComparisonRange(range);
@@ -154,25 +301,6 @@ export function WorkspaceSampleDashboard({
     const trendTotal = trend.reduce((s, b) => s + b.amount, 0);
     const aging = invoiceAgingBuckets(data.invoices);
     const categories = serviceCategoryBreakdown(data.jobs, range);
-
-    const statusFilter =
-      insightFocus === "overdue" ? ("Past due" as const) : invoiceStatus;
-
-    let invoices = filterInvoices({
-      invoices: data.invoices,
-      search: invoiceSearch,
-      status: statusFilter,
-    });
-    invoices = sortInvoices(invoices, invoiceSort, invoiceSort === "balance" ? "desc" : "asc");
-    const filteredBalance = invoices.reduce((s, i) => s + i.balanceDue, 0);
-
-    const jobs = filterJobsInRange({
-      jobs: data.jobs,
-      range,
-      status: jobStatus,
-      category: jobCategory,
-    });
-
     const jobCategories = [...new Set(data.jobs.map((j) => j.category))].sort();
 
     return {
@@ -189,24 +317,56 @@ export function WorkspaceSampleDashboard({
       trendTotal,
       aging,
       categories,
-      invoices,
-      filteredBalance,
       invoiceTotal: data.invoices.length,
-      jobs,
       jobCategories,
       upcoming: countUpcomingAppointments(data.appointments),
       upcomingList: listUpcomingAppointments(data.appointments),
     };
+  }, [data, rangeResult.range]);
+
+  const invoiceList = useMemo(() => {
+    if (!data || !analyticsCore) return null;
+
+    let invoices = filterInvoices({
+      invoices: data.invoices,
+      search: deferredInvoiceSearch,
+      status: appliedInvoiceStatusKey,
+    });
+    invoices = sortInvoices(
+      invoices,
+      invoiceSort,
+      invoiceSort === "balance" ? "desc" : "asc"
+    );
+    const filteredBalance = invoices.reduce((s, i) => s + i.balanceDue, 0);
+    return { invoices, filteredBalance };
   }, [
     data,
-    rangeResult.range,
-    invoiceSearch,
-    invoiceStatus,
+    analyticsCore,
+    deferredInvoiceSearch,
+    appliedInvoiceStatusKey,
     invoiceSort,
-    insightFocus,
-    jobStatus,
-    jobCategory,
   ]);
+
+  const jobsInRange = useMemo(() => {
+    if (!data || !analyticsCore) return [];
+    const { status, category } = parseJobFilterSignature(deferredJobFilterSignature);
+    return filterJobsInRange({
+      jobs: data.jobs,
+      range: analyticsCore.range,
+      status,
+      category,
+    });
+  }, [data, analyticsCore, deferredJobFilterSignature]);
+
+  const computed =
+    analyticsCore && invoiceList
+      ? {
+          ...analyticsCore,
+          invoices: invoiceList.invoices,
+          filteredBalance: invoiceList.filteredBalance,
+          jobs: jobsInRange,
+        }
+      : null;
 
   if (!data || !computed) {
     return (
@@ -230,12 +390,77 @@ export function WorkspaceSampleDashboard({
 
   const isHvac = workspaceId.includes("hvac");
 
+  const visibleInvoices = computed.invoices.slice(0, invoiceLimit);
+  const invoicePadRowCount = Math.max(0, invoiceLimit - visibleInvoices.length);
+
+  const invoiceToolbar = (
+    <DashboardControlBar theme={theme} compact singleRow fitContent>
+      <DashboardSearchInput
+        theme={theme}
+        className="w-[11rem] shrink-0 flex-none sm:w-[12rem]"
+        value={invoiceSearch}
+        onChange={(e) => {
+          const value = e.target.value;
+          startTransition(() => {
+            setInvoiceSearch(value);
+            setInvoiceLimit(INVOICE_PAGE_SIZE);
+          });
+        }}
+        placeholder="Search customer, #, description"
+        aria-busy={invoiceTablePending}
+      />
+      <DashboardChipGroup
+        theme={theme}
+        nowrap
+        aria-label="Invoice status"
+        value={requestedInvoiceStatusKey}
+        options={INVOICE_STATUS_OPTIONS}
+        onChange={(v) => {
+          setInvoiceStatus(v);
+          setInsightFocus("none");
+          setInvoiceLimit(INVOICE_PAGE_SIZE);
+        }}
+      />
+      <DashboardSelect
+        theme={theme}
+        className="shrink-0"
+        aria-label="Sort invoices by"
+        value={invoiceSort}
+        options={INVOICE_SORT_OPTIONS}
+        onChange={(v) => startTransition(() => setInvoiceSort(v))}
+        align="right"
+      />
+    </DashboardControlBar>
+  );
+
+  const jobActivityToolbar = (
+    <DashboardControlBar theme={theme} compact fitContent>
+      <DashboardChipGroup
+        theme={theme}
+        compact
+        aria-label="Job status"
+        value={jobStatus}
+        options={JOB_STATUS_OPTIONS}
+        onChange={(v) => startTransition(() => setJobStatus(v))}
+      />
+      <DashboardSelect
+        theme={theme}
+        size="compact"
+        aria-label="Filter by category"
+        value={jobCategory}
+        options={[
+          { value: "all", label: "All categories" },
+          ...computed.jobCategories.map((c) => ({ value: c, label: c })),
+        ]}
+        onChange={(v) => startTransition(() => setJobCategory(v))}
+        align="right"
+      />
+    </DashboardControlBar>
+  );
+
   const widgetBlocks: Record<DashboardWidgetId, ReactNode> = {
     metrics: (
-      <div
-        key="metrics"
-        className={`grid gap-2 sm:grid-cols-2 lg:grid-cols-4 ${compact ? "p-3" : "p-4 sm:p-5"}`}
-      >
+      <div key="metrics" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           compact={compact}
           label="Payments collected"
@@ -274,20 +499,10 @@ export function WorkspaceSampleDashboard({
         />
       </div>
     ),
-    collections_chart: (
-      <div className={`${compact ? "p-3" : "p-4"} ${theme.chartPanel} rounded-lg`}>
-        <h3 className="text-sm font-semibold text-ink">Collections trend</h3>
-        <p className="text-xs text-ink-muted">
-          {formatRangeForDisplay(computed.range)} · Total{" "}
-          <CurrencyAmount amount={computed.trendTotal} className="inline font-semibold" />
-        </p>
-        <CollectionsTrendChart trend={computed.trend} />
-      </div>
-    ),
+    collections_chart: <CollectionsTrendChart trend={computed.trend} />,
     needs_attention: (
-      <div className={`${compact ? "p-3" : "p-4"} rounded-lg border border-amber-100 bg-amber-50/30`}>
-        <h3 className="text-sm font-semibold text-ink">Needs attention</h3>
-        <ul className="mt-2 space-y-2 text-sm">
+      <div key="needs_attention">
+        <ul className="space-y-2 text-sm">
           <li>
             <button
               type="button"
@@ -352,6 +567,8 @@ export function WorkspaceSampleDashboard({
           setSelectedAppointmentId(null);
         }}
         embedded
+        bare
+        filterPending={jobFilterPending}
       />
     ),
     appointments: (
@@ -366,115 +583,101 @@ export function WorkspaceSampleDashboard({
           setSelectedInvoiceId(null);
           setSelectedJobId(null);
         }}
-        formatDateTime={formatDateTime}
+        formatDateTime={formatAppointmentDateTime}
         scheduleHref={dashboardSectionHref(dashboardRoutes.schedule, workspaceId)}
         embedded
+        bare
       />
     ),
     invoices: (
-      <div className={compact ? "px-3 py-3" : "px-4 py-4 sm:px-5"}>
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-semibold text-ink">Invoices</h3>
-            <p className="text-xs text-ink-muted">
-              {computed.invoices.length} shown · filtered balance{" "}
-              <CurrencyAmount amount={computed.filteredBalance} className="inline" />
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <input
-              type="search"
-              value={invoiceSearch}
-              onChange={(e) => {
-                setInvoiceSearch(e.target.value);
-                setInvoiceLimit(INVOICE_PAGE_SIZE);
-              }}
-              placeholder="Search customer, #, description"
-              className="rounded-lg border border-purple-100 px-2 py-1 text-xs"
-            />
-            <select
-              value={invoiceStatus}
-              onChange={(e) => {
-                setInvoiceStatus(e.target.value as typeof invoiceStatus);
-                setInsightFocus("none");
-              }}
-              className="rounded-lg border border-purple-100 px-2 py-1 text-xs"
-            >
-              <option value="all">All statuses</option>
-              <option value="Open">Open</option>
-              <option value="Past due">Past due</option>
-              <option value="Paid">Paid</option>
-            </select>
-            <select
-              value={invoiceSort}
-              onChange={(e) => setInvoiceSort(e.target.value as typeof invoiceSort)}
-              className="rounded-lg border border-purple-100 px-2 py-1 text-xs"
-            >
-              <option value="dueDate">Sort: due date</option>
-              <option value="balance">Sort: balance</option>
-            </select>
-            {(invoiceSearch || invoiceStatus !== "all" || insightFocus !== "none") && (
-              <button
-                type="button"
-                className="text-xs font-semibold text-purple"
-                onClick={() => {
-                  setInvoiceSearch("");
-                  setInvoiceStatus("all");
-                  setInsightFocus("none");
-                  setInvoiceLimit(INVOICE_PAGE_SIZE);
-                }}
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[32rem] text-left text-sm">
+      <div key="invoices">
+        <div
+          aria-busy={invoiceTablePending}
+          aria-label="Filtered invoices"
+          className={`relative overflow-x-auto [scrollbar-gutter:stable] ${widgetListShellClass}`}
+        >
+          <div aria-hidden className={filterPanelVeilClass(invoiceTablePending)} />
+          <div className={filterPanelContentClass(invoiceTablePending)}>
+          <table className="w-full min-w-[32rem] table-fixed text-center text-sm">
+            <colgroup>
+              <col className="w-[17%]" />
+              <col className="w-[31%]" />
+              <col className="w-[17%]" />
+              <col className="w-[17%]" />
+              <col className="w-[18%]" />
+            </colgroup>
             <thead>
-              <tr className="border-b border-purple-100/80 text-xs font-semibold uppercase text-ink-muted">
-                <th className="py-2 pr-2">Invoice</th>
-                <th className="py-2 pr-2">Customer</th>
-                <th className="py-2 pr-2">Due</th>
-                <th className="py-2 pr-2">Balance</th>
-                <th className="py-2">Status</th>
+              <tr className="border-b border-purple-200/80 bg-purple-50/55 text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+                <th className="px-3 py-2.5">Invoice</th>
+                <th className="px-3 py-2.5">Customer</th>
+                <th className="px-3 py-2.5">Due</th>
+                <th className="px-3 py-2.5">Balance</th>
+                <th className="px-3 py-2.5">Status</th>
               </tr>
             </thead>
-            <tbody>
-              {computed.invoices.slice(0, invoiceLimit).map((inv) => (
-                <tr
-                  key={inv.id}
-                  className={`cursor-pointer border-b border-purple-50/80 hover:bg-purple-50/30 ${selectedInvoiceId === inv.id ? "bg-purple-50/50" : ""}`}
-                  onClick={() => {
-                    setSelectedInvoiceId(inv.id);
-                    setSelectedJobId(null);
-                    setSelectedAppointmentId(null);
-                  }}
-                >
-                  <td className="py-2 pr-2 font-mono text-xs">{inv.invoiceNumber}</td>
-                  <td className="py-2 pr-2 font-medium text-ink">{inv.customer}</td>
-                  <td className="py-2 pr-2">{formatShortDate(inv.dueDate)}</td>
-                  <td className="py-2 pr-2">
-                    <CurrencyAmount amount={inv.balanceDue} />
-                  </td>
-                  <td className="py-2">
-                    <StatusPill status={inv.status} />
+            <tbody className="divide-y divide-purple-100/90">
+              {visibleInvoices.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="h-[21rem] align-middle text-center text-sm text-ink-muted"
+                  >
+                    No invoices match.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                <>
+                  {visibleInvoices.map((inv, idx) => (
+                    <tr
+                      key={inv.id}
+                      className={`h-10 cursor-pointer ${widgetListRowClass} ${
+                        selectedInvoiceId === inv.id
+                          ? "bg-purple-50/80 shadow-[inset_3px_0_0_0_rgb(124,58,237)]"
+                          : idx % 2 === 1
+                            ? "bg-white/60"
+                            : "bg-white"
+                      }`}
+                      onClick={() => {
+                        setSelectedInvoiceId(inv.id);
+                        setSelectedJobId(null);
+                        setSelectedAppointmentId(null);
+                      }}
+                    >
+                      <td className="truncate px-3 py-2.5 font-mono text-xs font-semibold text-purple-dark">
+                        {inv.invoiceNumber}
+                      </td>
+                      <td className="truncate px-3 py-2.5 font-medium text-ink">{inv.customer}</td>
+                      <td className="px-3 py-2.5 text-ink-muted">{formatShortDate(inv.dueDate)}</td>
+                      <td className="px-3 py-2.5 font-semibold text-purple-dark">
+                        <CurrencyAmount amount={inv.balanceDue} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusPill status={inv.status} />
+                      </td>
+                    </tr>
+                  ))}
+                  {Array.from({ length: invoicePadRowCount }, (_, i) => (
+                    <tr key={`invoice-pad-${i}`} className="h-10 pointer-events-none" aria-hidden>
+                      <td
+                        colSpan={5}
+                        className={`${i % 2 === 1 ? "bg-white/60" : "bg-white"} border-transparent`}
+                      />
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
-          {computed.invoices.length === 0 && (
-            <p className="py-4 text-center text-sm text-ink-muted">No invoices match.</p>
-          )}
+          </div>
+        </div>
+        <div className="mt-3 min-h-9">
           {computed.invoices.length > invoiceLimit && (
-            <button
-              type="button"
-              className="mt-2 text-xs font-semibold text-purple"
+            <DashboardSecondaryButton
+              theme={theme}
               onClick={() => setInvoiceLimit((n) => n + INVOICE_PAGE_SIZE)}
             >
               Show more
-            </button>
+            </DashboardSecondaryButton>
           )}
         </div>
       </div>
@@ -567,7 +770,68 @@ export function WorkspaceSampleDashboard({
           </p>
         )}
 
-        {renderWidgetRows(visibleWidgets, widgetBlocks)}
+        {renderWidgetRows(visibleWidgets, widgetBlocks, theme, compact, (id) => {
+          const rangeLabel = formatRangeForDisplay(computed.range);
+          switch (id) {
+            case "metrics":
+              return { title: "General Overview", subtitle: rangeLabel };
+            case "collections_chart":
+              return {
+                title: "Collections trend",
+                subtitle: (
+                  <>
+                    {rangeLabel} · Total{" "}
+                    <CurrencyAmount
+                      amount={computed.trendTotal}
+                      className={`inline font-semibold ${theme.metricValueA}`}
+                    />
+                  </>
+                ),
+                tightToolbar: true,
+              };
+            case "job_activity":
+              return {
+                title: "Job activity",
+                subtitle: rangeLabel,
+                subtitleAlign: "center" as const,
+                headerAside: jobActivityToolbar,
+                tightToolbar: true,
+              };
+            case "appointments":
+              return {
+                title: "Next 7 days",
+                subtitle: `${computed.upcoming} upcoming · from ${formatShortDate(DEMO_AS_OF_DATE)}`,
+                subtitleAlign: "center" as const,
+                headerAside: (
+                  <Link
+                    href={dashboardSectionHref(dashboardRoutes.schedule, workspaceId)}
+                    className={`inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${theme.filterSecondaryButton}`}
+                  >
+                    Open schedule
+                  </Link>
+                ),
+              };
+            case "invoices":
+              return {
+                title: "Invoices",
+                subtitle: (
+                  <>
+                    {computed.invoices.length} shown · filtered balance{" "}
+                    <CurrencyAmount
+                      amount={computed.filteredBalance}
+                      className={`inline font-semibold ${theme.metricValueA}`}
+                    />
+                  </>
+                ),
+                headerAside: invoiceToolbar,
+                tightToolbar: true,
+              };
+            case "needs_attention":
+              return { title: "Needs attention", accent: "alert" as const };
+            default:
+              return { title: id };
+          }
+        })}
 
       {(selectedInvoice || selectedJob || selectedAppointment) && (
         <div className="border-t border-purple-100/80 bg-white/90 px-4 py-4 sm:px-5">
@@ -668,14 +932,45 @@ function KpiCard({
 
 const OPERATIONS_PAIR: DashboardWidgetId[] = ["job_activity", "appointments"];
 
+type WidgetSectionMeta = {
+  title: string;
+  subtitle?: ReactNode;
+  headerAside?: ReactNode;
+  accent?: "default" | "alert";
+  tightToolbar?: boolean;
+  subtitleAlign?: "left" | "center" | "right";
+};
+
 function renderWidgetRows(
   visibleWidgets: DashboardWidgetId[],
-  widgetBlocks: Record<DashboardWidgetId, ReactNode>
+  widgetBlocks: Record<DashboardWidgetId, ReactNode>,
+  theme: LayoutCustomizeTheme,
+  compact: boolean,
+  sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta
 ) {
   const rows: ReactNode[] = [];
   const skip = new Set<DashboardWidgetId>();
   const hasJobs = visibleWidgets.includes("job_activity");
   const hasAppts = visibleWidgets.includes("appointments");
+
+  const wrapSection = (id: DashboardWidgetId) => {
+    const meta = sectionFor(id);
+    return (
+      <DashboardSection
+        key={id}
+        theme={theme}
+        compact={compact}
+        title={meta.title}
+        subtitle={meta.subtitle}
+        headerAside={meta.headerAside}
+        accent={meta.accent}
+        tightToolbar={meta.tightToolbar}
+        subtitleAlign={meta.subtitleAlign}
+      >
+        {widgetBlocks[id]}
+      </DashboardSection>
+    );
+  };
 
   for (let i = 0; i < visibleWidgets.length; i++) {
     const id = visibleWidgets[i]!;
@@ -688,28 +983,19 @@ function renderWidgetRows(
       if (id !== ordered[0]) continue;
       ordered.forEach((w) => skip.add(w));
       rows.push(
-        <div
-          key="operations-row"
-          className="grid border-t border-purple-100/60 lg:grid-cols-2 lg:divide-x lg:divide-purple-100/60"
-        >
-          {ordered.map((w) => (
-            <div key={w} className="min-w-0">
-              {widgetBlocks[w]}
-            </div>
-          ))}
+        <div key="operations-row" className="grid gap-4 lg:grid-cols-2">
+          {ordered.map((w) => wrapSection(w))}
         </div>
       );
       continue;
     }
 
-    rows.push(
-      <div key={id} className="border-t border-purple-100/60">
-        {widgetBlocks[id]}
-      </div>
-    );
+    rows.push(wrapSection(id));
   }
 
-  return rows;
+  return (
+    <div className={`flex flex-col gap-4 p-4 sm:p-5 ${theme.dashboardCanvas}`}>{rows}</div>
+  );
 }
 
 function OperationsJobsPanel({
@@ -726,6 +1012,8 @@ function OperationsJobsPanel({
   selectedJobId,
   onSelectJob,
   embedded = false,
+  bare = false,
+  filterPending = false,
 }: {
   compact: boolean;
   theme: ReturnType<typeof useCustomerPortal>["theme"];
@@ -740,54 +1028,57 @@ function OperationsJobsPanel({
   selectedJobId: string | null;
   onSelectJob: (id: string) => void;
   embedded?: boolean;
+  bare?: boolean;
+  filterPending?: boolean;
 }) {
   const pad = compact ? "p-2.5 sm:p-3" : "p-3 sm:p-4";
   const density = getOperationsListDensity(jobs.length);
   const visibleJobs = jobs.slice(0, density.maxVisible);
   const hiddenCount = jobs.length - visibleJobs.length;
 
+  const shellClass = bare
+    ? "min-w-0"
+    : `${pad} h-full ${embedded ? "" : `${theme.listPanel} rounded-xl`}`;
+
   return (
-    <div
-      className={`${pad} ${embedded ? "" : `${theme.listPanel} rounded-lg`} ${embedded ? theme.listPanel : ""} h-full`}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-ink">Job activity</h3>
-          <p className="text-[11px] text-ink-muted">{rangeLabel}</p>
+    <div className={shellClass}>
+      {!bare && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-100/80 pb-2">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">Job activity</h3>
+            <p className="text-[11px] text-ink-muted">{rangeLabel}</p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <DashboardSelect
+              theme={theme}
+              aria-label="Job status"
+              value={jobStatus}
+              options={[
+                { value: "all", label: "All statuses" },
+                { value: "completed", label: "Completed" },
+                { value: "scheduled", label: "Scheduled" },
+                { value: "in_progress", label: "In progress" },
+                { value: "canceled", label: "Canceled" },
+              ]}
+              onChange={setJobStatus}
+            />
+            <DashboardSelect
+              theme={theme}
+              aria-label="Job category"
+              value={jobCategory}
+              options={[
+                { value: "all", label: "All categories" },
+                ...jobCategories.map((c) => ({ value: c, label: c })),
+              ]}
+              onChange={setJobCategory}
+            />
+          </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <select
-            value={jobStatus}
-            onChange={(e) => setJobStatus(e.target.value as typeof jobStatus)}
-            className="rounded border border-purple-100 px-1.5 py-0.5 text-[11px]"
-          >
-            <option value="all">All statuses</option>
-            <option value="completed">Completed</option>
-            <option value="scheduled">Scheduled</option>
-            <option value="in_progress">In progress</option>
-            <option value="canceled">Canceled</option>
-          </select>
-          <select
-            value={jobCategory}
-            onChange={(e) => setJobCategory(e.target.value)}
-            className="rounded border border-purple-100 px-1.5 py-0.5 text-[11px]"
-          >
-            <option value="all">All categories</option>
-            {jobCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      )}
       {categories.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
+        <div className={operationsSummaryStripClass}>
           {categories.map((c) => (
-            <span
-              key={c.category}
-              className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-ink-muted"
-            >
+            <span key={c.category} className={operationsSummaryChipClass}>
               {c.category} · {c.completed}
             </span>
           ))}
@@ -798,25 +1089,25 @@ function OperationsJobsPanel({
           No jobs match these filters.
         </p>
       ) : (
-        <ul
-          className={`mt-2 divide-y divide-purple-100 overflow-hidden rounded-lg border border-purple-100/90 bg-white/50 ${density.text}`}
+        <div
+          aria-busy={filterPending}
+          className={`relative mt-3 ${widgetListShellClass} ${density.text}`}
         >
+          <div aria-hidden className={filterPanelVeilClass(filterPending)} />
+          <ul className={`divide-y divide-purple-200/80 ${filterPanelContentClass(filterPending)}`}>
           {visibleJobs.map((job) => {
-            const whenIso =
-              job.scheduledAt ??
-              `${job.completedDate ?? job.scheduledDate}T09:00:00`;
-            const { date, time } = formatDateTime(whenIso);
+            const { date, time } = formatJobRowWhen(job);
             return (
               <li key={job.id}>
                 <button
                   type="button"
                   onClick={() => onSelectJob(job.id)}
-                  className={`flex w-full flex-col gap-0.5 px-3 text-left text-ink transition-colors hover:bg-white/80 sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
-                    selectedJobId === job.id ? "bg-purple-50/90" : ""
+                  className={`flex w-full flex-col gap-0.5 px-3 text-left text-ink sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
+                    selectedJobId === job.id ? operationsListRowSelected : operationsListRowBase
                   }`}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
+                    <p className="truncate font-semibold">
                       {job.serviceType}
                       {" · "}
                       <CurrencyAmount amount={job.amount} className="inline font-medium" />
@@ -830,8 +1121,12 @@ function OperationsJobsPanel({
                   >
                     <span>
                       <span className={`font-semibold ${theme.listAccent}`}>{date}</span>
-                      {" · "}
-                      {time}
+                      {time ? (
+                        <>
+                          {" · "}
+                          {time}
+                        </>
+                      ) : null}
                     </span>
                     <span className="capitalize">{job.status.replace("_", " ")}</span>
                     <span className="hidden sm:inline">{job.assignee}</span>
@@ -840,7 +1135,8 @@ function OperationsJobsPanel({
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </div>
       )}
       {hiddenCount > 0 && (
         <p className={`mt-2 ${density.meta} text-ink-muted`}>
@@ -861,6 +1157,7 @@ function OperationsSchedulePanel({
   formatDateTime,
   scheduleHref,
   embedded = false,
+  bare = false,
 }: {
   compact: boolean;
   theme: ReturnType<typeof useCustomerPortal>["theme"];
@@ -871,28 +1168,43 @@ function OperationsSchedulePanel({
   formatDateTime: (iso: string) => { date: string; time: string };
   scheduleHref: string;
   embedded?: boolean;
+  bare?: boolean;
 }) {
   const pad = compact ? "p-2.5 sm:p-3" : "p-3 sm:p-4";
   const density = getOperationsListDensity(upcomingList.length);
   const visible = upcomingList.slice(0, density.maxVisible);
   const hiddenCount = upcomingList.length - visible.length;
+  const assigneeBreakdown = appointmentAssigneeBreakdown(upcomingList);
+
+  const shellClass = bare
+    ? "min-w-0"
+    : `${pad} h-full ${embedded ? "" : `${theme.listPanel} rounded-xl`}`;
 
   return (
-    <div
-      className={`${pad} ${embedded ? "" : `${theme.listPanel} rounded-lg`} ${embedded ? theme.listPanel : ""} h-full`}
-    >
-      <h3 className="text-sm font-semibold text-ink">Next 7 days</h3>
-      <p className="text-[11px] text-ink-muted">
-        From {formatShortDate(DEMO_AS_OF_DATE)} · {upcoming} scheduled
-      </p>
+    <div className={shellClass}>
+      {!bare && (
+        <div className="border-b border-purple-100/80 pb-2">
+          <h3 className="text-sm font-semibold text-ink">Next 7 days</h3>
+          <p className="text-[11px] text-ink-muted">
+            From {formatShortDate(DEMO_AS_OF_DATE)} · {upcoming} scheduled
+          </p>
+        </div>
+      )}
+      {assigneeBreakdown.length > 0 && (
+        <div className={operationsSummaryStripClass}>
+          {assigneeBreakdown.map(({ assignee, count }) => (
+            <span key={assignee} className={operationsSummaryChipClass}>
+              {assignee} · {count}
+            </span>
+          ))}
+        </div>
+      )}
       {visible.length === 0 ? (
         <p className={`mt-3 text-center ${density.meta} text-ink-muted`}>
           No upcoming appointments in this window.
         </p>
       ) : (
-        <ul
-          className={`mt-2 divide-y divide-purple-100 overflow-hidden rounded-lg border border-purple-100/90 bg-white/50 ${density.text}`}
-        >
+        <ul className={`mt-3 divide-y divide-purple-200/80 ${widgetListShellClass} ${density.text}`}>
           {visible.map((appt) => {
             const { date, time } = formatDateTime(appt.startAt);
             return (
@@ -900,11 +1212,13 @@ function OperationsSchedulePanel({
                 <button
                   type="button"
                   onClick={() => onSelectAppointment(appt.id)}
-                  className={`flex w-full flex-col gap-0.5 px-3 text-left transition-colors hover:bg-white/80 sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
-                    selectedAppointmentId === appt.id ? "bg-purple-50/90" : ""
+                  className={`flex w-full flex-col gap-0.5 px-3 text-left sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
+                    selectedAppointmentId === appt.id
+                      ? operationsListRowSelected
+                      : operationsListRowBase
                   }`}
                 >
-                  <p className="min-w-0 flex-1 truncate font-medium text-ink">{appt.title}</p>
+                  <p className="min-w-0 flex-1 truncate font-semibold text-ink">{appt.title}</p>
                   <div className={`shrink-0 ${density.meta}`}>
                     <span className={`font-semibold ${theme.listAccent}`}>{date}</span>
                     <span className="text-ink-muted"> · {time}</span>
@@ -931,12 +1245,12 @@ function OperationsSchedulePanel({
 function StatusPill({ status }: { status: string }) {
   const cls =
     status === "Past due"
-      ? "bg-amber-100 text-amber-900"
+      ? "border-amber-200/80 bg-gradient-to-b from-amber-50 to-amber-100/90 text-amber-950 ring-1 ring-amber-200/50"
       : status === "Open"
-        ? "bg-slate-100 text-slate-800"
-        : "bg-emerald-50 text-emerald-800";
+        ? "border-slate-200 bg-gradient-to-b from-slate-50 to-white text-slate-800 ring-1 ring-slate-200/60"
+        : "border-emerald-200/80 bg-gradient-to-b from-emerald-50 to-emerald-100/70 text-emerald-900 ring-1 ring-emerald-200/50";
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>
+    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold shadow-sm ${cls}`}>
       {status}
     </span>
   );

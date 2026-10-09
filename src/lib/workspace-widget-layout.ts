@@ -1,10 +1,10 @@
 export const DASHBOARD_WIDGET_IDS = [
   "metrics",
   "collections_chart",
-  "needs_attention",
   "job_activity",
   "appointments",
   "invoices",
+  "needs_attention",
 ] as const;
 
 export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
@@ -52,11 +52,11 @@ export function normalizeLayoutSettings(
     (id) => !visibleOrder.includes(id) && !hidden.includes(id)
   );
 
-  const mergedOrder = [
+  const mergedOrder = pinNeedsAttentionLast([
     ...visibleOrder,
     ...missing,
     ...hidden.filter((h) => !order.includes(h)),
-  ];
+  ]);
 
   return {
     themeId: partial?.themeId ?? DEFAULT_WORKSPACE_LAYOUT.themeId,
@@ -65,6 +65,12 @@ export function normalizeLayoutSettings(
     widgetOrder: mergedOrder,
     hiddenWidgets: hidden,
   };
+}
+
+/** Keep overdue / insight callouts at the bottom of the overview stack. */
+function pinNeedsAttentionLast(order: DashboardWidgetId[]): DashboardWidgetId[] {
+  if (!order.includes("needs_attention")) return order;
+  return [...order.filter((id) => id !== "needs_attention"), "needs_attention"];
 }
 
 export function moveWidget(

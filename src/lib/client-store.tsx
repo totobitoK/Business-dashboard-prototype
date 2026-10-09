@@ -121,6 +121,21 @@ function syncSetupPayment(client: Client): Client {
   return { ...client, setupPaidAmount: paid, completedSteps };
 }
 
+function readInitialClients(): Client[] {
+  if (typeof window === "undefined") return demoClients;
+  try {
+    return loadPersistedClients(demoClients);
+  } catch (err) {
+    console.error("Failed to load demo data from storage; using defaults.", err);
+    try {
+      localStorage.removeItem(CLIENT_DEMO_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    return normalizeClients(demoClients);
+  }
+}
+
 export function ClientStoreProvider({ children }: { children: ReactNode }) {
   const [clients, setClients] = useState<Client[]>(demoClients);
   const [hydrated, setHydrated] = useState(false);
@@ -202,19 +217,9 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      const loaded = loadPersistedClients(demoClients);
+      const loaded = readInitialClients();
       clientsRef.current = loaded;
       setClients(loaded);
-    } catch (err) {
-      console.error("Failed to load demo data from storage; using defaults.", err);
-      const fallback = normalizeClients(demoClients);
-      clientsRef.current = fallback;
-      setClients(fallback);
-      try {
-        localStorage.removeItem(CLIENT_DEMO_STORAGE_KEY);
-      } catch {
-        /* ignore */
-      }
     } finally {
       setHydrated(true);
     }
