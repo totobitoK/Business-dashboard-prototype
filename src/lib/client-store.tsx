@@ -43,6 +43,14 @@ import {
   getStepsForPath,
   isOnboardingComplete,
 } from "./onboarding";
+import { applyOnboardingDraftToClientList } from "./onboarding-draft";
+import {
+  applyPublishScopeToClient,
+  buildCustomerScopeAcceptPatch,
+  buildScopeMaterialChangePatch,
+  scopeHasPublishableContent,
+  touchesCustomerScopeMaterial,
+} from "./scope-acceptance";
 import {
   canAcceptScopeCard,
   exportScopeCardToServer,
@@ -78,9 +86,21 @@ interface ClientStoreContextValue {
   ) => { ok: boolean; error?: string };
   addNote: (id: string, content: string) => void;
   activateClient: (id: string) => void;
-  saveOnboardingDraft: (id: string, draft: ClientOnboardingDraft) => void;
-  submitOnboarding: (id: string, answers: ClientOnboardingAnswers) => void;
+  saveOnboardingDraft: (
+    id: string,
+    draft: ClientOnboardingDraft
+  ) => { ok: boolean; error?: string };
+  submitOnboarding: (
+    id: string,
+    answers: ClientOnboardingAnswers
+  ) => { ok: boolean; error?: string };
   acceptScopeCard: (id: string) => Promise<ScopeCardExportResult>;
+  publishScopeForCustomerReview: (id: string) => { ok: boolean; error?: string };
+  acceptCustomerScopePricing: (id: string) => { ok: boolean; error?: string };
+  requestCustomerScopeChanges: (
+    id: string,
+    note: string
+  ) => { ok: boolean; error?: string };
   toggleAdminMilestone: (id: string, milestone: ClientMilestone) => void;
   updateGuidedConnectionDemoStatus: (
     id: string,
@@ -248,6 +268,9 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         base.map((c) => {
           if (c.id !== id) return c;
           let next: Client = { ...c, ...updates };
+          if (touchesCustomerScopeMaterial(updates)) {
+            next = { ...next, ...buildScopeMaterialChangePatch(c, updates) };
+          }
           if ("acceptedSourcesIn" in updates) {
             next = {
               ...next,
@@ -256,8 +279,11 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
           }
           const scopeChanged =
             "acceptedSourcesIn" in updates ||
+            "acceptedScreens" in updates ||
             "agreedScopeSummary" in updates ||
-            "dashboardScope" in updates;
+            "dashboardScope" in updates ||
+            "setupFee" in updates ||
+            "monthlyFee" in updates;
           const buildReopened =
             "adminCompletedMilestones" in updates &&
             !(updates.adminCompletedMilestones ?? []).includes("building") &&
@@ -502,16 +528,8 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
 
   const saveOnboardingDraft = useCallback(
     (id: string, draft: ClientOnboardingDraft) => {
-      applyClientsUpdate((base) =>
-        base.map((c) =>
-          c.id === id
-            ? {
-                ...c,
-                onboardingFormStatus: "in-progress" as const,
-                onboardingDraft: draft,
-              }
-            : c
-        )
+      return applyClientsUpdate((base) =>
+        applyOnboardingDraftToClientList(base, id, draft)
       );
     },
     [applyClientsUpdate]
@@ -523,9 +541,13 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       const submittedAt = new Date().toISOString();
       let submittedClient: Client | undefined;
 
-      applyClientsUpdate((base) =>
+      const result = applyClientsUpdate((base) =>
         base.map((c) => {
           if (c.id !== id) return c;
+          if (c.onboardingFormStatus === "submitted") {
+            submittedClient = c;
+            return c;
+          }
           const completedSteps: OnboardingStep[] = c.completedSteps.includes(
             "requirements-submitted"
           )
@@ -547,52 +569,137 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         })
       );
 
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
       if (submittedClient) {
         void exportScopeCardForClient(submittedClient);
       }
+      return { ok: true };
     },
     [applyClientsUpdate, exportScopeCardForClient]
   );
 
   const acceptScopeCard = useCallback(async (id: string): Promise<ScopeCardExportResult> => {
-    let clientToExport: Client | undefined;
-
-    applyClientsUpdate((base) =>
-      base.map((c) => {
-        if (c.id !== id) return c;
-        if (!canAcceptScopeCard(c) && !c.completedSteps.includes("scope-pricing-confirmed")) {
-          return c;
-        }
-
-        let next: Client = { ...c };
-        if (!c.completedSteps.includes("scope-pricing-confirmed")) {
-          if (!canAcceptScopeCard(c)) return c;
-          const admin = new Set(next.adminCompletedMilestones ?? []);
-          admin.add("scope-confirmed");
-          next = {
-            ...next,
-            scopePricingConfirmedAt: new Date().toISOString(),
-            completedSteps: [...c.completedSteps, "scope-pricing-confirmed"],
-            adminCompletedMilestones: [...admin],
-          };
-        }
-        next = {
-          ...next,
-          guidedConnections: syncGuidedConnectionsFromScope(next),
-        };
-        clientToExport = next;
-        return next;
-      })
-    );
-
-    if (!clientToExport) {
-      return { ok: false, error: "Submit client onboarding before accepting the scope card." };
+    const client = clientsRef.current.find((c) => c.id === id);
+    if (!client) {
+      return { ok: false, error: "Client not found." };
     }
-
-    const exportResult = await exportScopeCardForClient(clientToExport);
+    if (!canAcceptScopeCard(client) && !client.scopeCardExportedAt) {
+      return {
+        ok: false,
+        error: "Submit client onboarding before exporting the scope card.",
+      };
+    }
+    const exportResult = await exportScopeCardForClient(client);
     if (exportResult) return exportResult;
     return { ok: true, unchanged: true };
-  }, [applyClientsUpdate, exportScopeCardForClient]);
+  }, [exportScopeCardForClient]);
+
+  const publishScopeForCustomerReview = useCallback(
+    (id: string) => {
+      const publishedAt = new Date().toISOString();
+      let published = false;
+      const result = applyClientsUpdate((base) =>
+        base.map((c) => {
+          if (c.id !== id) return c;
+          if (!scopeHasPublishableContent(c)) return c;
+          const publishedClient = applyPublishScopeToClient(c, publishedAt);
+          if (!publishedClient) return c;
+          published = true;
+          const note: Note = {
+            id: generateId("note"),
+            date: publishedAt,
+            content: `Scope revision published for customer review (revision ${publishedClient.publishedScopeRevision}).`,
+          };
+          let withPatch: Client = publishedClient;
+          if (c.previewApprovedAt) {
+            withPatch = {
+              ...withPatch,
+              ...buildPreviewInvalidationPatch(
+                withPatch,
+                "Preview approval cleared — scope republished for customer review."
+              ),
+            };
+          }
+          return {
+            ...withPatch,
+            guidedConnections: syncGuidedConnectionsFromScope(withPatch),
+            notes: [note, ...withPatch.notes],
+          };
+        })
+      );
+      if (!result.ok) return result;
+      if (!published) {
+        return {
+          ok: false,
+          error: "Add scope summary, sources, or screens before publishing.",
+        };
+      }
+      return result;
+    },
+    [applyClientsUpdate]
+  );
+
+  const acceptCustomerScopePricing = useCallback(
+    (id: string) => {
+      const acceptedAt = new Date().toISOString();
+      let accepted = false;
+      const result = applyClientsUpdate((base) =>
+        base.map((c) => {
+          if (c.id !== id) return c;
+          const patch = buildCustomerScopeAcceptPatch(c, acceptedAt);
+          if (!patch) return c;
+          accepted = true;
+          const note: Note = {
+            id: generateId("note"),
+            date: acceptedAt,
+            content: `Customer accepted scope & pricing (revision ${c.publishedScopeRevision}).`,
+          };
+          return {
+            ...c,
+            ...patch,
+            notes: [note, ...c.notes],
+          };
+        })
+      );
+      if (!result.ok) return result;
+      if (!accepted) {
+        return {
+          ok: false,
+          error: "No published scope is available to accept yet.",
+        };
+      }
+      return result;
+    },
+    [applyClientsUpdate]
+  );
+
+  const requestCustomerScopeChanges = useCallback(
+    (id: string, note: string) => {
+      const trimmed = note.trim();
+      if (!trimmed) return { ok: false, error: "Describe what you would like changed." };
+      const at = new Date().toISOString();
+      return applyClientsUpdate((base) =>
+        base.map((c) => {
+          if (c.id !== id) return c;
+          if (!c.publishedScopeRevision) return c;
+          const adminNote: Note = {
+            id: generateId("note"),
+            date: at,
+            content: `Customer scope change request (revision ${c.publishedScopeRevision}): ${trimmed}`,
+          };
+          return {
+            ...c,
+            scopeChangeRequestAt: at,
+            scopeChangeRequestNote: trimmed,
+            notes: [adminNote, ...c.notes],
+          };
+        })
+      );
+    },
+    [applyClientsUpdate]
+  );
 
   const toggleAdminMilestone = useCallback(
     (id: string, milestone: ClientMilestone) => {
@@ -766,6 +873,9 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       saveOnboardingDraft,
       submitOnboarding,
       acceptScopeCard,
+      publishScopeForCustomerReview,
+      acceptCustomerScopePricing,
+      requestCustomerScopeChanges,
       toggleAdminMilestone,
       updateGuidedConnectionDemoStatus,
       setPaymentOnlyPrepConfirmed,
@@ -787,6 +897,9 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       saveOnboardingDraft,
       submitOnboarding,
       acceptScopeCard,
+      publishScopeForCustomerReview,
+      acceptCustomerScopePricing,
+      requestCustomerScopeChanges,
       toggleAdminMilestone,
       updateGuidedConnectionDemoStatus,
       setPaymentOnlyPrepConfirmed,

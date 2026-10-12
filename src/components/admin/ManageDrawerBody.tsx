@@ -25,7 +25,6 @@ import { formatToolsList } from "@/lib/metrics";
 import {
   getOnboardingFormStatusLabel,
   getSetupRemaining,
-  isScopePricingConfirmed,
 } from "@/lib/onboarding";
 import {
   parseOfflinePaymentAmount,
@@ -33,6 +32,13 @@ import {
 } from "@/lib/offline-payment-input";
 import { formatPaymentRecordSource } from "@/lib/payment-record-source";
 import { clientRoutes } from "@/lib/routes";
+import {
+  hasCustomerAcceptedCurrentPublishedScope,
+  hasPendingScopeChangeRequest,
+  hasPublishedScopeForReview,
+  isLegacyScopeConfirmation,
+  needsCustomerScopeAcceptance,
+} from "@/lib/scope-acceptance";
 import { canAcceptScopeCard } from "@/lib/scope-card-export";
 import { useClientStore } from "@/lib/client-store";
 import type {
@@ -81,6 +87,7 @@ export function ManageDrawerBody({ client }: { client: Client }) {
 
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [publishMessage, setPublishMessage] = useState<string | null>(null);
 
   const [companyDraft, setCompanyDraft] = useState(() => companySeed(client));
   const [projectDraft, setProjectDraft] = useState(() => projectSeed(client));
@@ -128,9 +135,24 @@ export function ManageDrawerBody({ client }: { client: Client }) {
     return `${completed}/${total} milestones complete`;
   }, [client]);
 
-  const scopeSummary = isScopePricingConfirmed(client)
-    ? `Scope confirmed · ${client.acceptedSourcesIn?.length ?? 0} sources`
-    : "Scope not confirmed";
+  const scopeSummary = (() => {
+    if (hasPendingScopeChangeRequest(client)) {
+      return "Customer requested scope changes";
+    }
+    if (needsCustomerScopeAcceptance(client)) {
+      return `Published rev ${client.publishedScopeRevision} · awaiting customer acceptance`;
+    }
+    if (hasCustomerAcceptedCurrentPublishedScope(client)) {
+      return `Customer accepted rev ${client.scopeCustomerAcceptedRevision}`;
+    }
+    if (isLegacyScopeConfirmation(client)) {
+      return `Legacy scope confirmed · ${client.acceptedSourcesIn?.length ?? 0} sources`;
+    }
+    if (hasPublishedScopeForReview(client)) {
+      return `Published rev ${client.publishedScopeRevision} · not accepted`;
+    }
+    return "Scope not published for customer";
+  })();
 
   function handleAddNote() {
     if (!noteText.trim()) return;
@@ -501,19 +523,52 @@ export function ManageDrawerBody({ client }: { client: Client }) {
         {exportMessage && (
           <p className="mt-1 text-xs text-navy">{exportMessage}</p>
         )}
+        {client.scopeChangeRequestNote && (
+          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
+            Customer change request: {client.scopeChangeRequestNote}
+          </p>
+        )}
+        {client.scopeCustomerAcceptedAt && (
+          <p className="mt-2 text-xs text-navy-muted">
+            Customer accepted revision {client.scopeCustomerAcceptedRevision} on{" "}
+            {new Date(client.scopeCustomerAcceptedAt).toLocaleString()}
+          </p>
+        )}
+        {needsCustomerScopeAcceptance(client) && (
+          <p className="mt-2 text-xs font-semibold text-amber-800">
+            Waiting for customer to accept published scope (rev{" "}
+            {client.publishedScopeRevision}).
+          </p>
+        )}
         {!archived && (
-          <button
-            type="button"
-            onClick={handleAcceptScopeCard}
-            disabled={exporting || (!isScopePricingConfirmed(client) && !canAcceptScopeCard(client))}
-            className={primaryBtnClass + " mt-2 w-full disabled:opacity-50"}
-          >
-            {exporting
-              ? "Exporting…"
-              : isScopePricingConfirmed(client)
-                ? "Update scope card export"
-                : "Accept scope card"}
-          </button>
+          <div className="mt-3 space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPublishMessage(null);
+                const result = store.publishScopeForCustomerReview(client.id);
+                setPublishMessage(
+                  result.ok
+                    ? "Scope published for customer review."
+                    : result.error ?? "Could not publish."
+                );
+              }}
+              className={primaryBtnClass + " w-full"}
+            >
+              Publish scope for customer review
+            </button>
+            {publishMessage && (
+              <p className="text-xs text-navy-muted">{publishMessage}</p>
+            )}
+            <button
+              type="button"
+              onClick={handleAcceptScopeCard}
+              disabled={exporting || !canAcceptScopeCard(client)}
+              className={secondaryBtnClass + " w-full disabled:opacity-50"}
+            >
+              {exporting ? "Exporting…" : "Export scope card JSON (agent)"}
+            </button>
+          </div>
         )}
 
         <Field

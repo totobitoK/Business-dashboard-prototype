@@ -146,7 +146,7 @@ export const demoClients: Client[] = [
       "requirements-submitted",
       "scope-pricing-confirmed",
     ],
-    setupPaidAmount: 750,
+    setupPaidAmount: 375,
     onboardingFormStatus: "submitted",
     scopePricingConfirmedAt: "2025-10-01T10:00:00Z",
     acceptedSourcesIn: ["QuickBooks Online", "Excel / CSV"],
@@ -167,16 +167,16 @@ export const demoClients: Client[] = [
       {
         id: "p6",
         date: "2025-10-03T13:00:00Z",
-        amount: 750,
+        amount: 375,
         type: "setup",
-        note: "Partial setup payment (50%)",
+        note: "Partial setup payment toward deposit",
       },
     ],
     notes: [
       {
         id: "n3",
         date: "2025-10-03T13:30:00Z",
-        content: "Client requested split payment — second half due Oct 17.",
+        content: "Client requested split payment — remainder of deposit due Oct 17.",
       },
     ],
     files: [],
@@ -298,7 +298,8 @@ export const demoClients: Client[] = [
       "Operations dashboard: payments received, open invoices, and field schedule from QuickBooks Online and Google Calendar.",
     acceptedSourcesIn: ["QuickBooks Online", "Google Calendar"],
     acceptedScreens: ["Operations overview", "Receivables", "Schedule"],
-    adminCompletedMilestones: ["discovery", "guided-data-setup", "building"],
+    adminCompletedMilestones: ["discovery", "guided-data-setup"],
+    milestoneMigrationVersion: 2,
     guidedConnections: [
       {
         id: "conn-alpine-qbo",

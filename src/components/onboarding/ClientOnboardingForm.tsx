@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DATA_SOURCE_TOOLS,
   mergeDraftWithClient,
@@ -9,11 +9,20 @@ import {
   validateStep2,
   validateStep3,
 } from "@/lib/onboarding-form";
+import { normalizeDraftStep } from "@/lib/onboarding-draft";
 import { useClientStore } from "@/lib/client-store";
 import { formatToolsList } from "@/lib/metrics";
-import type { Client, ClientOnboardingAnswers, DataSourceTool } from "@/lib/types";
+import type { Client, ClientOnboardingAnswers, ClientOnboardingDraft } from "@/lib/types";
 
 const STEP_LABELS = ["Business details", "Your dashboard", "Current tools"];
+const AUTOSAVE_MS = 450;
+
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+function stepFromDraft(client: Client): 1 | 2 | 3 | "review" {
+  if (client.onboardingFormStatus === "submitted") return "review";
+  return normalizeDraftStep(client.onboardingDraft?.currentStep);
+}
 
 export function ClientOnboardingForm({
   client,
@@ -23,20 +32,29 @@ export function ClientOnboardingForm({
   embedded?: boolean;
 }) {
   const { saveOnboardingDraft, submitOnboarding } = useClientStore();
+  const clientIdRef = useRef(client.id);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestDraftRef = useRef<{ step: 1 | 2 | 3 | "review"; answers: Partial<ClientOnboardingAnswers> } | null>(
+    null
+  );
+
   const initialAnswers = useMemo(
     () => mergeDraftWithClient(client, client.onboardingDraft),
     [client]
   );
 
-  const [step, setStep] = useState<1 | 2 | 3 | "review">(
-    client.onboardingDraft?.currentStep ?? 1
-  );
+  const [step, setStep] = useState<1 | 2 | 3 | "review">(() => stepFromDraft(client));
   const [answers, setAnswers] =
     useState<Partial<ClientOnboardingAnswers>>(initialAnswers);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(
     client.onboardingFormStatus === "submitted"
   );
+  const submittedRef = useRef(submitted);
+  submittedRef.current = submitted;
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (client.onboardingFormStatus === "submitted") {
@@ -44,16 +62,62 @@ export function ClientOnboardingForm({
     }
   }, [client.onboardingFormStatus]);
 
-  const persistDraft = useCallback(
-    (nextStep: 1 | 2 | 3, nextAnswers: Partial<ClientOnboardingAnswers>) => {
-      saveOnboardingDraft(client.id, {
-        currentStep: nextStep,
+  useEffect(() => {
+    if (clientIdRef.current !== client.id) {
+      clientIdRef.current = client.id;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      setStep(stepFromDraft(client));
+      setAnswers(mergeDraftWithClient(client, client.onboardingDraft));
+      setErrors({});
+      setSaveStatus("idle");
+      setSaveError(null);
+      setSubmitError(null);
+      setSubmitted(client.onboardingFormStatus === "submitted");
+    }
+  }, [client]);
+
+  const flushDraft = useCallback(
+    (nextStep: 1 | 2 | 3 | "review", nextAnswers: Partial<ClientOnboardingAnswers>) => {
+      if (submitted || client.onboardingFormStatus === "submitted") return;
+      const draft: ClientOnboardingDraft = {
+        currentStep: nextStep === "review" ? "review" : nextStep,
         answers: nextAnswers,
         updatedAt: new Date().toISOString(),
-      });
+      };
+      setSaveStatus("saving");
+      setSaveError(null);
+      const result = saveOnboardingDraft(client.id, draft);
+      if (result.ok) {
+        setSaveStatus("saved");
+      } else {
+        setSaveStatus("error");
+        setSaveError(result.error ?? "Could not save on this device.");
+      }
     },
-    [client.id, saveOnboardingDraft]
+    [client.id, client.onboardingFormStatus, saveOnboardingDraft, submitted]
   );
+
+  const scheduleAutosave = useCallback(
+    (nextStep: 1 | 2 | 3 | "review", nextAnswers: Partial<ClientOnboardingAnswers>) => {
+      latestDraftRef.current = { step: nextStep, answers: nextAnswers };
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (submitted || client.onboardingFormStatus === "submitted") return;
+      setSaveStatus("saving");
+      debounceRef.current = setTimeout(() => {
+        if (submittedRef.current) return;
+        const latest = latestDraftRef.current;
+        if (!latest) return;
+        flushDraft(latest.step, latest.answers);
+      }, AUTOSAVE_MS);
+    },
+    [client.onboardingFormStatus, flushDraft, submitted]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   function updateField<K extends keyof ClientOnboardingAnswers>(
     key: K,
@@ -61,6 +125,7 @@ export function ClientOnboardingForm({
   ) {
     setAnswers((prev) => {
       const next = { ...prev, [key]: value };
+      scheduleAutosave(step, next);
       return next;
     });
     setErrors((prev) => {
@@ -70,7 +135,7 @@ export function ClientOnboardingForm({
     });
   }
 
-  function toggleTool(tool: DataSourceTool) {
+  function toggleTool(tool: (typeof DATA_SOURCE_TOOLS)[number]["id"]) {
     const current = answers.selectedTools ?? [];
     const next = current.includes(tool)
       ? current.filter((t) => t !== tool)
@@ -85,34 +150,38 @@ export function ClientOnboardingForm({
         setErrors(e);
         return;
       }
-      persistDraft(2, answers);
-      setStep(2);
+      const nextStep = 2 as const;
+      setStep(nextStep);
+      flushDraft(nextStep, answers);
     } else if (step === 2) {
       const e = validateStep2(answers);
       if (Object.keys(e).length) {
         setErrors(e);
         return;
       }
-      persistDraft(3, answers);
-      setStep(3);
+      const nextStep = 3 as const;
+      setStep(nextStep);
+      flushDraft(nextStep, answers);
     } else if (step === 3) {
       const e = validateStep3(answers);
       if (Object.keys(e).length) {
         setErrors(e);
         return;
       }
-      persistDraft(3, answers);
       setStep("review");
+      flushDraft("review", answers);
     }
   }
 
   function goBack() {
-    if (step === "review") setStep(3);
-    else if (step === 3) setStep(2);
-    else if (step === 2) setStep(1);
+    const nextStep =
+      step === "review" ? 3 : step === 3 ? 2 : step === 2 ? 1 : 1;
+    setStep(nextStep);
+    flushDraft(nextStep, answers);
   }
 
   function handleSubmit() {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     const e1 = validateStep1(answers);
     const e2 = validateStep2(answers);
     const e3 = validateStep3(answers);
@@ -121,8 +190,13 @@ export function ClientOnboardingForm({
       setErrors(all);
       return;
     }
+    setSubmitError(null);
     const full = toFullAnswers(answers);
-    submitOnboarding(client.id, full);
+    const result = submitOnboarding(client.id, full);
+    if (!result.ok) {
+      setSubmitError(result.error ?? "Could not submit — try again.");
+      return;
+    }
     setSubmitted(true);
   }
 
@@ -153,7 +227,27 @@ export function ClientOnboardingForm({
         </>
       )}
 
-      <div className="mt-6 flex gap-2">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted">
+        <p>
+          Progress saves on this device only — use the same browser to resume
+          after refresh.
+        </p>
+        <p aria-live="polite">
+          {saveStatus === "saving" && "Saving…"}
+          {saveStatus === "saved" && "Saved on this device"}
+          {saveStatus === "error" && (
+            <span className="text-red-600">{saveError ?? "Save failed"}</span>
+          )}
+        </p>
+      </div>
+
+      {submitError && (
+        <p className="mt-2 text-sm text-red-600" role="alert">
+          {submitError}
+        </p>
+      )}
+
+      <div className="mt-4 flex gap-2">
         {STEP_LABELS.map((label, i) => {
           const n = (i + 1) as 1 | 2 | 3;
           const active = step === n || (step === "review" && n === 3);

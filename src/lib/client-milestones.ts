@@ -4,7 +4,7 @@ import type {
   ConnectionDemoStatus,
   GuidedConnection,
 } from "./types";
-import { isScopePricingConfirmed } from "./onboarding";
+import { hasCustomerScopeAcceptanceForDeposit } from "./scope-acceptance";
 import { isPreviewApprovedForCurrentRevision } from "./preview-review";
 
 export const MILESTONE_LABELS: Record<ClientMilestone, string> = {
@@ -48,8 +48,12 @@ export function getSetupBalanceRemaining(client: Client): number {
 }
 
 export function isDepositPaid(client: Client): boolean {
-  if (client.setupFee <= 0) return false;
+  if (client.setupFee <= 0) return true;
   return client.setupPaidAmount >= getDepositAmount(client);
+}
+
+export function isZeroSetupFee(client: Client): boolean {
+  return client.setupFee <= 0;
 }
 
 export function isFinalBalancePaid(client: Client): boolean {
@@ -71,10 +75,7 @@ export function hasIntakeComplete(client: Client): boolean {
 }
 
 export function hasScopeConfirmed(client: Client): boolean {
-  return (
-    isScopePricingConfirmed(client) ||
-    client.adminCompletedMilestones?.includes("scope-confirmed") === true
-  );
+  return hasCustomerScopeAcceptanceForDeposit(client);
 }
 
 export function hasDiscoveryComplete(client: Client): boolean {

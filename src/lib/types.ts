@@ -53,7 +53,7 @@ export interface ClientOnboardingSubmission extends ClientOnboardingAnswers {
 }
 
 export interface ClientOnboardingDraft {
-  currentStep: 1 | 2 | 3;
+  currentStep: 1 | 2 | 3 | "review";
   answers: Partial<ClientOnboardingAnswers>;
   updatedAt: string;
 }
@@ -154,6 +154,15 @@ export interface Client {
   onboardingDraft?: ClientOnboardingDraft;
   onboardingSubmission?: ClientOnboardingSubmission;
   scopePricingConfirmedAt?: string;
+  /** Monotonic scope content revision (admin edits bump this). */
+  scopeRevision?: number;
+  /** Revision published for customer review. */
+  publishedScopeRevision?: number;
+  scopePublishedAt?: string;
+  scopeCustomerAcceptedAt?: string;
+  scopeCustomerAcceptedRevision?: number;
+  scopeChangeRequestAt?: string;
+  scopeChangeRequestNote?: string;
   /** Admin-confirmed data sources for agent export — not from onboarding checkboxes. */
   acceptedSourcesIn?: string[];
   /** Admin-confirmed dashboard screens for agent export — not from free-text scope. */
