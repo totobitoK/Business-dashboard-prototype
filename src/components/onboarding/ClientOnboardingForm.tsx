@@ -34,9 +34,19 @@ export function ClientOnboardingForm({
   const { saveOnboardingDraft, submitOnboarding } = useClientStore();
   const clientIdRef = useRef(client.id);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveGenerationRef = useRef(0);
   const latestDraftRef = useRef<{ step: 1 | 2 | 3 | "review"; answers: Partial<ClientOnboardingAnswers> } | null>(
     null
   );
+
+  const cancelPendingAutosave = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    autosaveGenerationRef.current += 1;
+    latestDraftRef.current = null;
+  }, []);
 
   const initialAnswers = useMemo(
     () => mergeDraftWithClient(client, client.onboardingDraft),
@@ -64,8 +74,8 @@ export function ClientOnboardingForm({
 
   useEffect(() => {
     if (clientIdRef.current !== client.id) {
+      cancelPendingAutosave();
       clientIdRef.current = client.id;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
       setStep(stepFromDraft(client));
       setAnswers(mergeDraftWithClient(client, client.onboardingDraft));
       setErrors({});
@@ -74,11 +84,21 @@ export function ClientOnboardingForm({
       setSubmitError(null);
       setSubmitted(client.onboardingFormStatus === "submitted");
     }
-  }, [client]);
+  }, [client, cancelPendingAutosave]);
 
   const flushDraft = useCallback(
-    (nextStep: 1 | 2 | 3 | "review", nextAnswers: Partial<ClientOnboardingAnswers>) => {
-      if (submitted || client.onboardingFormStatus === "submitted") return;
+    (
+      nextStep: 1 | 2 | 3 | "review",
+      nextAnswers: Partial<ClientOnboardingAnswers>,
+      options?: { generation?: number }
+    ): boolean => {
+      if (submittedRef.current || client.onboardingFormStatus === "submitted") {
+        return true;
+      }
+      if (clientIdRef.current !== client.id) return false;
+      const generation = options?.generation ?? autosaveGenerationRef.current;
+      if (generation !== autosaveGenerationRef.current) return false;
+
       const draft: ClientOnboardingDraft = {
         currentStep: nextStep === "review" ? "review" : nextStep,
         answers: nextAnswers,
@@ -87,30 +107,34 @@ export function ClientOnboardingForm({
       setSaveStatus("saving");
       setSaveError(null);
       const result = saveOnboardingDraft(client.id, draft);
+      if (generation !== autosaveGenerationRef.current) return false;
       if (result.ok) {
         setSaveStatus("saved");
-      } else {
-        setSaveStatus("error");
-        setSaveError(result.error ?? "Could not save on this device.");
+        return true;
       }
+      setSaveStatus("error");
+      setSaveError(result.error ?? "Could not save on this device.");
+      return false;
     },
-    [client.id, client.onboardingFormStatus, saveOnboardingDraft, submitted]
+    [client.id, client.onboardingFormStatus, saveOnboardingDraft]
   );
 
   const scheduleAutosave = useCallback(
     (nextStep: 1 | 2 | 3 | "review", nextAnswers: Partial<ClientOnboardingAnswers>) => {
+      if (submittedRef.current || client.onboardingFormStatus === "submitted") return;
       latestDraftRef.current = { step: nextStep, answers: nextAnswers };
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (submitted || client.onboardingFormStatus === "submitted") return;
+      const generation = autosaveGenerationRef.current;
       setSaveStatus("saving");
       debounceRef.current = setTimeout(() => {
         if (submittedRef.current) return;
+        if (generation !== autosaveGenerationRef.current) return;
         const latest = latestDraftRef.current;
         if (!latest) return;
-        flushDraft(latest.step, latest.answers);
+        flushDraft(latest.step, latest.answers, { generation });
       }, AUTOSAVE_MS);
     },
-    [client.onboardingFormStatus, flushDraft, submitted]
+    [client.onboardingFormStatus, flushDraft]
   );
 
   useEffect(() => {
@@ -143,6 +167,16 @@ export function ClientOnboardingForm({
     updateField("selectedTools", next);
   }
 
+  function persistNavigation(
+    nextStep: 1 | 2 | 3 | "review",
+    nextAnswers: Partial<ClientOnboardingAnswers>
+  ): boolean {
+    cancelPendingAutosave();
+    latestDraftRef.current = { step: nextStep, answers: nextAnswers };
+    const generation = autosaveGenerationRef.current;
+    return flushDraft(nextStep, nextAnswers, { generation });
+  }
+
   function goNext() {
     if (step === 1) {
       const e = validateStep1(answers);
@@ -151,8 +185,8 @@ export function ClientOnboardingForm({
         return;
       }
       const nextStep = 2 as const;
+      if (!persistNavigation(nextStep, answers)) return;
       setStep(nextStep);
-      flushDraft(nextStep, answers);
     } else if (step === 2) {
       const e = validateStep2(answers);
       if (Object.keys(e).length) {
@@ -160,28 +194,28 @@ export function ClientOnboardingForm({
         return;
       }
       const nextStep = 3 as const;
+      if (!persistNavigation(nextStep, answers)) return;
       setStep(nextStep);
-      flushDraft(nextStep, answers);
     } else if (step === 3) {
       const e = validateStep3(answers);
       if (Object.keys(e).length) {
         setErrors(e);
         return;
       }
+      if (!persistNavigation("review", answers)) return;
       setStep("review");
-      flushDraft("review", answers);
     }
   }
 
   function goBack() {
     const nextStep =
       step === "review" ? 3 : step === 3 ? 2 : step === 2 ? 1 : 1;
+    if (!persistNavigation(nextStep, answers)) return;
     setStep(nextStep);
-    flushDraft(nextStep, answers);
   }
 
   function handleSubmit() {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+    cancelPendingAutosave();
     const e1 = validateStep1(answers);
     const e2 = validateStep2(answers);
     const e3 = validateStep3(answers);
@@ -197,6 +231,7 @@ export function ClientOnboardingForm({
       setSubmitError(result.error ?? "Could not submit — try again.");
       return;
     }
+    submittedRef.current = true;
     setSubmitted(true);
   }
 

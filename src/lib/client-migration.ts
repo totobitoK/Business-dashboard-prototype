@@ -1,5 +1,5 @@
 import { syncGuidedConnectionsFromScope } from "./client-milestones";
-import { backfillLegacyScopePublish } from "./scope-acceptance";
+import { applyScopeAcceptanceMigration } from "./scope-acceptance";
 import type { Client, ClientMilestone, OnboardingStep } from "./types";
 
 const LEGACY_STEP = "details-submitted";
@@ -120,7 +120,7 @@ export function normalizeClient(client: Client): Client {
     onboardingFormStatus,
     scopePricingConfirmedAt,
     ...milestonePatch,
-    ...backfillLegacyScopePublish({
+    ...applyScopeAcceptanceMigration({
       ...client,
       completedSteps: steps,
       scopePricingConfirmedAt,

@@ -127,6 +127,20 @@ export interface ActivityEntry {
   category: ActivityCategory;
 }
 
+/** Immutable scope/pricing snapshot shown to the customer for a published revision. */
+export interface PublishedScopeSnapshot {
+  revision: number;
+  publishedAt: string;
+  setupFee: number;
+  monthlyFee: number;
+  acceptedSourcesIn: string[];
+  acceptedScreens: string[];
+  agreedScopeSummary?: string;
+  dashboardScope?: string;
+}
+
+export type ScopeCustomerAcceptanceSource = "customer";
+
 export interface Client {
   id: string;
   company: string;
@@ -161,8 +175,18 @@ export interface Client {
   scopePublishedAt?: string;
   scopeCustomerAcceptedAt?: string;
   scopeCustomerAcceptedRevision?: number;
+  /** Set when the customer explicitly accepts on the portal (not migration). */
+  scopeCustomerAcceptanceSource?: ScopeCustomerAcceptanceSource;
+  /** Published scope frozen for customer review — admin draft fields may differ until republish. */
+  publishedScopeSnapshot?: PublishedScopeSnapshot;
+  /** Launched before customer publish flow — deposit gate without retrospective acceptance. */
+  scopeDepositGrandfathered?: boolean;
+  /** Prior migration may have fabricated acceptance — admin should verify. */
+  scopeAcceptanceNeedsReview?: boolean;
   scopeChangeRequestAt?: string;
   scopeChangeRequestNote?: string;
+  /** Bump when scope acceptance / publish migration rules change. */
+  scopeMigrationVersion?: number;
   /** Admin-confirmed data sources for agent export — not from onboarding checkboxes. */
   acceptedSourcesIn?: string[];
   /** Admin-confirmed dashboard screens for agent export — not from free-text scope. */

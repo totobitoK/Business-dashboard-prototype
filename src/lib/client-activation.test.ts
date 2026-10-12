@@ -31,6 +31,22 @@ function baseClient(overrides: Partial<Client> = {}): Client {
     previewApprovedRevision: 1,
     previewRevisionVersion: 1,
     previewFeedbackUnresolved: false,
+    publishedScopeRevision: 1,
+    scopePublishedAt: "2025-01-15T00:00:00Z",
+    scopeRevision: 1,
+    scopeCustomerAcceptedAt: "2025-01-16T00:00:00Z",
+    scopeCustomerAcceptedRevision: 1,
+    scopeCustomerAcceptanceSource: "customer",
+    publishedScopeSnapshot: {
+      revision: 1,
+      publishedAt: "2025-01-15T00:00:00Z",
+      setupFee: 1000,
+      monthlyFee: 100,
+      acceptedSourcesIn: ["Google Sheets"],
+      acceptedScreens: ["Overview"],
+      agreedScopeSummary: "Test",
+    },
+    scopeMigrationVersion: 1,
     ...overrides,
   };
 }

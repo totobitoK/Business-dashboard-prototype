@@ -47,6 +47,7 @@ import { applyOnboardingDraftToClientList } from "./onboarding-draft";
 import {
   applyPublishScopeToClient,
   buildCustomerScopeAcceptPatch,
+  validateCustomerScopeAcceptance,
   buildScopeMaterialChangePatch,
   scopeHasPublishableContent,
   touchesCustomerScopeMaterial,
@@ -96,7 +97,10 @@ interface ClientStoreContextValue {
   ) => { ok: boolean; error?: string };
   acceptScopeCard: (id: string) => Promise<ScopeCardExportResult>;
   publishScopeForCustomerReview: (id: string) => { ok: boolean; error?: string };
-  acceptCustomerScopePricing: (id: string) => { ok: boolean; error?: string };
+  acceptCustomerScopePricing: (
+    id: string,
+    expectedPublishedRevision: number
+  ) => { ok: boolean; error?: string };
   requestCustomerScopeChanges: (
     id: string,
     note: string
@@ -642,14 +646,30 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const acceptCustomerScopePricing = useCallback(
-    (id: string) => {
+    (id: string, expectedPublishedRevision: number) => {
       const acceptedAt = new Date().toISOString();
+      let acceptError: string | undefined;
       let accepted = false;
       const result = applyClientsUpdate((base) =>
         base.map((c) => {
           if (c.id !== id) return c;
-          const patch = buildCustomerScopeAcceptPatch(c, acceptedAt);
-          if (!patch) return c;
+          const validation = validateCustomerScopeAcceptance(
+            c,
+            expectedPublishedRevision
+          );
+          if (!validation.ok) {
+            acceptError = validation.reason;
+            return c;
+          }
+          const patch = buildCustomerScopeAcceptPatch(
+            c,
+            acceptedAt,
+            expectedPublishedRevision
+          );
+          if (!patch) {
+            acceptError = "Could not record acceptance on this device.";
+            return c;
+          }
           accepted = true;
           const note: Note = {
             id: generateId("note"),
@@ -667,7 +687,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       if (!accepted) {
         return {
           ok: false,
-          error: "No published scope is available to accept yet.",
+          error: acceptError ?? "No published scope is available to accept yet.",
         };
       }
       return result;

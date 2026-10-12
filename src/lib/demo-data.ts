@@ -1,4 +1,9 @@
+import { demoCustomerScopePublish } from "./demo-scope-seed";
 import type { Client } from "./types";
+
+const ATLAS_SCOPE_PUBLISHED = "2025-10-02T10:00:00Z";
+const ALPINE_SCOPE_PUBLISHED = "2025-10-10T14:00:00Z";
+const MERIDIAN_SCOPE_PUBLISHED = "2025-10-06T11:00:00Z";
 
 export const DEFAULT_SETUP_FEE = 1500;
 export const DEFAULT_MONTHLY_FEE = 249;
@@ -62,6 +67,8 @@ export const demoClients: Client[] = [
         addedAt: "2025-08-10T12:00:00Z",
       },
     ],
+    scopeMigrationVersion: 1,
+    scopeDepositGrandfathered: true,
     createdAt: "2025-08-01T08:00:00Z",
   },
   {
@@ -95,6 +102,8 @@ export const demoClients: Client[] = [
     ],
     notes: [],
     files: [],
+    scopeMigrationVersion: 1,
+    scopeDepositGrandfathered: true,
     createdAt: "2025-09-01T08:00:00Z",
   },
   {
@@ -151,6 +160,20 @@ export const demoClients: Client[] = [
     scopePricingConfirmedAt: "2025-10-01T10:00:00Z",
     acceptedSourcesIn: ["QuickBooks Online", "Excel / CSV"],
     acceptedScreens: ["Production overview", "Job costing"],
+    agreedScopeSummary:
+      "Production dashboard: job costing and throughput from QuickBooks Online and shop spreadsheets.",
+    ...demoCustomerScopePublish(
+      {
+        setupFee: 1500,
+        monthlyFee: 249,
+        acceptedSourcesIn: ["QuickBooks Online", "Excel / CSV"],
+        acceptedScreens: ["Production overview", "Job costing"],
+        agreedScopeSummary:
+          "Production dashboard: job costing and throughput from QuickBooks Online and shop spreadsheets.",
+      },
+      ATLAS_SCOPE_PUBLISHED,
+      true
+    ),
     onboardingSubmission: {
       company: "Atlas Manufacturing",
       contactName: "Marcus Chen",
@@ -298,6 +321,18 @@ export const demoClients: Client[] = [
       "Operations dashboard: payments received, open invoices, and field schedule from QuickBooks Online and Google Calendar.",
     acceptedSourcesIn: ["QuickBooks Online", "Google Calendar"],
     acceptedScreens: ["Operations overview", "Receivables", "Schedule"],
+    ...demoCustomerScopePublish(
+      {
+        setupFee: 1500,
+        monthlyFee: 249,
+        acceptedSourcesIn: ["QuickBooks Online", "Google Calendar"],
+        acceptedScreens: ["Operations overview", "Receivables", "Schedule"],
+        agreedScopeSummary:
+          "Operations dashboard: payments received, open invoices, and field schedule from QuickBooks Online and Google Calendar.",
+      },
+      ALPINE_SCOPE_PUBLISHED,
+      true
+    ),
     adminCompletedMilestones: ["discovery", "guided-data-setup"],
     milestoneMigrationVersion: 2,
     guidedConnections: [
@@ -368,6 +403,18 @@ export const demoClients: Client[] = [
       "Retail performance view: weekly sales from Google Sheets and pipeline summary from HubSpot.",
     acceptedSourcesIn: ["Google Sheets", "HubSpot"],
     acceptedScreens: ["Sales pulse", "Pipeline snapshot"],
+    ...demoCustomerScopePublish(
+      {
+        setupFee: 1800,
+        monthlyFee: 279,
+        acceptedSourcesIn: ["Google Sheets", "HubSpot"],
+        acceptedScreens: ["Sales pulse", "Pipeline snapshot"],
+        agreedScopeSummary:
+          "Retail performance view: weekly sales from Google Sheets and pipeline summary from HubSpot.",
+      },
+      MERIDIAN_SCOPE_PUBLISHED,
+      true
+    ),
     adminCompletedMilestones: ["discovery"],
     guidedConnections: [
       {

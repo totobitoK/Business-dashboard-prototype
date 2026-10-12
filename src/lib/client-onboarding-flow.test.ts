@@ -63,7 +63,7 @@ describe("onboarding flow integration (storage-shaped)", () => {
       (list) =>
         list.map((x) => {
           if (x.id !== id) return x;
-          const next = applyAcceptScopeToClient(x, at);
+          const next = applyAcceptScopeToClient(x, at, x.publishedScopeRevision ?? 1);
           return next ?? x;
         }),
       mem.read,
@@ -95,7 +95,7 @@ describe("onboarding flow integration (storage-shaped)", () => {
         list.map((c) => {
           if (c.id !== id) return c;
           let next = applyPublishScopeToClient(c, at);
-          next = next ? applyAcceptScopeToClient(next, at) : null;
+          next = next ? applyAcceptScopeToClient(next, at, next.publishedScopeRevision ?? 1) : null;
           return next ?? c;
         }),
       mem.read,

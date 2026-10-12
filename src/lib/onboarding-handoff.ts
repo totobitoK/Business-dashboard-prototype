@@ -1,3 +1,4 @@
+import { getCustomerFacingScope } from "./scope-acceptance";
 import type { Client } from "./types";
 
 /** Customer-visible open requests — only when recorded on the client. */
@@ -13,5 +14,9 @@ export function getOutstandingCustomerRequests(client: Client): string[] {
 }
 
 export function getAgreedScopeToolLabels(client: Client): string[] {
+  const published = getCustomerFacingScope(client);
+  if (published?.acceptedSourcesIn?.length) {
+    return published.acceptedSourcesIn;
+  }
   return client.acceptedSourcesIn ?? [];
 }

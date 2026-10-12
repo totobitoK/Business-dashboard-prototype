@@ -90,6 +90,49 @@ describe("onboarding draft persistence", () => {
     expect(c.onboardingDraft?.answers.company).toBe("Saved Co");
   });
 
+  it("navigation step persisted last wins over an earlier step write", () => {
+    const mem = memoryStorage();
+    const clientId = "nav-step-client";
+    const start: Client[] = [
+      {
+        ...demoClients[0]!,
+        id: clientId,
+        onboardingPath: "full",
+        onboardingFormStatus: "in-progress",
+        completedSteps: [],
+      },
+    ];
+    mem.write(JSON.stringify(start));
+
+    mutatePersistedClientList(
+      demoClients,
+      (base) =>
+        applyOnboardingDraftToClientList(base, clientId, {
+          currentStep: 1,
+          answers: { company: "Step one" },
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }),
+      mem.read,
+      mem.write
+    );
+
+    mutatePersistedClientList(
+      demoClients,
+      (base) =>
+        applyOnboardingDraftToClientList(base, clientId, {
+          currentStep: 2,
+          answers: { company: "Step two" },
+          updatedAt: "2026-01-01T00:00:01.000Z",
+        }),
+      mem.read,
+      mem.write
+    );
+
+    const reloaded = JSON.parse(mem.read()!) as Client[];
+    expect(reloaded[0]!.onboardingDraft?.currentStep).toBe(2);
+    expect(reloaded[0]!.onboardingDraft?.answers.company).toBe("Step two");
+  });
+
   it("ignores draft save after submission", () => {
     const submitted: Client = {
       ...demoClients[0]!,
