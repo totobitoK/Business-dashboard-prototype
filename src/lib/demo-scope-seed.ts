@@ -30,7 +30,7 @@ export function demoCustomerScopePublish(
     publishedScopeRevision: revision,
     scopePublishedAt: publishedAt,
     publishedScopeSnapshot: snapshot,
-    scopeMigrationVersion: 1,
+    scopeMigrationVersion: 2,
     ...(customerAccepted
       ? {
           scopeCustomerAcceptedAt: publishedAt,

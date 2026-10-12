@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DATA_SOURCE_TOOLS,
   mergeDraftWithClient,
@@ -10,9 +10,10 @@ import {
   validateStep3,
 } from "@/lib/onboarding-form";
 import { normalizeDraftStep } from "@/lib/onboarding-draft";
+import { OnboardingFormAutosaveCoordinator } from "@/lib/onboarding-form-autosave";
 import { useClientStore } from "@/lib/client-store";
 import { formatToolsList } from "@/lib/metrics";
-import type { Client, ClientOnboardingAnswers, ClientOnboardingDraft } from "@/lib/types";
+import type { Client, ClientOnboardingAnswers } from "@/lib/types";
 
 const STEP_LABELS = ["Business details", "Your dashboard", "Current tools"];
 const AUTOSAVE_MS = 450;
@@ -33,20 +34,7 @@ export function ClientOnboardingForm({
 }) {
   const { saveOnboardingDraft, submitOnboarding } = useClientStore();
   const clientIdRef = useRef(client.id);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autosaveGenerationRef = useRef(0);
-  const latestDraftRef = useRef<{ step: 1 | 2 | 3 | "review"; answers: Partial<ClientOnboardingAnswers> } | null>(
-    null
-  );
-
-  const cancelPendingAutosave = useCallback(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    autosaveGenerationRef.current += 1;
-    latestDraftRef.current = null;
-  }, []);
+  const submittedRef = useRef(client.onboardingFormStatus === "submitted");
 
   const initialAnswers = useMemo(
     () => mergeDraftWithClient(client, client.onboardingDraft),
@@ -60,7 +48,6 @@ export function ClientOnboardingForm({
   const [submitted, setSubmitted] = useState(
     client.onboardingFormStatus === "submitted"
   );
-  const submittedRef = useRef(submitted);
   submittedRef.current = submitted;
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -72,9 +59,32 @@ export function ClientOnboardingForm({
     }
   }, [client.onboardingFormStatus]);
 
+  const autosaveRef = useRef<OnboardingFormAutosaveCoordinator | null>(null);
+  const autosaveClientIdRef = useRef<string | null>(null);
+  if (!autosaveRef.current || autosaveClientIdRef.current !== client.id) {
+    autosaveRef.current = new OnboardingFormAutosaveCoordinator(
+      AUTOSAVE_MS,
+      () =>
+        !submittedRef.current &&
+        clientIdRef.current === client.id &&
+        client.onboardingFormStatus !== "submitted",
+      (draft) => saveOnboardingDraft(client.id, draft),
+      (status, error) => {
+        setSaveStatus(status);
+        if (status === "error") {
+          setSaveError(error ?? "Could not save on this device.");
+        } else {
+          setSaveError(null);
+        }
+      }
+    );
+    autosaveClientIdRef.current = client.id;
+  }
+  const autosave = autosaveRef.current;
+
   useEffect(() => {
     if (clientIdRef.current !== client.id) {
-      cancelPendingAutosave();
+      autosave.cancelPending();
       clientIdRef.current = client.id;
       setStep(stepFromDraft(client));
       setAnswers(mergeDraftWithClient(client, client.onboardingDraft));
@@ -84,64 +94,11 @@ export function ClientOnboardingForm({
       setSubmitError(null);
       setSubmitted(client.onboardingFormStatus === "submitted");
     }
-  }, [client, cancelPendingAutosave]);
-
-  const flushDraft = useCallback(
-    (
-      nextStep: 1 | 2 | 3 | "review",
-      nextAnswers: Partial<ClientOnboardingAnswers>,
-      options?: { generation?: number }
-    ): boolean => {
-      if (submittedRef.current || client.onboardingFormStatus === "submitted") {
-        return true;
-      }
-      if (clientIdRef.current !== client.id) return false;
-      const generation = options?.generation ?? autosaveGenerationRef.current;
-      if (generation !== autosaveGenerationRef.current) return false;
-
-      const draft: ClientOnboardingDraft = {
-        currentStep: nextStep === "review" ? "review" : nextStep,
-        answers: nextAnswers,
-        updatedAt: new Date().toISOString(),
-      };
-      setSaveStatus("saving");
-      setSaveError(null);
-      const result = saveOnboardingDraft(client.id, draft);
-      if (generation !== autosaveGenerationRef.current) return false;
-      if (result.ok) {
-        setSaveStatus("saved");
-        return true;
-      }
-      setSaveStatus("error");
-      setSaveError(result.error ?? "Could not save on this device.");
-      return false;
-    },
-    [client.id, client.onboardingFormStatus, saveOnboardingDraft]
-  );
-
-  const scheduleAutosave = useCallback(
-    (nextStep: 1 | 2 | 3 | "review", nextAnswers: Partial<ClientOnboardingAnswers>) => {
-      if (submittedRef.current || client.onboardingFormStatus === "submitted") return;
-      latestDraftRef.current = { step: nextStep, answers: nextAnswers };
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      const generation = autosaveGenerationRef.current;
-      setSaveStatus("saving");
-      debounceRef.current = setTimeout(() => {
-        if (submittedRef.current) return;
-        if (generation !== autosaveGenerationRef.current) return;
-        const latest = latestDraftRef.current;
-        if (!latest) return;
-        flushDraft(latest.step, latest.answers, { generation });
-      }, AUTOSAVE_MS);
-    },
-    [client.onboardingFormStatus, flushDraft]
-  );
+  }, [client, autosave]);
 
   useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
+    return () => autosave.cancelPending();
+  }, [autosave]);
 
   function updateField<K extends keyof ClientOnboardingAnswers>(
     key: K,
@@ -149,7 +106,7 @@ export function ClientOnboardingForm({
   ) {
     setAnswers((prev) => {
       const next = { ...prev, [key]: value };
-      scheduleAutosave(step, next);
+      autosave.scheduleAutosave(step, next);
       return next;
     });
     setErrors((prev) => {
@@ -171,10 +128,7 @@ export function ClientOnboardingForm({
     nextStep: 1 | 2 | 3 | "review",
     nextAnswers: Partial<ClientOnboardingAnswers>
   ): boolean {
-    cancelPendingAutosave();
-    latestDraftRef.current = { step: nextStep, answers: nextAnswers };
-    const generation = autosaveGenerationRef.current;
-    return flushDraft(nextStep, nextAnswers, { generation });
+    return autosave.persistNavigation(nextStep, nextAnswers);
   }
 
   function goNext() {
@@ -215,7 +169,7 @@ export function ClientOnboardingForm({
   }
 
   function handleSubmit() {
-    cancelPendingAutosave();
+    autosave.cancelPending();
     const e1 = validateStep1(answers);
     const e2 = validateStep2(answers);
     const e3 = validateStep3(answers);

@@ -6,6 +6,8 @@ import {
   applyAcceptScopeToClient,
   applyPublishScopeToClient,
   applyScopeAcceptanceMigration,
+  hasTrustworthyLaunchHistory,
+  SCOPE_MIGRATION_VERSION,
   buildCustomerScopeAcceptPatch,
   buildScopeMaterialChangePatch,
   buildScopePublishPatch,
@@ -35,7 +37,7 @@ function baseClient(): Client {
     scopePricingConfirmedAt: undefined,
     completedSteps: ["requirements-submitted"],
     onboardingFormStatus: "submitted",
-    scopeMigrationVersion: 1,
+    scopeMigrationVersion: 2,
     acceptedSourcesIn: ["Google Sheets"],
     acceptedScreens: ["Overview"],
     agreedScopeSummary: "Test scope",
@@ -186,5 +188,102 @@ describe("scope acceptance", () => {
     expect(hasCustomerScopeAcceptanceForDeposit(c)).toBe(false);
     c = applyAcceptScopeToClient(c, "2026-01-04T00:00:00.000Z", 2)!;
     expect(hasCustomerScopeAcceptanceForDeposit(c)).toBe(true);
+  });
+});
+
+describe("launch exemption for scope deposit", () => {
+  it("pending client with dashboard-ready step is not treated as launched", () => {
+    const pending: Client = {
+      ...baseClient(),
+      status: "pending",
+      launchedAt: undefined,
+      completedSteps: [
+        "requirements-submitted",
+        "scope-pricing-confirmed",
+        "dashboard-ready",
+      ],
+      scopePricingConfirmedAt: "2025-10-01T10:00:00Z",
+    };
+    expect(hasTrustworthyLaunchHistory(pending)).toBe(false);
+    expect(isScopeDepositGrandfathered(pending)).toBe(false);
+  });
+
+  it("v2 migration repairs invalid grandfather on pending dashboard-ready clients", () => {
+    const buggyV1: Client = {
+      ...baseClient(),
+      status: "pending",
+      scopeMigrationVersion: 1,
+      scopeDepositGrandfathered: true,
+      completedSteps: [
+        "requirements-submitted",
+        "scope-pricing-confirmed",
+        "dashboard-ready",
+      ],
+      scopePricingConfirmedAt: "2025-10-01T10:00:00Z",
+      publishedScopeRevision: 1,
+      scopePublishedAt: "2025-10-01T10:00:00Z",
+      publishedScopeSnapshot: {
+        revision: 1,
+        publishedAt: "2025-10-01T10:00:00Z",
+        setupFee: 1500,
+        monthlyFee: 249,
+        acceptedSourcesIn: ["Google Sheets"],
+        acceptedScreens: ["Overview"],
+        agreedScopeSummary: "Test scope",
+      },
+    };
+    const patch = applyScopeAcceptanceMigration(buggyV1);
+    const merged = { ...buggyV1, ...patch };
+    expect(merged.scopeMigrationVersion).toBe(SCOPE_MIGRATION_VERSION);
+    expect(merged.scopeDepositGrandfathered).toBe(false);
+    expect(merged.scopeAcceptanceNeedsReview).toBe(true);
+    expect(hasCustomerScopeAcceptanceForDeposit(merged)).toBe(false);
+    expect(applyScopeAcceptanceMigration(merged)).toEqual({});
+  });
+
+  it("never-launched archived clients require customer acceptance", () => {
+    const archived: Client = {
+      ...baseClient(),
+      status: "archived",
+      launchedAt: undefined,
+      scopeDepositGrandfathered: true,
+      scopeMigrationVersion: 1,
+      completedSteps: ["requirements-submitted", "scope-pricing-confirmed", "dashboard-ready"],
+      publishedScopeRevision: 1,
+      scopePublishedAt: "2025-10-01T10:00:00Z",
+      publishedScopeSnapshot: {
+        revision: 1,
+        publishedAt: "2025-10-01T10:00:00Z",
+        setupFee: 1500,
+        monthlyFee: 249,
+        acceptedSourcesIn: ["Google Sheets"],
+        acceptedScreens: ["Overview"],
+      },
+    };
+    expect(isScopeDepositGrandfathered(archived)).toBe(false);
+    const merged = { ...archived, ...applyScopeAcceptanceMigration(archived) };
+    expect(merged.scopeDepositGrandfathered).toBe(false);
+    expect(hasCustomerScopeAcceptanceForDeposit(merged)).toBe(false);
+  });
+
+  it("previously launched archived clients keep grandfather exemption", () => {
+    const archivedLaunched: Client = {
+      ...baseClient(),
+      status: "archived",
+      launchedAt: "2024-06-01T08:00:00Z",
+      scopeMigrationVersion: 1,
+      scopePricingConfirmedAt: "2024-05-01T08:00:00Z",
+      completedSteps: [
+        "requirements-submitted",
+        "scope-pricing-confirmed",
+        "dashboard-ready",
+        "active",
+      ],
+      publishedScopeRevision: undefined,
+    };
+    const merged = { ...archivedLaunched, ...applyScopeAcceptanceMigration(archivedLaunched) };
+    expect(hasTrustworthyLaunchHistory(merged)).toBe(true);
+    expect(isScopeDepositGrandfathered(merged)).toBe(true);
+    expect(hasCustomerScopeAcceptanceForDeposit(merged)).toBe(true);
   });
 });

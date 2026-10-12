@@ -2,7 +2,7 @@ import type { Client, PublishedScopeSnapshot } from "./types";
 import { isScopePricingConfirmed } from "./onboarding";
 
 /** Bump when one-time scope acceptance repair runs. */
-export const SCOPE_MIGRATION_VERSION = 1;
+export const SCOPE_MIGRATION_VERSION = 2;
 
 /** Fields that change what the customer must accept before deposit. */
 export function touchesCustomerScopeMaterial(updates: Partial<Client>): boolean {
@@ -87,21 +87,41 @@ export function hasCustomerAcceptedCurrentPublishedScope(client: Client): boolea
   );
 }
 
-export function isHistoricalLaunchedClient(client: Client): boolean {
+/** Trustworthy proof the engagement launched — not dashboard-ready alone. */
+export function hasTrustworthyLaunchHistory(client: Client): boolean {
   if (client.status === "active") return true;
   if (client.launchedAt) return true;
-  return client.completedSteps.some((s) =>
-    ["dashboard-ready", "active"].includes(s)
-  );
+  return false;
+}
+
+/** @deprecated Use hasTrustworthyLaunchHistory */
+export function isHistoricalLaunchedClient(client: Client): boolean {
+  return hasTrustworthyLaunchHistory(client);
 }
 
 export function isScopeDepositGrandfathered(client: Client): boolean {
+  if (!hasTrustworthyLaunchHistory(client)) return false;
   if (client.scopeDepositGrandfathered === true) return true;
   return (
-    isHistoricalLaunchedClient(client) &&
-    isLegacyAdminScopeConfirmation(client) &&
-    client.publishedScopeRevision == null
+    isLegacyAdminScopeConfirmation(client) && client.publishedScopeRevision == null
   );
+}
+
+function repairInvalidScopeDepositGrandfather(
+  client: Client,
+  patch: Partial<Client>
+): void {
+  const merged = { ...client, ...patch };
+  if (!merged.scopeDepositGrandfathered) return;
+  if (hasTrustworthyLaunchHistory(merged)) return;
+
+  patch.scopeDepositGrandfathered = false;
+  if (
+    !hasCustomerAcceptedCurrentPublishedScope(merged) &&
+    merged.scopeCustomerAcceptanceSource !== "customer"
+  ) {
+    patch.scopeAcceptanceNeedsReview = true;
+  }
 }
 
 /** Deposit / guided setup gate — explicit customer acceptance or grandfathered launch. */
@@ -114,7 +134,7 @@ export function needsCustomerScopeAcceptance(client: Client): boolean {
   if (!hasPublishedScopeForReview(client)) {
     if (
       isLegacyAdminScopeConfirmation(client) &&
-      !isHistoricalLaunchedClient(client) &&
+      !hasTrustworthyLaunchHistory(client) &&
       !isScopeDepositGrandfathered(client)
     ) {
       return true;
@@ -232,44 +252,54 @@ export function applyAcceptScopeToClient(
 
 /** One-time migration: publish legacy admin scope without fabricating customer acceptance. */
 export function applyScopeAcceptanceMigration(client: Client): Partial<Client> {
-  if ((client.scopeMigrationVersion ?? 0) >= SCOPE_MIGRATION_VERSION) {
+  const version = client.scopeMigrationVersion ?? 0;
+  if (version >= SCOPE_MIGRATION_VERSION) {
     return {};
   }
 
   const patch: Partial<Client> = { scopeMigrationVersion: SCOPE_MIGRATION_VERSION };
 
-  const fabricatedCustomerAcceptance =
-    !!client.scopeCustomerAcceptedAt &&
-    client.scopeCustomerAcceptanceSource !== "customer";
+  if (version < 1) {
+    const fabricatedCustomerAcceptance =
+      !!client.scopeCustomerAcceptedAt &&
+      client.scopeCustomerAcceptanceSource !== "customer";
 
-  if (fabricatedCustomerAcceptance && !isHistoricalLaunchedClient(client)) {
-    patch.scopeCustomerAcceptedAt = undefined;
-    patch.scopeCustomerAcceptedRevision = undefined;
-    patch.scopeCustomerAcceptanceSource = undefined;
-    patch.scopeAcceptanceNeedsReview = true;
+    if (fabricatedCustomerAcceptance && !hasTrustworthyLaunchHistory(client)) {
+      patch.scopeCustomerAcceptedAt = undefined;
+      patch.scopeCustomerAcceptedRevision = undefined;
+      patch.scopeCustomerAcceptanceSource = undefined;
+      patch.scopeAcceptanceNeedsReview = true;
+    }
+
+    if (
+      client.publishedScopeRevision == null &&
+      isLegacyAdminScopeConfirmation(client) &&
+      !hasTrustworthyLaunchHistory(client) &&
+      scopeHasPublishableContent(client)
+    ) {
+      const at = client.scopePricingConfirmedAt ?? client.createdAt;
+      const revision = 1;
+      patch.scopeRevision = revision;
+      patch.publishedScopeRevision = revision;
+      patch.scopePublishedAt = at;
+      patch.publishedScopeSnapshot = buildScopeSnapshot(
+        { ...client, ...patch },
+        revision,
+        at
+      );
+    }
   }
 
-  if (isHistoricalLaunchedClient(client) && isLegacyAdminScopeConfirmation(client)) {
+  const mergedAfterV1 = { ...client, ...patch };
+  if (
+    version < 1 &&
+    hasTrustworthyLaunchHistory(mergedAfterV1) &&
+    isLegacyAdminScopeConfirmation(mergedAfterV1)
+  ) {
     patch.scopeDepositGrandfathered = true;
   }
 
-  if (
-    client.publishedScopeRevision == null &&
-    isLegacyAdminScopeConfirmation(client) &&
-    !isHistoricalLaunchedClient(client) &&
-    scopeHasPublishableContent(client)
-  ) {
-    const at = client.scopePricingConfirmedAt ?? client.createdAt;
-    const revision = 1;
-    patch.scopeRevision = revision;
-    patch.publishedScopeRevision = revision;
-    patch.scopePublishedAt = at;
-    patch.publishedScopeSnapshot = buildScopeSnapshot(
-      { ...client, ...patch },
-      revision,
-      at
-    );
-  }
+  repairInvalidScopeDepositGrandfather({ ...client, ...patch }, patch);
 
   return patch;
 }
