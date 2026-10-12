@@ -37,6 +37,33 @@ export type LayoutCustomizeTheme = {
   filterMenuItemIdle: string;
   swatches: string[];
   swatchRing: string;
+  /** Active Overview/Revenue/Schedule tab on the gradient dashboard header. */
+  embeddedNavActive: string;
+  /** Active reporting-period chip on the dashboard header. */
+  embeddedPeriodActive: string;
+  chartGridLine: string;
+  chartAxisLine: string;
+  chartLine: string;
+  chartPoint: string;
+  chartPointHover: string;
+  widgetListShell: string;
+  widgetListDivide: string;
+  widgetListHeader: string;
+  widgetListDivideLight: string;
+  widgetListColDivide: string;
+  operationsListHover: string;
+  operationsListSelected: string;
+  tableRowSelected: string;
+  tableRowSelectedInset: string;
+  detailPanelBorder: string;
+  detailSectionLabel: string;
+  linkAccent: string;
+  linkAccentHover: string;
+  kpiEmptyState: string;
+  attentionMetricTile: string;
+  attentionMetricTileIdle: string;
+  operationsSummaryChip: string;
+  toolbarDivider: string;
 };
 
 export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
@@ -63,7 +90,7 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     listAccent: "text-purple-dark",
     dashboardCanvas: "bg-gradient-to-b from-purple-50/40 via-slate-50/30 to-violet-50/20",
     sectionPanel:
-      "rounded-2xl border border-purple-200/90 bg-gradient-to-b from-white via-white to-purple-50/35 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-10px_rgba(124,58,237,0.18)] ring-1 ring-purple-100/70",
+      "rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-white",
     sectionHeader: "border-b border-purple-100/90",
     filterTrack:
       "rounded-xl bg-purple-50/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ring-1 ring-purple-100/80",
@@ -81,6 +108,33 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     filterMenuItemIdle: "text-ink hover:bg-purple-50/60",
     swatches: ["#7C3AED", "#18181B", "#F3E8FF"],
     swatchRing: "border-purple-200",
+    embeddedNavActive: "bg-white text-purple-dark shadow-sm",
+    embeddedPeriodActive: "bg-white text-purple-dark shadow-md ring-1 ring-white/90",
+    chartGridLine: "stroke-purple-100",
+    chartAxisLine: "stroke-purple-200",
+    chartLine: "stroke-purple",
+    chartPoint: "fill-purple",
+    chartPointHover: "fill-purple-dark",
+    widgetListShell:
+      "overflow-hidden rounded-xl border border-purple-200/90 bg-gradient-to-b from-white via-white to-purple-50/40 shadow-sm ring-1 ring-purple-100/60",
+    widgetListDivide: "divide-purple-200/80",
+    widgetListHeader: "border-b border-purple-200/80 bg-purple-50/55",
+    widgetListDivideLight: "divide-purple-100/90",
+    widgetListColDivide: "divide-purple-100/80",
+    operationsListHover: "hover:bg-purple-50/65",
+    operationsListSelected: "bg-purple-50/85",
+    tableRowSelected: "bg-purple-50/80",
+    tableRowSelectedInset: "shadow-[inset_3px_0_0_0_rgb(124,58,237)]",
+    detailPanelBorder: "border-purple-100/80",
+    detailSectionLabel: "text-purple",
+    linkAccent: "text-purple",
+    linkAccentHover: "hover:text-purple-dark",
+    kpiEmptyState: "border-purple-200 bg-purple-50/30",
+    attentionMetricTile: "border-purple-200 bg-gradient-to-br from-purple-50 to-white",
+    attentionMetricTileIdle: "border-purple-200 bg-gradient-to-br from-purple-50 to-white",
+    operationsSummaryChip:
+      "rounded-full border border-purple-100 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-ink-muted shadow-sm",
+    toolbarDivider: "border-purple-100/80",
   },
   {
     id: "forest",
@@ -105,7 +159,7 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     listAccent: "text-emerald-800",
     dashboardCanvas: "bg-gradient-to-b from-emerald-50/35 via-slate-50/30 to-teal-50/15",
     sectionPanel:
-      "rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-white via-white to-emerald-50/30 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-10px_rgba(5,150,105,0.15)] ring-1 ring-emerald-100/70",
+      "rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white",
     sectionHeader: "border-b border-emerald-100/90",
     filterTrack:
       "rounded-xl bg-emerald-50/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ring-1 ring-emerald-100/80",
@@ -123,6 +177,33 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     filterMenuItemIdle: "text-ink hover:bg-emerald-50/60",
     swatches: ["#059669", "#134E4A", "#D1FAE5"],
     swatchRing: "border-emerald-200",
+    embeddedNavActive: "bg-white text-emerald-900 shadow-sm",
+    embeddedPeriodActive: "bg-white text-emerald-900 shadow-md ring-1 ring-white/90",
+    chartGridLine: "stroke-emerald-100",
+    chartAxisLine: "stroke-emerald-200",
+    chartLine: "stroke-emerald-600",
+    chartPoint: "fill-emerald-600",
+    chartPointHover: "fill-emerald-800",
+    widgetListShell:
+      "overflow-hidden rounded-xl border border-emerald-200/90 bg-gradient-to-b from-white via-white to-emerald-50/40 shadow-sm ring-1 ring-emerald-100/60",
+    widgetListDivide: "divide-emerald-200/80",
+    widgetListHeader: "border-b border-emerald-200/80 bg-emerald-50/55",
+    widgetListDivideLight: "divide-emerald-100/90",
+    widgetListColDivide: "divide-emerald-100/80",
+    operationsListHover: "hover:bg-emerald-50/65",
+    operationsListSelected: "bg-emerald-50/85",
+    tableRowSelected: "bg-emerald-50/80",
+    tableRowSelectedInset: "shadow-[inset_3px_0_0_0_rgb(5,150,105)]",
+    detailPanelBorder: "border-emerald-100/80",
+    detailSectionLabel: "text-emerald-700",
+    linkAccent: "text-emerald-700",
+    linkAccentHover: "hover:text-emerald-900",
+    kpiEmptyState: "border-emerald-200 bg-emerald-50/30",
+    attentionMetricTile: "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white",
+    attentionMetricTileIdle: "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white",
+    operationsSummaryChip:
+      "rounded-full border border-emerald-100 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-ink-muted shadow-sm",
+    toolbarDivider: "border-emerald-100/80",
   },
   {
     id: "ocean",
@@ -147,7 +228,7 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     listAccent: "text-sky-900",
     dashboardCanvas: "bg-gradient-to-b from-sky-50/35 via-slate-50/30 to-indigo-50/15",
     sectionPanel:
-      "rounded-2xl border border-sky-200/90 bg-gradient-to-b from-white via-white to-sky-50/30 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_28px_-10px_rgba(2,132,199,0.15)] ring-1 ring-sky-100/70",
+      "rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 to-white",
     sectionHeader: "border-b border-sky-100/90",
     filterTrack:
       "rounded-xl bg-sky-50/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ring-1 ring-sky-100/80",
@@ -165,6 +246,33 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     filterMenuItemIdle: "text-ink hover:bg-sky-50/60",
     swatches: ["#0284C7", "#0F172A", "#E0F2FE"],
     swatchRing: "border-sky-200",
+    embeddedNavActive: "bg-white text-sky-900 shadow-sm",
+    embeddedPeriodActive: "bg-white text-sky-900 shadow-md ring-1 ring-white/90",
+    chartGridLine: "stroke-sky-100",
+    chartAxisLine: "stroke-sky-200",
+    chartLine: "stroke-sky-600",
+    chartPoint: "fill-sky-600",
+    chartPointHover: "fill-sky-900",
+    widgetListShell:
+      "overflow-hidden rounded-xl border border-sky-200/90 bg-gradient-to-b from-white via-white to-sky-50/40 shadow-sm ring-1 ring-sky-100/60",
+    widgetListDivide: "divide-sky-200/80",
+    widgetListHeader: "border-b border-sky-200/80 bg-sky-50/55",
+    widgetListDivideLight: "divide-sky-100/90",
+    widgetListColDivide: "divide-sky-100/80",
+    operationsListHover: "hover:bg-sky-50/65",
+    operationsListSelected: "bg-sky-50/85",
+    tableRowSelected: "bg-sky-50/80",
+    tableRowSelectedInset: "shadow-[inset_3px_0_0_0_rgb(2,132,199)]",
+    detailPanelBorder: "border-sky-100/80",
+    detailSectionLabel: "text-sky-700",
+    linkAccent: "text-sky-700",
+    linkAccentHover: "hover:text-sky-900",
+    kpiEmptyState: "border-sky-200 bg-sky-50/30",
+    attentionMetricTile: "border-sky-200 bg-gradient-to-br from-sky-50 to-white",
+    attentionMetricTileIdle: "border-sky-200 bg-gradient-to-br from-sky-50 to-white",
+    operationsSummaryChip:
+      "rounded-full border border-sky-100 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-ink-muted shadow-sm",
+    toolbarDivider: "border-sky-100/80",
   },
 ];
 

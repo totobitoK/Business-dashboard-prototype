@@ -1,3 +1,14 @@
+import {
+  normalizeOverviewKpiLayout,
+  normalizeRevenueKpiLayout,
+  OVERVIEW_KPI_IDS,
+  REVENUE_KPI_IDS,
+  type OverviewKpiId,
+  type RevenueKpiId,
+} from "./workspace-kpi-layout";
+
+export type { OverviewKpiId, RevenueKpiId };
+
 export const DASHBOARD_WIDGET_IDS = [
   "metrics",
   "collections_chart",
@@ -26,6 +37,10 @@ export interface WorkspaceLayoutSettings {
   showCompactMetrics: boolean;
   widgetOrder: DashboardWidgetId[];
   hiddenWidgets: DashboardWidgetId[];
+  overviewKpiOrder: OverviewKpiId[];
+  overviewHiddenKpis: OverviewKpiId[];
+  revenueKpiOrder: RevenueKpiId[];
+  revenueHiddenKpis: RevenueKpiId[];
 }
 
 export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutSettings = {
@@ -33,6 +48,10 @@ export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutSettings = {
   showCompactMetrics: false,
   widgetOrder: [...DASHBOARD_WIDGET_IDS],
   hiddenWidgets: [],
+  overviewKpiOrder: [...OVERVIEW_KPI_IDS],
+  overviewHiddenKpis: [],
+  revenueKpiOrder: [...REVENUE_KPI_IDS],
+  revenueHiddenKpis: [],
 };
 
 export function normalizeLayoutSettings(
@@ -58,12 +77,19 @@ export function normalizeLayoutSettings(
     ...hidden.filter((h) => !order.includes(h)),
   ]);
 
+  const overviewKpis = normalizeOverviewKpiLayout(partial);
+  const revenueKpis = normalizeRevenueKpiLayout(partial);
+
   return {
     themeId: partial?.themeId ?? DEFAULT_WORKSPACE_LAYOUT.themeId,
     showCompactMetrics:
       partial?.showCompactMetrics ?? DEFAULT_WORKSPACE_LAYOUT.showCompactMetrics,
     widgetOrder: mergedOrder,
     hiddenWidgets: hidden,
+    overviewKpiOrder: overviewKpis.order,
+    overviewHiddenKpis: overviewKpis.hidden,
+    revenueKpiOrder: revenueKpis.order,
+    revenueHiddenKpis: revenueKpis.hidden,
   };
 }
 

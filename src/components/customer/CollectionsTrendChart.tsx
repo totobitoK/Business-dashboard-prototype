@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { chartYAxisMax, formatChartCurrency } from "@/lib/format-chart-currency";
+import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import type { TrendBucket } from "@/lib/workspace-analytics";
 
 const PAD = { top: 10, right: 16, bottom: 30, left: 52 };
@@ -28,8 +29,10 @@ function periodLabel(bucket: TrendBucket): string {
 
 export const CollectionsTrendChart = memo(function CollectionsTrendChart({
   trend,
+  theme,
 }: {
   trend: TrendBucket[];
+  theme: LayoutCustomizeTheme;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -136,7 +139,7 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
                     y1={y}
                     x2={width - PAD.right}
                     y2={y}
-                    className="stroke-purple-100"
+                    className={theme.chartGridLine}
                     strokeWidth={1}
                   />
                   <text
@@ -156,7 +159,7 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
               y1={PAD.top + plotH}
               x2={width - PAD.right}
               y2={PAD.top + plotH}
-              className="stroke-purple-200"
+              className={theme.chartAxisLine}
               strokeWidth={1}
             />
 
@@ -165,7 +168,7 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
                 <path
                   d={buildPath(points)}
                   fill="none"
-                  className="stroke-purple"
+                  className={theme.chartLine}
                   strokeWidth={2}
                   strokeLinejoin="round"
                   strokeLinecap="round"
@@ -177,7 +180,7 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
                     cy={p.y}
                     r={hoverIndex === i ? 4 : 2.5}
                     className={`pointer-events-none ${
-                      hoverIndex === i ? "fill-purple-dark" : "fill-purple"
+                      hoverIndex === i ? theme.chartPointHover : theme.chartPoint
                     }`}
                   />
                 ))}
@@ -225,7 +228,7 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
           <>
             <span className="font-semibold text-ink">{periodLabel(hover)}</span>
             {" · "}
-            <span className="font-semibold text-purple-dark">
+            <span className={`font-semibold ${theme.metricValueA}`}>
               {formatChartCurrency(hover.amount)}
             </span>
           </>

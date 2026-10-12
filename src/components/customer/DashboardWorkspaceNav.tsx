@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   DASHBOARD_SECTIONS,
   dashboardSectionHref,
-  sectionIdFromPathname,
+  resolveDashboardSection,
 } from "@/lib/dashboard-section-routes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 
 export function DashboardWorkspaceNav({ embedded = false }: { embedded?: boolean }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { workspaceId, theme } = useCustomerPortal();
-  const active = sectionIdFromPathname(pathname);
+  const active = resolveDashboardSection(pathname, searchParams);
 
   if (!workspaceId) return null;
 
@@ -27,16 +28,17 @@ export function DashboardWorkspaceNav({ embedded = false }: { embedded?: boolean
     >
       {DASHBOARD_SECTIONS.map((section) => {
         const isActive = section.id === active;
-        const href = dashboardSectionHref(section.href, workspaceId);
+        const href = dashboardSectionHref(workspaceId, section.id);
         return (
           <Link
             key={section.id}
             href={href}
+            scroll={false}
             title={section.description}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm ${
               isActive
                 ? embedded
-                  ? "bg-white text-purple-dark shadow-sm"
+                  ? theme.embeddedNavActive
                   : `${theme.navActive}`
                 : embedded
                   ? "text-white/90 hover:bg-white/15"

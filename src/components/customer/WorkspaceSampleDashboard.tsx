@@ -25,6 +25,7 @@ import {
 } from "@/lib/workspace-business-data";
 import {
   buildCollectionsTrend,
+  computeRevenueOverviewMetrics,
   countCompletedJobsInRange,
   countOverdueInvoices,
   countUpcomingAppointments,
@@ -59,6 +60,13 @@ import { ReportingPeriodCustomRange } from "@/components/customer/ReportingPerio
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import { getOperationsListDensity } from "@/lib/operations-list-density";
 import { dashboardRoutes } from "@/lib/routes";
+import {
+  OVERVIEW_KPI_LABELS,
+  REVENUE_KPI_LABELS,
+  visibleKpiIds,
+  type OverviewKpiId,
+  type RevenueKpiId,
+} from "@/lib/workspace-kpi-layout";
 import type { DashboardWidgetId } from "@/lib/workspace-widget-layout";
 
 const INVOICE_PAGE_SIZE = 8;
@@ -83,21 +91,12 @@ const INVOICE_SORT_OPTIONS = [
   { value: "balance" as const, label: "Balance" },
 ];
 
-const widgetListShellClass =
-  "overflow-hidden rounded-xl border border-purple-200/90 bg-gradient-to-b from-white via-white to-purple-50/40 shadow-sm ring-1 ring-purple-100/60";
-
-const widgetListRowClass =
-  "transition-all hover:bg-white/90 hover:shadow-[inset_3px_0_0_0_rgb(124,58,237)]";
+const widgetListRowClass = "transition-all hover:bg-white/90";
 
 /** Job activity + Next 7 days lists — subtle hover only (no left accent). */
-const operationsListRowBase =
-  "transition-colors bg-white/70 hover:bg-purple-50/65";
-const operationsListRowSelected = "bg-purple-50/85";
+const operationsListRowBase = "transition-colors bg-white/70";
 
 const operationsSummaryStripClass = "mt-2 flex flex-wrap gap-1";
-
-const operationsSummaryChipClass =
-  "rounded-full border border-purple-100 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-ink-muted shadow-sm";
 
 /** Minimum time the dim state stays on (mostly for search deferral). */
 const FILTER_PANEL_MIN_PENDING_MS = 240;
@@ -303,6 +302,12 @@ export function WorkspaceSampleDashboard({
     const categories = serviceCategoryBreakdown(data.jobs, range);
     const jobCategories = [...new Set(data.jobs.map((j) => j.category))].sort();
 
+    const revenueOverview = computeRevenueOverviewMetrics(
+      data.payments,
+      data.invoices,
+      range
+    );
+
     return {
       range,
       paymentsCollected,
@@ -321,6 +326,7 @@ export function WorkspaceSampleDashboard({
       jobCategories,
       upcoming: countUpcomingAppointments(data.appointments),
       upcomingList: listUpcomingAppointments(data.appointments),
+      ...revenueOverview,
     };
   }, [data, rangeResult.range]);
 
@@ -393,6 +399,15 @@ export function WorkspaceSampleDashboard({
   const visibleInvoices = computed.invoices.slice(0, invoiceLimit);
   const invoicePadRowCount = Math.max(0, invoiceLimit - visibleInvoices.length);
 
+  const visibleOverviewKpis = visibleKpiIds(
+    settings.overviewKpiOrder,
+    settings.overviewHiddenKpis
+  );
+  const visibleRevenueKpis = visibleKpiIds(
+    settings.revenueKpiOrder,
+    settings.revenueHiddenKpis
+  );
+
   const invoiceToolbar = (
     <DashboardControlBar theme={theme} compact singleRow fitContent>
       <DashboardSearchInput
@@ -460,93 +475,29 @@ export function WorkspaceSampleDashboard({
 
   const widgetBlocks: Record<DashboardWidgetId, ReactNode> = {
     metrics: (
-      <div key="metrics" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          compact={compact}
-          label="Payments collected"
-          sub={formatRangeForDisplay(computed.range)}
-          compare={computed.paymentsCompare.text}
-          compareTone={computed.paymentsCompare.tone}
-          value={<CurrencyAmount amount={computed.paymentsCollected} className="text-xl font-bold sm:text-2xl" />}
-          className={theme.metricA}
-        />
-        <KpiCard
-          compact={compact}
-          label="Completed jobs"
-          sub={formatRangeForDisplay(computed.range)}
-          compare={computed.jobsCompare.text}
-          compareTone={computed.jobsCompare.tone}
-          value={
-            <span className={`text-xl font-bold sm:text-2xl ${theme.metricValueA}`}>
-              {computed.jobsCompleted}
-            </span>
-          }
-          className={theme.metricB}
-        />
-        <KpiCard
-          compact={compact}
-          label="Outstanding invoice balance"
-          sub={`As of ${formatShortDate(DEMO_AS_OF_DATE)}`}
-          value={<CurrencyAmount amount={computed.outstanding} className="text-xl font-bold sm:text-2xl" />}
-          className={theme.metricA}
-        />
-        <KpiCard
-          compact={compact}
-          label="Overdue invoice balance"
-          sub={`As of ${formatShortDate(DEMO_AS_OF_DATE)}`}
-          value={<CurrencyAmount amount={computed.overdue} className="text-xl font-bold sm:text-2xl" />}
-          className={theme.metricB}
-        />
-      </div>
+      <MetricsKpiGrid
+        mode={mode}
+        compact={compact}
+        theme={theme}
+        computed={computed}
+        overviewKpiIds={visibleOverviewKpis}
+        revenueKpiIds={visibleRevenueKpis}
+      />
     ),
-    collections_chart: <CollectionsTrendChart trend={computed.trend} />,
+    collections_chart: <CollectionsTrendChart trend={computed.trend} theme={theme} />,
     needs_attention: (
-      <div key="needs_attention">
-        <ul className="space-y-2 text-sm">
-          <li>
-            <button
-              type="button"
-              className="text-left font-medium text-amber-950 underline-offset-2 hover:underline"
-              onClick={() => {
-                setInsightFocus("overdue");
-                setInvoiceStatus("Past due");
-                setSelectedInvoiceId(null);
-              }}
-            >
-              {computed.overdueCount} overdue invoices ·{" "}
-              <CurrencyAmount amount={computed.overdue} className="inline" />
-            </button>
-          </li>
-          {computed.oldestDays != null && computed.oldestDays > 0 && (
-            <li className="text-ink">
-              Oldest unpaid invoice:{" "}
-              <span className="font-semibold">{computed.oldestDays} days</span> past due
-            </li>
-          )}
-          {computed.aging["90_plus"].count > 0 && (
-            <li className="text-ink">
-              {computed.aging["90_plus"].count} invoices 90+ days overdue (
-              <CurrencyAmount amount={computed.aging["90_plus"].total} className="inline" />)
-            </li>
-          )}
-        </ul>
-        <div className="mt-3 grid grid-cols-2 gap-1 text-[10px] text-ink-muted sm:grid-cols-5">
-          {(
-            [
-              ["Not due", "not_due"],
-              ["1–30", "1_30"],
-              ["31–60", "31_60"],
-              ["61–90", "61_90"],
-              ["90+", "90_plus"],
-            ] as const
-          ).map(([label, key]) => (
-            <div key={key} className="rounded bg-white/70 px-1.5 py-1">
-              <p className="font-semibold text-ink">{label}</p>
-              <p>{computed.aging[key].count} · ${computed.aging[key].total.toLocaleString()}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      <NeedsAttentionPanel
+        theme={theme}
+        overdueCount={computed.overdueCount}
+        overdueTotal={computed.overdue}
+        oldestDays={computed.oldestDays}
+        aging={computed.aging}
+        onViewOverdueInvoices={() => {
+          setInsightFocus("overdue");
+          setInvoiceStatus("Past due");
+          setSelectedInvoiceId(null);
+        }}
+      />
     ),
     job_activity: (
       <OperationsJobsPanel
@@ -584,7 +535,7 @@ export function WorkspaceSampleDashboard({
           setSelectedJobId(null);
         }}
         formatDateTime={formatAppointmentDateTime}
-        scheduleHref={dashboardSectionHref(dashboardRoutes.schedule, workspaceId)}
+        scheduleHref={dashboardSectionHref(workspaceId, "schedule")}
         embedded
         bare
       />
@@ -594,7 +545,7 @@ export function WorkspaceSampleDashboard({
         <div
           aria-busy={invoiceTablePending}
           aria-label="Filtered invoices"
-          className={`relative overflow-x-auto [scrollbar-gutter:stable] ${widgetListShellClass}`}
+          className={`relative overflow-x-auto [scrollbar-gutter:stable] ${theme.widgetListShell}`}
         >
           <div aria-hidden className={filterPanelVeilClass(invoiceTablePending)} />
           <div className={filterPanelContentClass(invoiceTablePending)}>
@@ -607,7 +558,7 @@ export function WorkspaceSampleDashboard({
               <col className="w-[18%]" />
             </colgroup>
             <thead>
-              <tr className="border-b border-purple-200/80 bg-purple-50/55 text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+              <tr className={`${theme.widgetListHeader} text-[10px] font-bold uppercase tracking-wide text-ink-muted`}>
                 <th className="px-3 py-2.5">Invoice</th>
                 <th className="px-3 py-2.5">Customer</th>
                 <th className="px-3 py-2.5">Due</th>
@@ -615,7 +566,7 @@ export function WorkspaceSampleDashboard({
                 <th className="px-3 py-2.5">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-purple-100/90">
+            <tbody className={`divide-y ${theme.widgetListDivideLight}`}>
               {visibleInvoices.length === 0 ? (
                 <tr>
                   <td
@@ -632,7 +583,7 @@ export function WorkspaceSampleDashboard({
                       key={inv.id}
                       className={`h-10 cursor-pointer ${widgetListRowClass} ${
                         selectedInvoiceId === inv.id
-                          ? "bg-purple-50/80 shadow-[inset_3px_0_0_0_rgb(124,58,237)]"
+                          ? `${theme.tableRowSelected} ${theme.tableRowSelectedInset}`
                           : idx % 2 === 1
                             ? "bg-white/60"
                             : "bg-white"
@@ -643,12 +594,12 @@ export function WorkspaceSampleDashboard({
                         setSelectedAppointmentId(null);
                       }}
                     >
-                      <td className="truncate px-3 py-2.5 font-mono text-xs font-semibold text-purple-dark">
+                      <td className={`truncate px-3 py-2.5 font-mono text-xs font-semibold ${theme.metricValueA}`}>
                         {inv.invoiceNumber}
                       </td>
                       <td className="truncate px-3 py-2.5 font-medium text-ink">{inv.customer}</td>
                       <td className="px-3 py-2.5 text-ink-muted">{formatShortDate(inv.dueDate)}</td>
-                      <td className="px-3 py-2.5 font-semibold text-purple-dark">
+                      <td className={`px-3 py-2.5 font-semibold ${theme.metricValueA}`}>
                         <CurrencyAmount amount={inv.balanceDue} />
                       </td>
                       <td className="px-3 py-2.5">
@@ -670,13 +621,21 @@ export function WorkspaceSampleDashboard({
           </table>
           </div>
         </div>
-        <div className="mt-3 min-h-9">
+        <div className="mt-3 flex min-h-9 flex-wrap items-center gap-2">
           {computed.invoices.length > invoiceLimit && (
             <DashboardSecondaryButton
               theme={theme}
               onClick={() => setInvoiceLimit((n) => n + INVOICE_PAGE_SIZE)}
             >
               Show more
+            </DashboardSecondaryButton>
+          )}
+          {invoiceLimit > INVOICE_PAGE_SIZE && (
+            <DashboardSecondaryButton
+              theme={theme}
+              onClick={() => setInvoiceLimit(INVOICE_PAGE_SIZE)}
+            >
+              Collapse
             </DashboardSecondaryButton>
           )}
         </div>
@@ -726,7 +685,7 @@ export function WorkspaceSampleDashboard({
                       onClick={() => setPreset(value)}
                       className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all sm:px-3 sm:py-2 sm:text-sm ${
                         active
-                          ? "bg-white text-purple-dark shadow-md ring-1 ring-white/90"
+                          ? theme.embeddedPeriodActive
                           : "text-white/95 hover:bg-white/15"
                       }`}
                     >
@@ -774,7 +733,11 @@ export function WorkspaceSampleDashboard({
           const rangeLabel = formatRangeForDisplay(computed.range);
           switch (id) {
             case "metrics":
-              return { title: "General Overview", subtitle: rangeLabel };
+              return {
+                title: mode === "revenue" ? "Revenue Overview" : "General Overview",
+                subtitle: rangeLabel,
+                subtitleAlign: "center" as const,
+              };
             case "collections_chart":
               return {
                 title: "Collections trend",
@@ -787,6 +750,7 @@ export function WorkspaceSampleDashboard({
                     />
                   </>
                 ),
+                subtitleAlign: "center" as const,
                 tightToolbar: true,
               };
             case "job_activity":
@@ -804,7 +768,7 @@ export function WorkspaceSampleDashboard({
                 subtitleAlign: "center" as const,
                 headerAside: (
                   <Link
-                    href={dashboardSectionHref(dashboardRoutes.schedule, workspaceId)}
+                    href={dashboardSectionHref(workspaceId, "schedule")}
                     className={`inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${theme.filterSecondaryButton}`}
                   >
                     Open schedule
@@ -827,17 +791,21 @@ export function WorkspaceSampleDashboard({
                 tightToolbar: true,
               };
             case "needs_attention":
-              return { title: "Needs attention", accent: "alert" as const };
+              return {
+                title: "Needs attention",
+                subtitle: "Open receivables & aging",
+                subtitleAlign: "center" as const,
+              };
             default:
               return { title: id };
           }
         })}
 
       {(selectedInvoice || selectedJob || selectedAppointment) && (
-        <div className="border-t border-purple-100/80 bg-white/90 px-4 py-4 sm:px-5">
+        <div className={`border-t ${theme.detailPanelBorder} bg-white/90 px-4 py-4 sm:px-5`}>
           {selectedInvoice && (
             <>
-              <p className="text-xs font-semibold uppercase text-purple">Invoice detail</p>
+              <p className={`text-xs font-semibold uppercase ${theme.detailSectionLabel}`}>Invoice detail</p>
               <p className="font-semibold text-ink">
                 {selectedInvoice.invoiceNumber} — {selectedInvoice.customer}
               </p>
@@ -872,7 +840,7 @@ export function WorkspaceSampleDashboard({
           )}
           {selectedJob && (
             <>
-              <p className="text-xs font-semibold uppercase text-purple">Job detail</p>
+              <p className={`text-xs font-semibold uppercase ${theme.detailSectionLabel}`}>Job detail</p>
               <p className="font-semibold text-ink">
                 {selectedJob.serviceType}
                 {" · "}
@@ -885,13 +853,318 @@ export function WorkspaceSampleDashboard({
           )}
           {selectedAppointment && (
             <>
-              <p className="text-xs font-semibold uppercase text-purple">Appointment</p>
+              <p className={`text-xs font-semibold uppercase ${theme.detailSectionLabel}`}>Appointment</p>
               <p className="font-semibold text-ink">{selectedAppointment.title}</p>
               <p className="text-sm text-ink-muted">{selectedAppointment.location}</p>
             </>
           )}
         </div>
       )}
+      </div>
+    </div>
+  );
+}
+
+type MetricsKpiComputed = {
+  range: { start: string; end: string; preset: ReportingPeriodPreset };
+  paymentsCollected: number;
+  paymentsCompare: { text: string; tone: "neutral" | "up" | "down" };
+  jobsCompleted: number;
+  jobsCompare: { text: string; tone: "neutral" | "up" | "down" };
+  outstanding: number;
+  overdue: number;
+  weeklyRevenue: number;
+  weeklyRevenueCompare: { text: string; tone: "neutral" | "up" | "down" };
+  weeklyRangeLabel: string;
+  monthlyRevenue: number;
+  monthlyRevenueCompare: { text: string; tone: "neutral" | "up" | "down" };
+  monthlyRangeLabel: string;
+  monthPipeline: number;
+  monthPipelineLabel: string;
+};
+
+function MetricsKpiGrid({
+  mode,
+  compact,
+  theme,
+  computed,
+  overviewKpiIds,
+  revenueKpiIds,
+}: {
+  mode: "overview" | "revenue";
+  compact: boolean;
+  theme: LayoutCustomizeTheme;
+  computed: MetricsKpiComputed;
+  overviewKpiIds: OverviewKpiId[];
+  revenueKpiIds: RevenueKpiId[];
+}) {
+  const ids = mode === "revenue" ? revenueKpiIds : overviewKpiIds;
+
+  if (ids.length === 0) {
+    return (
+      <p
+        className={`rounded-lg border border-dashed px-4 py-6 text-center text-sm text-ink-muted ${theme.kpiEmptyState}`}
+      >
+        No KPI cards selected.{" "}
+        <Link
+          href={dashboardRoutes.settings}
+          className={`font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
+        >
+          Choose KPIs in Appearance & layout
+        </Link>
+        .
+      </p>
+    );
+  }
+
+  const lgCols =
+    ids.length <= 1
+      ? "lg:grid-cols-1"
+      : ids.length === 2
+        ? "lg:grid-cols-2"
+        : ids.length === 3
+          ? "lg:grid-cols-3"
+          : "lg:grid-cols-4";
+
+  return (
+    <div key="metrics" className={`grid gap-2 sm:grid-cols-2 ${lgCols}`}>
+      {mode === "revenue"
+        ? revenueKpiIds.map((id, index) => (
+            <KpiCard
+              key={id}
+              compact={compact}
+              label={REVENUE_KPI_LABELS[id]}
+              {...revenueKpiCardProps(id, computed, theme, index)}
+            />
+          ))
+        : overviewKpiIds.map((id, index) => (
+            <KpiCard
+              key={id}
+              compact={compact}
+              label={OVERVIEW_KPI_LABELS[id]}
+              {...overviewKpiCardProps(id, computed, theme, index)}
+            />
+          ))}
+    </div>
+  );
+}
+
+function revenueKpiCardProps(
+  id: RevenueKpiId,
+  computed: MetricsKpiComputed,
+  theme: LayoutCustomizeTheme,
+  index: number
+) {
+  const className = index % 2 === 0 ? theme.metricA : theme.metricB;
+  switch (id) {
+    case "weekly_revenue":
+      return {
+        sub: computed.weeklyRangeLabel,
+        compare: computed.weeklyRevenueCompare.text,
+        compareTone: computed.weeklyRevenueCompare.tone,
+        value: (
+          <CurrencyAmount amount={computed.weeklyRevenue} className="text-xl font-bold sm:text-2xl" />
+        ),
+        className,
+      };
+    case "monthly_revenue":
+      return {
+        sub: computed.monthlyRangeLabel,
+        compare: computed.monthlyRevenueCompare.text,
+        compareTone: computed.monthlyRevenueCompare.tone,
+        value: (
+          <CurrencyAmount amount={computed.monthlyRevenue} className="text-xl font-bold sm:text-2xl" />
+        ),
+        className,
+      };
+    case "month_pipeline":
+      return {
+        sub: computed.monthPipelineLabel,
+        value: (
+          <CurrencyAmount amount={computed.monthPipeline} className="text-xl font-bold sm:text-2xl" />
+        ),
+        className,
+      };
+    case "overdue_ar":
+      return {
+        sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
+        value: (
+          <CurrencyAmount amount={computed.overdue} className="text-xl font-bold sm:text-2xl" />
+        ),
+        className,
+      };
+  }
+}
+
+function overviewKpiCardProps(
+  id: OverviewKpiId,
+  computed: MetricsKpiComputed,
+  theme: LayoutCustomizeTheme,
+  index: number
+) {
+  const className = index % 2 === 0 ? theme.metricA : theme.metricB;
+  switch (id) {
+    case "payments_collected":
+      return {
+        sub: formatRangeForDisplay(computed.range),
+        compare: computed.paymentsCompare.text,
+        compareTone: computed.paymentsCompare.tone,
+        value: (
+          <CurrencyAmount
+            amount={computed.paymentsCollected}
+            className="text-xl font-bold sm:text-2xl"
+          />
+        ),
+        className,
+      };
+    case "jobs_completed":
+      return {
+        sub: formatRangeForDisplay(computed.range),
+        compare: computed.jobsCompare.text,
+        compareTone: computed.jobsCompare.tone,
+        value: (
+          <span className={`text-xl font-bold sm:text-2xl ${theme.metricValueA}`}>
+            {computed.jobsCompleted}
+          </span>
+        ),
+        className,
+      };
+    case "outstanding_balance":
+      return {
+        sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
+        value: (
+          <CurrencyAmount amount={computed.outstanding} className="text-xl font-bold sm:text-2xl" />
+        ),
+        className,
+      };
+    case "overdue_balance":
+      return {
+        sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
+        value: (
+          <CurrencyAmount amount={computed.overdue} className="text-xl font-bold sm:text-2xl" />
+        ),
+        className,
+      };
+  }
+}
+
+const AGING_BUCKET_KEYS = [
+  ["Not due", "not_due"],
+  ["1–30", "1_30"],
+  ["31–60", "31_60"],
+  ["61–90", "61_90"],
+  ["90+", "90_plus"],
+] as const;
+
+type AgingBuckets = ReturnType<typeof invoiceAgingBuckets>;
+
+function NeedsAttentionPanel({
+  theme,
+  overdueCount,
+  overdueTotal,
+  oldestDays,
+  aging,
+  onViewOverdueInvoices,
+}: {
+  theme: LayoutCustomizeTheme;
+  overdueCount: number;
+  overdueTotal: number;
+  oldestDays: number | null;
+  aging: AgingBuckets;
+  onViewOverdueInvoices: () => void;
+}) {
+  const critical = aging["90_plus"];
+
+  return (
+    <div key="needs_attention" className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <button
+          type="button"
+          onClick={onViewOverdueInvoices}
+          className={`rounded-lg border border-amber-200/90 bg-gradient-to-br from-amber-50/90 to-white p-3 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md ${overdueCount > 0 ? "ring-1 ring-amber-200/60" : ""}`}
+        >
+          <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">
+            Past due
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-ink">
+            {overdueCount}{" "}
+            <span className="text-sm font-semibold text-ink-muted">invoices</span>
+          </p>
+          <p className={`mt-0.5 text-sm font-semibold ${theme.metricValueA}`}>
+            <CurrencyAmount amount={overdueTotal} />
+          </p>
+          <p className={`mt-1 text-[10px] font-semibold ${theme.linkAccent}`}>
+            View in invoice list →
+          </p>
+        </button>
+
+        <div className={`rounded-lg border p-3 shadow-sm ${theme.attentionMetricTile}`}>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+            Oldest overdue
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-ink">
+            {oldestDays != null && oldestDays > 0 ? (
+              <>
+                {oldestDays}{" "}
+                <span className="text-sm font-semibold text-ink-muted">days</span>
+              </>
+            ) : (
+              <span className="text-sm font-semibold text-ink-muted">None</span>
+            )}
+          </p>
+          <p className="mt-2 text-[10px] leading-snug text-ink-muted">
+            Longest-running unpaid balance past due date
+          </p>
+        </div>
+
+        <div
+          className={`rounded-lg border p-3 shadow-sm ${
+            critical.count > 0
+              ? "border-amber-200/90 bg-gradient-to-br from-amber-50/70 to-white ring-1 ring-amber-200/50"
+              : theme.attentionMetricTileIdle
+          }`}
+        >
+          <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+            90+ days overdue
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-ink">{critical.count}</p>
+          <p className={`mt-0.5 text-sm font-semibold ${theme.metricValueA}`}>
+            <CurrencyAmount amount={critical.total} />
+          </p>
+        </div>
+      </div>
+
+      <div className={`overflow-hidden ${theme.widgetListShell}`}>
+        <p
+          className={`px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-ink-muted ${theme.widgetListHeader}`}
+        >
+          Open balance by aging bucket
+        </p>
+        <table className="w-full table-fixed text-center text-xs">
+          <thead>
+            <tr
+              className={`${theme.widgetListHeader} text-[10px] font-bold uppercase tracking-wide text-ink-muted`}
+            >
+              {AGING_BUCKET_KEYS.map(([label]) => (
+                <th key={label} className="px-2 py-2.5 font-bold">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr className={`divide-x bg-white/80 text-ink ${theme.widgetListColDivide}`}>
+              {AGING_BUCKET_KEYS.map(([label, key]) => (
+                <td key={key} className="px-2 py-2.5 tabular-nums">
+                  <span className="block font-semibold text-ink">{aging[key].count}</span>
+                  <span className={`mt-0.5 block text-[11px] font-medium ${theme.metricValueA}`}>
+                    <CurrencyAmount amount={aging[key].total} className="inline" />
+                  </span>
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -1043,7 +1316,7 @@ function OperationsJobsPanel({
   return (
     <div className={shellClass}>
       {!bare && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-100/80 pb-2">
+        <div className={`flex flex-wrap items-center justify-between gap-2 border-b pb-2 ${theme.toolbarDivider}`}>
           <div>
             <h3 className="text-sm font-semibold text-ink">Job activity</h3>
             <p className="text-[11px] text-ink-muted">{rangeLabel}</p>
@@ -1078,7 +1351,7 @@ function OperationsJobsPanel({
       {categories.length > 0 && (
         <div className={operationsSummaryStripClass}>
           {categories.map((c) => (
-            <span key={c.category} className={operationsSummaryChipClass}>
+            <span key={c.category} className={theme.operationsSummaryChip}>
               {c.category} · {c.completed}
             </span>
           ))}
@@ -1091,10 +1364,10 @@ function OperationsJobsPanel({
       ) : (
         <div
           aria-busy={filterPending}
-          className={`relative mt-3 ${widgetListShellClass} ${density.text}`}
+          className={`relative mt-3 ${theme.widgetListShell} ${density.text}`}
         >
           <div aria-hidden className={filterPanelVeilClass(filterPending)} />
-          <ul className={`divide-y divide-purple-200/80 ${filterPanelContentClass(filterPending)}`}>
+          <ul className={`divide-y ${theme.widgetListDivide} ${filterPanelContentClass(filterPending)}`}>
           {visibleJobs.map((job) => {
             const { date, time } = formatJobRowWhen(job);
             return (
@@ -1103,7 +1376,9 @@ function OperationsJobsPanel({
                   type="button"
                   onClick={() => onSelectJob(job.id)}
                   className={`flex w-full flex-col gap-0.5 px-3 text-left text-ink sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
-                    selectedJobId === job.id ? operationsListRowSelected : operationsListRowBase
+                    selectedJobId === job.id
+                      ? theme.operationsListSelected
+                      : `${operationsListRowBase} ${theme.operationsListHover}`
                   }`}
                 >
                   <div className="min-w-0 flex-1">
@@ -1183,7 +1458,7 @@ function OperationsSchedulePanel({
   return (
     <div className={shellClass}>
       {!bare && (
-        <div className="border-b border-purple-100/80 pb-2">
+        <div className={`border-b pb-2 ${theme.toolbarDivider}`}>
           <h3 className="text-sm font-semibold text-ink">Next 7 days</h3>
           <p className="text-[11px] text-ink-muted">
             From {formatShortDate(DEMO_AS_OF_DATE)} · {upcoming} scheduled
@@ -1193,7 +1468,7 @@ function OperationsSchedulePanel({
       {assigneeBreakdown.length > 0 && (
         <div className={operationsSummaryStripClass}>
           {assigneeBreakdown.map(({ assignee, count }) => (
-            <span key={assignee} className={operationsSummaryChipClass}>
+            <span key={assignee} className={theme.operationsSummaryChip}>
               {assignee} · {count}
             </span>
           ))}
@@ -1204,7 +1479,7 @@ function OperationsSchedulePanel({
           No upcoming appointments in this window.
         </p>
       ) : (
-        <ul className={`mt-3 divide-y divide-purple-200/80 ${widgetListShellClass} ${density.text}`}>
+        <ul className={`mt-3 divide-y ${theme.widgetListDivide} ${theme.widgetListShell} ${density.text}`}>
           {visible.map((appt) => {
             const { date, time } = formatDateTime(appt.startAt);
             return (
@@ -1214,8 +1489,8 @@ function OperationsSchedulePanel({
                   onClick={() => onSelectAppointment(appt.id)}
                   className={`flex w-full flex-col gap-0.5 px-3 text-left sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
                     selectedAppointmentId === appt.id
-                      ? operationsListRowSelected
-                      : operationsListRowBase
+                      ? theme.operationsListSelected
+                      : `${operationsListRowBase} ${theme.operationsListHover}`
                   }`}
                 >
                   <p className="min-w-0 flex-1 truncate font-semibold text-ink">{appt.title}</p>
@@ -1233,7 +1508,10 @@ function OperationsSchedulePanel({
       {hiddenCount > 0 && (
         <p className={`mt-2 ${density.meta} text-ink-muted`}>
           + {hiddenCount} more —{" "}
-          <Link href={scheduleHref} className="font-semibold text-purple hover:text-purple-dark">
+          <Link
+            href={scheduleHref}
+            className={`font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
+          >
             open Schedule
           </Link>
         </p>

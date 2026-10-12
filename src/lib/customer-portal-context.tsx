@@ -24,8 +24,11 @@ import {
   DEFAULT_WORKSPACE_LAYOUT,
   normalizeLayoutSettings,
   type DashboardWidgetId,
+  type OverviewKpiId,
+  type RevenueKpiId,
   type WorkspaceLayoutSettings,
 } from "./workspace-widget-layout";
+import { moveKpi, toggleKpiHidden } from "./workspace-kpi-layout";
 
 const WORKSPACE_STORAGE_KEY = "customer-portal-demo-workspace";
 const SETTINGS_STORAGE_KEY = "customer-portal-workspace-settings";
@@ -52,6 +55,10 @@ interface CustomerPortalContextValue {
   resetLayoutToDefaults: () => void;
   moveWidget: (id: DashboardWidgetId, direction: "up" | "down") => void;
   toggleWidgetHidden: (id: DashboardWidgetId) => void;
+  moveOverviewKpi: (id: OverviewKpiId, direction: "up" | "down") => void;
+  toggleOverviewKpiHidden: (id: OverviewKpiId) => void;
+  moveRevenueKpi: (id: RevenueKpiId, direction: "up" | "down") => void;
+  toggleRevenueKpiHidden: (id: RevenueKpiId) => void;
   theme: LayoutCustomizeTheme;
 }
 
@@ -216,6 +223,82 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
     [workspaceId, workspaceInvalid]
   );
 
+  const moveOverviewKpi = useCallback(
+    (id: OverviewKpiId, direction: "up" | "down") => {
+      if (workspaceInvalid || !workspaceId) return;
+      setSettingsMap((prev) => {
+        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        return {
+          ...prev,
+          [workspaceId]: normalizeLayoutSettings({
+            ...current,
+            overviewKpiOrder: moveKpi(current.overviewKpiOrder, id, direction),
+          }),
+        };
+      });
+    },
+    [workspaceId, workspaceInvalid]
+  );
+
+  const toggleOverviewKpiHidden = useCallback(
+    (id: OverviewKpiId) => {
+      if (workspaceInvalid || !workspaceId) return;
+      setSettingsMap((prev) => {
+        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        return {
+          ...prev,
+          [workspaceId]: normalizeLayoutSettings({
+            ...current,
+            overviewHiddenKpis: toggleKpiHidden(
+              current.overviewKpiOrder,
+              current.overviewHiddenKpis,
+              id
+            ),
+          }),
+        };
+      });
+    },
+    [workspaceId, workspaceInvalid]
+  );
+
+  const moveRevenueKpi = useCallback(
+    (id: RevenueKpiId, direction: "up" | "down") => {
+      if (workspaceInvalid || !workspaceId) return;
+      setSettingsMap((prev) => {
+        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        return {
+          ...prev,
+          [workspaceId]: normalizeLayoutSettings({
+            ...current,
+            revenueKpiOrder: moveKpi(current.revenueKpiOrder, id, direction),
+          }),
+        };
+      });
+    },
+    [workspaceId, workspaceInvalid]
+  );
+
+  const toggleRevenueKpiHidden = useCallback(
+    (id: RevenueKpiId) => {
+      if (workspaceInvalid || !workspaceId) return;
+      setSettingsMap((prev) => {
+        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        return {
+          ...prev,
+          [workspaceId]: normalizeLayoutSettings({
+            ...current,
+            revenueHiddenKpis: toggleKpiHidden(
+              current.revenueKpiOrder,
+              current.revenueHiddenKpis,
+              id
+            ),
+          }),
+        };
+      });
+    },
+    [workspaceId, workspaceInvalid]
+  );
+
   const value = useMemo(
     () => ({
       workspaces: CUSTOMER_DEMO_WORKSPACES,
@@ -230,6 +313,10 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
       resetLayoutToDefaults,
       moveWidget,
       toggleWidgetHidden,
+      moveOverviewKpi,
+      toggleOverviewKpiHidden,
+      moveRevenueKpi,
+      toggleRevenueKpiHidden,
       theme,
     }),
     [
@@ -244,6 +331,10 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
       resetLayoutToDefaults,
       moveWidget,
       toggleWidgetHidden,
+      moveOverviewKpi,
+      toggleOverviewKpiHidden,
+      moveRevenueKpi,
+      toggleRevenueKpiHidden,
       theme,
     ]
   );

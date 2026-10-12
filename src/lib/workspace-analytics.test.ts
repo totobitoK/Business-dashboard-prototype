@@ -4,6 +4,7 @@ import { getWorkspaceBusinessData } from "./workspace-business-data";
 import { daysBetweenInclusive } from "./workspace-reporting-period";
 import {
   buildCollectionsTrend,
+  computeRevenueOverviewMetrics,
   countCompletedJobsInRange,
   filterInvoices,
   invoiceAgingBuckets,
@@ -126,6 +127,27 @@ describe("workspace analytics", () => {
       status: "all",
     });
     expect(bySlash.some((inv) => inv.id === sample.id)).toBe(true);
+  });
+
+  it("revenue overview monthly total follows the selected reporting period", () => {
+    const mtd = resolveReportingRange("mtd");
+    const prev = resolveReportingRange("prev_month");
+    expect(mtd.ok && prev.ok).toBe(true);
+    if (!mtd.ok || !prev.ok) return;
+
+    const mtdMetrics = computeRevenueOverviewMetrics(
+      alpine.payments,
+      alpine.invoices,
+      mtd.range
+    );
+    const prevMetrics = computeRevenueOverviewMetrics(
+      alpine.payments,
+      alpine.invoices,
+      prev.range
+    );
+
+    expect(mtdMetrics.monthlyRangeLabel).not.toBe(prevMetrics.monthlyRangeLabel);
+    expect(mtdMetrics.monthlyRevenue).not.toBe(prevMetrics.monthlyRevenue);
   });
 
   it("has sufficient alpine sample volume", () => {

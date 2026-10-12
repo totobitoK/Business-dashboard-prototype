@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { WorkspaceScheduleDashboard } from "@/components/customer/WorkspaceScheduleDashboard";
+import { resolveDashboardSection } from "@/lib/dashboard-section-routes";
 import { ProgressBar } from "@/components/ProgressBar";
 import {
   CustomerCompletePaymentButton,
@@ -188,6 +191,9 @@ function PortalDashboardSection({
 }) {
   const showPreview = showCustomerDashboardPreview(client);
   const isReviewStage = stage === "preview-ready";
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const previewSection = resolveDashboardSection(pathname, searchParams);
 
   return (
     <section aria-labelledby="portal-dashboard-heading" className="space-y-3">
@@ -218,15 +224,19 @@ function PortalDashboardSection({
         </p>
       )}
 
-      {showPreview && (
-        <WorkspaceSampleDashboard
-          changesRequestedNote={
-            client.previewChangeRequest
-              ? `Change request on file (${getPreviewRevisionLabel(client)}).`
-              : undefined
-          }
-        />
-      )}
+      {showPreview &&
+        (previewSection === "schedule" ? (
+          <WorkspaceScheduleDashboard />
+        ) : (
+          <WorkspaceSampleDashboard
+            mode={previewSection === "revenue" ? "revenue" : "overview"}
+            changesRequestedNote={
+              client.previewChangeRequest
+                ? `Change request on file (${getPreviewRevisionLabel(client)}).`
+                : undefined
+            }
+          />
+        ))}
 
       {isReviewStage && <PortalPreviewReviewControls client={client} />}
 

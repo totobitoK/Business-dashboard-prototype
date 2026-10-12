@@ -8,10 +8,16 @@ import {
 } from "./workspace-business-data";
 import { anyCalendarDateMatchesSearch } from "./calendar-date-search";
 import {
+  addCalendarDays,
   compareIsoDates,
+  formatCalendarDateDisplay,
+  formatComparisonDelta,
+  formatIsoDate,
+  formatRangeForDisplay,
   isDateInRange,
   isDateOnOrBeforeDemo,
   mtdComparisonRange,
+  parseIsoDate,
   priorComparisonRange,
   type ReportingDateRange,
   type ReportingPeriodPreset,
@@ -58,6 +64,104 @@ export function getComparisonRange(
     return mtdComparisonRange(DEMO_AS_OF_DATE);
   }
   return priorComparisonRange(range);
+}
+
+/** Last 7 calendar days ending on `end` (inclusive). */
+export function lastSevenDayRangeEnding(
+  end: string,
+  preset: ReportingPeriodPreset
+): ReportingDateRange {
+  return {
+    start: addCalendarDays(end, -6),
+    end,
+    preset,
+  };
+}
+
+/** Revenue “monthly” window follows the reporting period when it is month-shaped. */
+export function revenueMonthlyRangeForReporting(
+  range: ReportingDateRange
+): ReportingDateRange {
+  if (range.preset === "mtd" || range.preset === "prev_month") {
+    return range;
+  }
+  const { y, m } = parseIsoDate(range.end);
+  return {
+    start: formatIsoDate(y, m, 1),
+    end: range.end,
+    preset: range.preset,
+  };
+}
+
+export function calendarMonthBoundsForDate(iso: string): {
+  start: string;
+  end: string;
+} {
+  const { y, m } = parseIsoDate(iso);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return {
+    start: formatIsoDate(y, m, 1),
+    end: formatIsoDate(y, m, lastDay),
+  };
+}
+
+export function computeRevenueOverviewMetrics(
+  payments: BusinessPayment[],
+  invoices: BusinessInvoice[],
+  reportingRange: ReportingDateRange
+) {
+  const weeklyRange = lastSevenDayRangeEnding(
+    reportingRange.end,
+    reportingRange.preset
+  );
+  const weeklyRevenue = sumPaymentsInRange(payments, weeklyRange);
+  const weeklyRevenueCompare = formatComparisonDelta(
+    weeklyRevenue,
+    sumPaymentsInRange(payments, priorComparisonRange(weeklyRange))
+  );
+
+  const monthlyRange = revenueMonthlyRangeForReporting(reportingRange);
+  const monthlyRevenue = sumPaymentsInRange(payments, monthlyRange);
+  const monthlyCompareRange = getComparisonRange(monthlyRange);
+  const monthlyRevenueCompare = formatComparisonDelta(
+    monthlyRevenue,
+    sumPaymentsInRange(payments, monthlyCompareRange)
+  );
+
+  const pipelineMonth = calendarMonthBoundsForDate(reportingRange.end);
+  const monthPipeline = sumOpenInvoiceBalanceDueBetween(
+    invoices,
+    pipelineMonth.start,
+    pipelineMonth.end
+  );
+
+  return {
+    weeklyRevenue,
+    weeklyRevenueCompare,
+    weeklyRangeLabel: formatRangeForDisplay(weeklyRange),
+    monthlyRevenue,
+    monthlyRevenueCompare,
+    monthlyRangeLabel: formatRangeForDisplay(monthlyRange),
+    monthPipeline,
+    monthPipelineLabel: `${formatCalendarDateDisplay(pipelineMonth.start)} – ${formatCalendarDateDisplay(pipelineMonth.end)}`,
+  };
+}
+
+/** Open invoice balance with due date in an inclusive calendar range. */
+export function sumOpenInvoiceBalanceDueBetween(
+  invoices: BusinessInvoice[],
+  start: string,
+  end: string
+): number {
+  return invoices
+    .filter(
+      (inv) =>
+        inv.balanceDue > 0 &&
+        inv.status !== "Paid" &&
+        compareIsoDates(inv.dueDate, start) >= 0 &&
+        compareIsoDates(inv.dueDate, end) <= 0
+    )
+    .reduce((s, inv) => s + inv.balanceDue, 0);
 }
 
 export function sumOutstandingInvoices(invoices: BusinessInvoice[]): number {
