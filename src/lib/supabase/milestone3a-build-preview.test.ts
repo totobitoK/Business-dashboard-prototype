@@ -95,10 +95,13 @@ describe("Milestone 3A build progress and preview review", () => {
     return id;
   }
 
-  async function publishScopeAccepted(projectId: string) {
+  async function publishScopeAccepted(
+    projectId: string,
+    contact: typeof scopeContact = scopeContact
+  ) {
     await admin.rpc("admin_save_scope_draft", {
       p_project_id: projectId,
-      p_contact: scopeContact,
+      p_contact: contact,
       p_scope_draft: scopeDraft,
     });
     const { data: pub, error: pubErr } = await admin.rpc("admin_publish_scope", {
@@ -133,6 +136,28 @@ describe("Milestone 3A build progress and preview review", () => {
     });
     expect(error).toBeNull();
     return data as { preview_revision_id: string; preview_revision: number };
+  }
+
+  function isMilestone2TestProjectRow(row: { email?: string | null; company_name?: string | null }) {
+    const email = row.email ?? "";
+    const companyName = row.company_name ?? "";
+    return /^m2-.*@test\.local$/i.test(email) || companyName.startsWith("M2 ");
+  }
+
+  async function readNonTestSeedProjectId() {
+    const { data, error } = await admin
+      .from("client_projects")
+      .select("id, email, company_name")
+      .eq("company_id", companyAId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      throw new Error(`Could not list acme projects: ${error.message}`);
+    }
+    const row = (data ?? []).find((p) => !isMilestone2TestProjectRow(p));
+    if (!row?.id) {
+      throw new Error("Non-test seed project missing for acme-hvac.");
+    }
+    return row.id as string;
   }
 
   it("admin publishes preview → customer approves; payments and status unchanged", async () => {
@@ -360,6 +385,102 @@ describe("Milestone 3A build progress and preview review", () => {
       p_preview_revision_id: pub.preview_revision_id,
     });
     expect(blocked.error?.message).toMatch(/INVALID_DEMO_WORKSPACE/i);
+  });
+
+  it("allows platform admin to mutate preview workspace on M2 test fixtures", async () => {
+    const projectId = await newProject("m3a-test-rpc-ok");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const pub = await publishPreview(projectId);
+    const ok = await admin.rpc("admin_milestone3a_test_set_preview_workspace", {
+      p_preview_revision_id: pub.preview_revision_id,
+      p_demo_workspace_id: WORKSPACE_MERIDIAN_RETAIL,
+    });
+    expect(ok.error).toBeNull();
+    const row = await admin
+      .from("preview_revisions")
+      .select("demo_workspace_id")
+      .eq("id", pub.preview_revision_id)
+      .single();
+    expect(row.data?.demo_workspace_id).toBe(WORKSPACE_MERIDIAN_RETAIL);
+  });
+
+  it("denies test workspace RPC on non-test projects and leaves preview and approvals unchanged", async () => {
+    const projectId = await readNonTestSeedProjectId();
+    await publishScopeAccepted(projectId, {
+      company_name: "Acme Seed QA Co",
+      contact_name: "Alex",
+      email: "seed-non-test@acme.dev",
+      phone: "555-0100",
+      website: "",
+    });
+    await markBuildReady(projectId);
+    const pub = await publishPreview(projectId);
+    expect(
+      (
+        await userA.rpc("customer_approve_preview", {
+          p_project_id: projectId,
+          p_preview_revision_id: pub.preview_revision_id,
+        })
+      ).error
+    ).toBeNull();
+
+    const previewBefore = await admin
+      .from("preview_revisions")
+      .select("demo_workspace_id, status")
+      .eq("id", pub.preview_revision_id)
+      .single();
+    const approvalsBefore = await admin
+      .from("preview_revision_approvals")
+      .select("id")
+      .eq("preview_revision_id", pub.preview_revision_id);
+
+    const denied = await admin.rpc("admin_milestone3a_test_set_preview_workspace", {
+      p_preview_revision_id: pub.preview_revision_id,
+      p_demo_workspace_id: "ws-evil-mapping",
+    });
+    expect(denied.error).not.toBeNull();
+    expect(denied.error!.message).toMatch(/FORBIDDEN/i);
+
+    const previewAfter = await admin
+      .from("preview_revisions")
+      .select("demo_workspace_id, status")
+      .eq("id", pub.preview_revision_id)
+      .single();
+    const approvalsAfter = await admin
+      .from("preview_revision_approvals")
+      .select("id")
+      .eq("preview_revision_id", pub.preview_revision_id);
+
+    expect(previewAfter.data).toEqual(previewBefore.data);
+    expect(approvalsAfter.data?.length).toBe(approvalsBefore.data?.length);
+  });
+
+  it("denies customer invocation of test workspace RPC without mutating preview", async () => {
+    const projectId = await newProject("m3a-test-rpc-customer");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const pub = await publishPreview(projectId);
+
+    const previewBefore = await admin
+      .from("preview_revisions")
+      .select("demo_workspace_id, status")
+      .eq("id", pub.preview_revision_id)
+      .single();
+
+    const denied = await userA.rpc("admin_milestone3a_test_set_preview_workspace", {
+      p_preview_revision_id: pub.preview_revision_id,
+      p_demo_workspace_id: "ws-evil-mapping",
+    });
+    expect(denied.error).not.toBeNull();
+    expect(denied.error!.message).toMatch(/FORBIDDEN/i);
+
+    const previewAfter = await admin
+      .from("preview_revisions")
+      .select("demo_workspace_id, status")
+      .eq("id", pub.preview_revision_id)
+      .single();
+    expect(previewAfter.data).toEqual(previewBefore.data);
   });
 
   it("blocks preview publish when material scope edits are unpublished", async () => {
