@@ -1,16 +1,11 @@
-import type { DataSourceTool } from "./types";
+import { MARKETING_CONNECTORS } from "./connector-catalog";
 
 export const marketingConnectionsHref = "#integrations";
 
-/** Sources shown on marketing — aligned with onboarding tool options. */
-export const MARKETING_DATA_SOURCES: {
-  id: DataSourceTool | "csv-import";
-  label: string;
-  status: string;
-}[] = [
-  { id: "quickbooks", label: "QuickBooks Online", status: "In development" },
-  { id: "google-calendar", label: "Google Calendar", status: "In development" },
-  { id: "excel-csv", label: "Excel / CSV", status: "Planned fallback" },
-  { id: "google-sheets", label: "Google Sheets", status: "As agreed in scope" },
-  { id: "hubspot", label: "HubSpot", status: "As agreed in scope" },
-];
+/** Sources shown on marketing — derived from the shared connector catalog. */
+export const MARKETING_DATA_SOURCES = MARKETING_CONNECTORS.map((c) => ({
+  id: c.id,
+  label: c.label,
+  status: c.statusLabel,
+  description: c.shortDescription,
+}));

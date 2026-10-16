@@ -133,10 +133,15 @@ export function IntegrationsVisual() {
       {MARKETING_DATA_SOURCES.map((item) => (
         <div
           key={item.id}
-          className="flex items-center justify-between gap-3 rounded-xl border border-purple-100 bg-white px-4 py-4 shadow-soft"
+          className="flex flex-col gap-2 rounded-xl border border-purple-100 bg-white px-4 py-4 shadow-soft sm:flex-row sm:items-center sm:justify-between"
         >
-          <span className="font-semibold text-ink">{item.label}</span>
-          <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple">
+          <div className="min-w-0">
+            <span className="font-semibold text-ink">{item.label}</span>
+            {"description" in item && item.description ? (
+              <p className="mt-1 text-xs text-ink-muted">{item.description}</p>
+            ) : null}
+          </div>
+          <span className="shrink-0 rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple">
             {item.status}
           </span>
         </div>

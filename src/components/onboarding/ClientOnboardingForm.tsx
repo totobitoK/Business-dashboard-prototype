@@ -393,25 +393,31 @@ export function ClientOnboardingForm({
                 <p className="mb-2 text-xs text-red-600">{errors.selectedTools}</p>
               )}
               <div className="space-y-2">
-                {DATA_SOURCE_TOOLS.map(({ id, label }) => (
+                {DATA_SOURCE_TOOLS.map(({ id, label, statusLabel }) => (
                   <label
                     key={id}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-purple-100 px-3 py-2.5 hover:bg-purple-50/40"
+                    className="flex cursor-pointer items-start gap-3 rounded-lg border border-purple-100 px-3 py-2.5 hover:bg-purple-50/40"
                   >
                     <input
                       type="checkbox"
                       checked={answers.selectedTools?.includes(id) ?? false}
                       onChange={() => toggleTool(id)}
-                      className="rounded border-purple-300 text-purple focus:ring-purple"
+                      className="mt-0.5 rounded border-purple-300 text-purple focus:ring-purple"
                     />
-                    <span className="text-sm text-ink">{label}</span>
+                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-sm font-medium text-ink">{label}</span>
+                      <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-dark">
+                        {statusLabel}
+                      </span>
+                    </span>
                   </label>
                 ))}
               </div>
             </fieldset>
             <p className="text-xs text-ink-subtle">
-              Selecting a tool records a requirement only — it does not connect
-              an integration or guarantee support.
+              Checking a box captures interest for discovery and scope only. It
+              does not connect an account, start OAuth, or guarantee that provider
+              will be available on your launch date.
             </p>
             {answers.selectedTools?.includes("other") && (
               <Field label="Describe other tool" error={errors.otherToolExplanation}>

@@ -138,10 +138,10 @@ export function MarketingHomePage() {
               </p>
               <div className="mt-8 border-t border-purple-100 pt-6">
                 <p className="text-sm font-semibold text-ink">
-                  Sources we can connect
+                  Data sources in our connector roadmap
                 </p>
                 <p className="mt-1 text-sm text-ink">
-                  Agreed in scope—{" "}
+                  Final connections are agreed in scope—{" "}
                   <a
                     href={marketingConnectionsHref}
                     className="font-semibold text-purple underline-offset-2 hover:underline"
@@ -268,19 +268,19 @@ export function MarketingHomePage() {
         >
           <SplitSection visual={<IntegrationsVisual />}>
             <SectionEyebrow>Data connections</SectionEyebrow>
-            <SectionTitle>Initial integrations in development</SectionTitle>
+            <SectionTitle>Connector lineup — not all live yet</SectionTitle>
             <p className="mt-4 text-base leading-relaxed text-ink sm:text-lg">
-              We are developing connections for QuickBooks Online and Google
-              Calendar first, with Excel / CSV as a fallback when a direct
-              connection is not the right fit. Other sources—such as Google
-              Sheets and HubSpot—can be included when they match your agreed
-              scope.
+              RavenView is building toward QuickBooks Online, Google Calendar,
+              Google Sheets, Square, HubSpot, Google Ads, Meta Ads, and Excel /
+              CSV imports. Google Calendar is the first engineering milestone;
+              other providers are planned and appear as &ldquo;Coming soon&rdquo;
+              until their integrations ship.
             </p>
             <p className="mt-4 text-sm leading-relaxed text-ink sm:text-base">
-              These integrations are not live or universally supported in this
-              prototype. Availability depends on your systems and agreed scope.
-              Stripe is used for payments to {branding.name}, not as a customer
-              data connector for your dashboard.
+              Displaying a logo or name does not mean your account can connect
+              today. Final sources depend on discovery and agreed scope. Payments
+              to {branding.name} (setup and subscription) use Stripe separately —
+              that is not the same as connecting your business data sources.
             </p>
           </SplitSection>
         </section>

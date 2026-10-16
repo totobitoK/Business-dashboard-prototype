@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ConnectorCatalogList } from "@/components/connectors/ConnectorCatalogList";
 import { CONNECTION_STATUS_LABELS } from "@/lib/client-milestones";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import { demoDashboardRoutes as dashboardRoutes } from "@/lib/routes";
@@ -108,6 +109,16 @@ export function CustomerConnectionsPage() {
           ))}
         </ul>
       )}
+
+      <div className="space-y-3 border-t border-purple-100 pt-6">
+        <h2 className="text-lg font-semibold text-ink">Connector catalog</h2>
+        <p className="text-sm text-ink-muted">
+          Full lineup RavenView is building toward. Only integrations marked
+          available (none in this prototype) would show an active Connect action.
+          Planned providers stay read-only until engineering and your scope align.
+        </p>
+        <ConnectorCatalogList />
+      </div>
 
       <p className="text-sm text-ink-muted">
         Connection simulation controls live in the RavenView admin client profile — they

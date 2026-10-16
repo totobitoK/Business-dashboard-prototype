@@ -4,24 +4,19 @@ import type {
   ClientOnboardingDraft,
   DataSourceTool,
 } from "./types";
+import { CONNECTOR_TOOL_LABELS, ONBOARDING_CONNECTORS } from "./connector-catalog";
 
 export const DATA_SOURCE_TOOLS: {
   id: DataSourceTool;
   label: string;
-}[] = [
-  { id: "google-sheets", label: "Google Sheets" },
-  { id: "excel-csv", label: "Excel / CSV" },
-  { id: "quickbooks", label: "QuickBooks Online" },
-  { id: "hubspot", label: "HubSpot" },
-  { id: "stripe", label: "Stripe" },
-  { id: "square", label: "Square" },
-  { id: "google-calendar", label: "Google Calendar" },
-  { id: "other", label: "Other" },
-];
+  statusLabel: string;
+}[] = ONBOARDING_CONNECTORS.map((c) => ({
+  id: c.id,
+  label: c.label,
+  statusLabel: c.statusLabel,
+}));
 
-export const TOOL_LABELS: Record<DataSourceTool, string> = Object.fromEntries(
-  DATA_SOURCE_TOOLS.map((t) => [t.id, t.label])
-) as Record<DataSourceTool, string>;
+export const TOOL_LABELS: Record<DataSourceTool, string> = CONNECTOR_TOOL_LABELS;
 
 export function prefillFromClient(client: Client): Partial<ClientOnboardingAnswers> {
   return {

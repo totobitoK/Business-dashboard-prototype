@@ -31,6 +31,8 @@ export type DataSourceTool =
   | "stripe"
   | "square"
   | "google-calendar"
+  | "google-ads"
+  | "meta-ads"
   | "other";
 
 export interface ClientOnboardingAnswers {
