@@ -8,6 +8,8 @@ export type AppointmentRow = {
   starts_at: string | null;
   ends_at: string | null;
   all_day: boolean;
+  all_day_start?: string | null;
+  all_day_end?: string | null;
   timezone: string | null;
   imported_at: string;
 };
@@ -111,6 +113,8 @@ function renderBody(
                 startsAt: row.starts_at,
                 endsAt: row.ends_at,
                 allDay: row.all_day,
+                allDayStart: row.all_day_start,
+                allDayEnd: row.all_day_end,
                 timezone: row.timezone,
               })}
             </p>

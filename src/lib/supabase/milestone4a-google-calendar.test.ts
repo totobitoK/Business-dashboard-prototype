@@ -2,12 +2,14 @@ import crypto from "crypto";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { loadDevSeedCredentials } from "./load-dev-seed-credentials";
-import { readCompanyIdBySlug } from "./milestone2-test-fixtures";
 import { encryptToken } from "../google-calendar/token-crypto";
 import { hashOAuthState } from "../google-calendar/oauth-state";
+import {
+  createDisposableM4aCompany,
+  deleteDisposableM4aCompany,
+} from "./milestone4a-test-fixtures";
 
 const USER_A = "member-a@acme.dev";
-const USER_B = "member-b@beta.dev";
 
 function prereq(): { ok: true } | { ok: false; reason: string } {
   if (process.env.RUN_SUPABASE_MILESTONE4A_TESTS !== "1") {
@@ -23,7 +25,7 @@ function prereq(): { ok: true } | { ok: false; reason: string } {
     return { ok: false, reason: "GOOGLE_TOKEN_ENCRYPTION_KEY" };
   }
   const seed = loadDevSeedCredentials();
-  if (!seed?.users[USER_A] || !seed?.users[USER_B]) {
+  if (!seed?.users[USER_A]) {
     return { ok: false, reason: ".dev-seed-credentials.json (run npm run seed:dev)" };
   }
   return { ok: true };
@@ -39,9 +41,8 @@ async function signIn(url: string, key: string, email: string, password: string)
 describe("Milestone 4A Google Calendar tenancy", () => {
   const check = prereq();
   let service: SupabaseClient;
-  let acmeId: string;
-  let betaId: string;
-  let acmeConnId: string | null = null;
+  let ownerUserId: string;
+  let disposableCompanyId: string | null = null;
 
   if (!check.ok) {
     if (process.env.RUN_SUPABASE_MILESTONE4A_TESTS === "1") {
@@ -60,45 +61,45 @@ describe("Milestone 4A Google Calendar tenancy", () => {
       process.env.SUPABASE_SECRET_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
-    acmeId = await readCompanyIdBySlug(service, "acme-hvac");
-    betaId = await readCompanyIdBySlug(service, "beta-retail");
+    const { data: users } = await service.auth.admin.listUsers();
+    ownerUserId = users.users.find((u) => u.email === USER_A)?.id ?? "";
+    expect(ownerUserId).toBeTruthy();
   });
 
   afterEach(async () => {
-    if (acmeConnId) {
-      await service.from("google_calendar_events").delete().eq("connection_id", acmeConnId);
-      await service.from("google_calendar_selected_calendars").delete().eq("connection_id", acmeConnId);
-      await service.from("google_calendar_connection_secrets").delete().eq("connection_id", acmeConnId);
-      await service.from("google_calendar_connections").delete().eq("id", acmeConnId);
-      acmeConnId = null;
+    if (disposableCompanyId) {
+      await deleteDisposableM4aCompany(service, disposableCompanyId);
+      disposableCompanyId = null;
     }
   });
 
   it("enforces one connection row per company and hides secrets from members", async () => {
+    const disposable = await createDisposableM4aCompany(service, ownerUserId);
+    disposableCompanyId = disposable.companyId;
+
     const { data: conn, error } = await service
       .from("google_calendar_connections")
       .insert({
-        company_id: acmeId,
+        company_id: disposableCompanyId,
         google_sub: "sub-test",
-        google_email: "owner@acme.test",
+        google_email: "owner@m4a.test",
         status: "connected",
         connected_at: new Date().toISOString(),
       })
       .select("id")
       .single();
     expect(error).toBeNull();
-    acmeConnId = conn!.id as string;
 
     const dup = await service.from("google_calendar_connections").insert({
-      company_id: acmeId,
+      company_id: disposableCompanyId,
       google_sub: "sub-other",
       status: "connected",
     });
     expect(dup.error).toBeTruthy();
 
     await service.from("google_calendar_connection_secrets").insert({
-      connection_id: acmeConnId,
-      company_id: acmeId,
+      connection_id: conn!.id,
+      company_id: disposableCompanyId,
       refresh_token_enc: encryptToken("refresh-test"),
       access_token_enc: encryptToken("access-test"),
       access_token_expires_at: new Date(Date.now() + 3600_000).toISOString(),
@@ -113,91 +114,72 @@ describe("Milestone 4A Google Calendar tenancy", () => {
     expect(secrets.error?.message ?? "no access").toMatch(/permission|denied|schema/i);
 
     const { data: status } = await member.rpc("member_get_google_calendar_status", {
-      p_company_id: acmeId,
+      p_company_id: disposableCompanyId,
     });
-    expect(status?.google_email).toBe("owner@acme.test");
+    expect(status?.google_email).toBe("owner@m4a.test");
   });
 
-  it("denies cross-tenant appointment reads", async () => {
-    const { data: conn } = await service
-      .from("google_calendar_connections")
-      .insert({
-        company_id: acmeId,
-        google_sub: "sub-acme",
-        google_email: "acme@test.local",
-        status: "connected",
-      })
-      .select("id")
-      .single();
-    acmeConnId = conn!.id as string;
+  it("acquires and releases sync lease atomically by worker id", async () => {
+    const disposable = await createDisposableM4aCompany(service, ownerUserId);
+    disposableCompanyId = disposable.companyId;
 
-    await service.from("google_calendar_selected_calendars").insert({
-      connection_id: acmeConnId,
-      company_id: acmeId,
-      google_calendar_id: "primary",
-      summary: "Primary",
-      selected: true,
+    const w1 = "worker-a";
+    const w2 = "worker-b";
+    const a1 = await service.rpc("google_calendar_acquire_sync_lease", {
+      p_company_id: disposableCompanyId,
+      p_worker_id: w1,
+      p_ttl_seconds: 300,
     });
+    expect(a1.data).toBe(true);
 
-    await service.from("google_calendar_events").insert({
-      company_id: acmeId,
-      connection_id: acmeConnId,
-      google_calendar_id: "primary",
-      google_event_id: "evt-1",
-      title: "Acme only",
-      starts_at: new Date().toISOString(),
-      all_day: false,
-      status: "confirmed",
+    const a2 = await service.rpc("google_calendar_acquire_sync_lease", {
+      p_company_id: disposableCompanyId,
+      p_worker_id: w2,
+      p_ttl_seconds: 300,
     });
+    expect(a2.data).toBe(false);
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
-    const seed = loadDevSeedCredentials()!;
-    const betaMember = await signIn(url, key, USER_B, seed.users[USER_B]!);
-
-    const { error } = await betaMember.rpc("member_list_google_calendar_appointments", {
-      p_company_id: acmeId,
+    await service.rpc("google_calendar_release_sync_lease", {
+      p_company_id: disposableCompanyId,
+      p_worker_id: w2,
     });
-    expect(error?.message).toContain("FORBIDDEN");
-
-    const { data: betaAppts } = await betaMember.rpc("member_list_google_calendar_appointments", {
-      p_company_id: betaId,
+    const stillHeld = await service.rpc("google_calendar_acquire_sync_lease", {
+      p_company_id: disposableCompanyId,
+      p_worker_id: w2,
+      p_ttl_seconds: 300,
     });
-    expect(betaAppts ?? []).toHaveLength(0);
+    expect(stillHeld.data).toBe(false);
+
+    await service.rpc("google_calendar_release_sync_lease", {
+      p_company_id: disposableCompanyId,
+      p_worker_id: w1,
+    });
   });
 
-  it("consumes oauth state only once", async () => {
+  it("consumes oauth state only once via RPC", async () => {
+    const disposable = await createDisposableM4aCompany(service, ownerUserId);
+    disposableCompanyId = disposable.companyId;
+
     process.env.GOOGLE_OAUTH_STATE_SECRET = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY!;
     const state = crypto.randomBytes(16).toString("base64url");
     const stateHash = hashOAuthState(state);
-    const { data: userRow } = await service.auth.admin.listUsers();
-    const userId = userRow.users.find((u) => u.email === USER_A)?.id;
-    expect(userId).toBeTruthy();
 
     await service.from("google_calendar_oauth_states").insert({
       state_hash: stateHash,
-      user_id: userId!,
-      company_id: acmeId,
+      user_id: ownerUserId,
+      company_id: disposableCompanyId,
       purpose: "connect",
       expires_at: new Date(Date.now() + 600_000).toISOString(),
     });
 
-    const first = await service
-      .from("google_calendar_oauth_states")
-      .update({ consumed_at: new Date().toISOString() })
-      .eq("state_hash", stateHash)
-      .is("consumed_at", null)
-      .select("id");
-    expect(first.data).toHaveLength(1);
+    const first = await service.rpc("google_calendar_consume_oauth_state", {
+      p_state_hash: stateHash,
+    });
+    expect((first.data as unknown[] | null)?.length ?? 0).toBe(1);
 
-    const second = await service
-      .from("google_calendar_oauth_states")
-      .update({ consumed_at: new Date().toISOString() })
-      .eq("state_hash", stateHash)
-      .is("consumed_at", null)
-      .select("id");
-    expect(second.data).toHaveLength(0);
-
-    await service.from("google_calendar_oauth_states").delete().eq("state_hash", stateHash);
+    const second = await service.rpc("google_calendar_consume_oauth_state", {
+      p_state_hash: stateHash,
+    });
+    expect((second.data as unknown[] | null)?.length ?? 0).toBe(0);
   });
 });

@@ -19,7 +19,7 @@ describe("connector catalog (internal)", () => {
 
   it("prioritizes Google Calendar first internally", () => {
     const calendar = CONNECTOR_DEFINITIONS.find((c) => c.id === "google-calendar");
-    expect(calendar?.implementationStatus).toBe("operational");
+    expect(calendar?.implementationStatus).toBe("in_development");
     expect(calendar?.implementationPriority).toBe(1);
     const others = CONNECTOR_DEFINITIONS.filter(
       (c) => c.id !== "google-calendar" && c.id !== "other" && c.id !== "excel-csv"

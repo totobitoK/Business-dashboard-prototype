@@ -23,7 +23,8 @@ describe("parseGoogleEvent", () => {
       end: { date: "2026-03-23" },
     });
     expect(parsed.allDay).toBe(true);
-    expect(parsed.startsAt).toContain("2026-03-22");
+    expect(parsed.allDayStart).toBe("2026-03-22");
+    expect(parsed.allDayEnd).toBe("2026-03-23");
   });
 
   it("marks cancelled status", () => {

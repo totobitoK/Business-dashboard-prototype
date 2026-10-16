@@ -1,12 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  exchangeCodeForTokens,
-  fetchGoogleUserEmail,
-  listCalendars,
-} from "./google-api";
+import { exchangeCodeForTokens, fetchGoogleUserEmail } from "./google-api";
 import { getGoogleRedirectUri } from "./config";
-import { upsertSecrets } from "./connection-store";
+import { loadSecrets, upsertSecrets } from "./connection-store";
 import { purgeGoogleCalendarImportData } from "./disconnect";
+import { assertDbOk } from "./db-write";
+import { upsertCalendarListPreservingSelection } from "./calendar-list";
 
 export async function finishGoogleCalendarOAuth(params: {
   admin: SupabaseClient;
@@ -25,16 +23,13 @@ export async function finishGoogleCalendarOAuth(params: {
     clientSecret,
     redirectUri,
   });
-  if (!tokens.refresh_token) {
-    throw new Error("MISSING_REFRESH_TOKEN");
-  }
 
   const profile = await fetchGoogleUserEmail(tokens.access_token);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
   const { data: existing } = await params.admin
     .from("google_calendar_connections")
-    .select("id, google_sub, status, disconnected_at")
+    .select("id, google_sub, status, disconnected_at, sync_generation")
     .eq("company_id", params.companyId)
     .maybeSingle();
 
@@ -49,26 +44,43 @@ export async function finishGoogleCalendarOAuth(params: {
   }
 
   let connectionId: string;
+  let refreshToken = tokens.refresh_token;
 
   if (existing) {
     connectionId = existing.id as string;
-    if (params.purpose === "replace" || existing.google_sub !== profile.sub) {
+    const accountChanging =
+      params.purpose === "replace" ||
+      (existing.google_sub && existing.google_sub !== profile.sub);
+    if (accountChanging) {
+      if (!refreshToken) throw new Error("MISSING_REFRESH_TOKEN");
       await purgeGoogleCalendarImportData(params.admin, params.companyId, connectionId);
+    } else if (!refreshToken) {
+      const secrets = await loadSecrets(params.admin, connectionId);
+      if (!secrets?.refreshToken) throw new Error("MISSING_REFRESH_TOKEN");
+      refreshToken = secrets.refreshToken;
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      google_sub: profile.sub,
+      google_email: profile.email,
+      status: "connected",
+      connected_at: new Date().toISOString(),
+      disconnected_at: null,
+      last_sync_error_code: null,
+      syncing_started_at: null,
+      updated_at: new Date().toISOString(),
+    };
+    if (accountChanging) {
+      updatePayload.sync_generation = Number(existing.sync_generation ?? 0) + 1;
+      updatePayload.sync_cursor = {};
     }
     const { error: updErr } = await params.admin
       .from("google_calendar_connections")
-      .update({
-        google_sub: profile.sub,
-        google_email: profile.email,
-        status: "connected",
-        connected_at: new Date().toISOString(),
-        disconnected_at: null,
-        last_sync_error_code: null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", connectionId);
-    if (updErr) throw updErr;
+    assertDbOk(updErr, "UPDATE_CONNECTION");
   } else {
+    if (!refreshToken) throw new Error("MISSING_REFRESH_TOKEN");
     const { data: inserted, error: insErr } = await params.admin
       .from("google_calendar_connections")
       .insert({
@@ -80,33 +92,23 @@ export async function finishGoogleCalendarOAuth(params: {
       })
       .select("id")
       .single();
-    if (insErr) throw insErr;
-    connectionId = inserted.id as string;
+    assertDbOk(insErr, "INSERT_CONNECTION");
+    connectionId = inserted!.id as string;
   }
 
   await upsertSecrets(params.admin, {
     connectionId,
     companyId: params.companyId,
-    refreshToken: tokens.refresh_token,
+    refreshToken: refreshToken!,
     accessToken: tokens.access_token,
     accessTokenExpiresAt: expiresAt,
   });
 
-  const calendars = await listCalendars(tokens.access_token);
-  if (calendars.length > 0) {
-    const rows = calendars.map((c) => ({
-      connection_id: connectionId,
-      company_id: params.companyId,
-      google_calendar_id: c.id,
-      summary: c.summary || c.id,
-      selected: false,
-      updated_at: new Date().toISOString(),
-    }));
-    const { error: calErr } = await params.admin
-      .from("google_calendar_selected_calendars")
-      .upsert(rows, { onConflict: "connection_id,google_calendar_id" });
-    if (calErr) throw calErr;
-  }
+  await upsertCalendarListPreservingSelection(params.admin, {
+    connectionId,
+    companyId: params.companyId,
+    accessToken: tokens.access_token,
+  });
 
   return { connectionId };
 }

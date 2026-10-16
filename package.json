@@ -13,7 +13,7 @@
     "test:milestone2": "RUN_SUPABASE_MILESTONE2_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/supabase/milestone2-live-writes.test.ts src/lib/supabase/milestone2-scope-repair.test.ts src/lib/supabase/milestone2-scope-review-resolution.test.ts",
     "test:milestone3a": "RUN_SUPABASE_MILESTONE3A_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/supabase/milestone3a-build-preview.test.ts",
     "test:milestone3b": "RUN_SUPABASE_MILESTONE3B_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/supabase/milestone3b-build-activation.test.ts src/lib/supabase/milestone3b-online-provider-upsert.test.ts",
-    "test:milestone4a": "RUN_SUPABASE_MILESTONE4A_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/supabase/milestone4a-google-calendar.test.ts src/lib/google-calendar/*.test.ts",
+    "test:milestone4a": "RUN_SUPABASE_MILESTONE4A_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/supabase/milestone4a-google-calendar.test.ts src/lib/google-calendar/*.test.ts src/lib/google-calendar/sync-company.logic.test.ts",
     "seed:dev": "node scripts/seed-dev-users.mjs"
   },
   "dependencies": {

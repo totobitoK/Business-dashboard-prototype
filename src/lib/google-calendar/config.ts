@@ -32,6 +32,35 @@ export const IMPORT_WINDOW_FUTURE_DAYS = 180;
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 export const SYNC_LOCK_TTL_MS = 5 * 60 * 1000;
 
+/** Re-run full window sync when anchor is older than this (advances rolling window). */
+export const IMPORT_WINDOW_ROLL_MS = 24 * 60 * 60 * 1000;
+
+export const SYNC_RUN_TIME_BUDGET_MS = 50_000;
+export const STALE_SYNCING_RECOVERY_MS = 10 * 60 * 1000;
+export const TOKEN_REFRESH_MAX_ATTEMPTS = 3;
+export const TOKEN_REFRESH_BASE_BACKOFF_MS = 400;
+
+/** Vercel cron: see vercel.json (default every 15 minutes). */
+export const SYNC_CRON_INTERVAL_MINUTES = 15;
+export const SYNC_CRON_MAX_COMPANIES_PER_RUN = 5;
+
+/**
+ * Scheduled refresh capacity (approximate):
+ * At most SYNC_CRON_MAX_COMPANIES_PER_RUN companies complete a sync pass per cron tick.
+ * With a 15-minute cron, each company is refreshed about every (N / 5) × 15 minutes
+ * when N companies have selected calendars and healthy connections.
+ */
+export function estimatedSyncRefreshMinutes(connectedCompaniesWithSelection: number): number {
+  if (connectedCompaniesWithSelection <= 0) return 0;
+  const batches = Math.ceil(connectedCompaniesWithSelection / SYNC_CRON_MAX_COMPANIES_PER_RUN);
+  return batches * SYNC_CRON_INTERVAL_MINUTES;
+}
+
+/** Internal QA only — customers stay on in_development until OAuth verification. */
+export function isGoogleCalendarInternalConnectEnabled(): boolean {
+  return process.env.GOOGLE_CALENDAR_INTERNAL_CONNECT_ENABLED === "true";
+}
+
 export function isGoogleCalendarIntegrationConfigured(): boolean {
   return (
     process.env.GOOGLE_CALENDAR_INTEGRATION_ENABLED === "true" &&

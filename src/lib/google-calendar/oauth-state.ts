@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { OAUTH_STATE_TTL_MS } from "./config";
+import { assertDbOk } from "./db-write";
 
 function stateHmacSecret(): string {
   const s = process.env.GOOGLE_OAUTH_STATE_SECRET ?? process.env.GOOGLE_TOKEN_ENCRYPTION_KEY;
@@ -33,7 +34,7 @@ export async function createOAuthStateRecord(
     purpose: params.purpose,
     expires_at: expiresAt.toISOString(),
   });
-  if (error) throw error;
+  assertDbOk(error, "OAUTH_STATE_INSERT");
   return state;
 }
 
@@ -42,26 +43,15 @@ export async function consumeOAuthState(
   state: string
 ): Promise<{ userId: string; companyId: string; purpose: "connect" | "replace" } | null> {
   const stateHash = hashOAuthState(state);
-  const { data, error } = await admin
-    .from("google_calendar_oauth_states")
-    .select("id, user_id, company_id, purpose, expires_at, consumed_at")
-    .eq("state_hash", stateHash)
-    .maybeSingle();
-
-  if (error || !data || data.consumed_at) return null;
-  if (new Date(data.expires_at as string) < new Date()) return null;
-
-  const { error: markErr } = await admin
-    .from("google_calendar_oauth_states")
-    .update({ consumed_at: new Date().toISOString() })
-    .eq("id", data.id)
-    .is("consumed_at", null);
-
-  if (markErr) return null;
-
+  const { data, error } = await admin.rpc("google_calendar_consume_oauth_state", {
+    p_state_hash: stateHash,
+  });
+  assertDbOk(error, "OAUTH_STATE_CONSUME");
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
   return {
-    userId: data.user_id as string,
-    companyId: data.company_id as string,
-    purpose: data.purpose as "connect" | "replace",
+    userId: row.user_id as string,
+    companyId: row.company_id as string,
+    purpose: row.purpose as "connect" | "replace",
   };
 }

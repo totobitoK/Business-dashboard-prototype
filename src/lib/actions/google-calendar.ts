@@ -6,14 +6,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isGoogleCalendarIntegrationConfigured } from "@/lib/google-calendar/config";
 import { getValidAccessToken } from "@/lib/google-calendar/access-token";
-import { listCalendars } from "@/lib/google-calendar/google-api";
 import { disconnectGoogleCalendar, purgeGoogleCalendarImportData } from "@/lib/google-calendar/disconnect";
 import { loadConnectionByCompany } from "@/lib/google-calendar/connection-store";
-import {
-  releaseSyncLock,
-  syncCompanyGoogleCalendar,
-  tryAcquireSyncLock,
-} from "@/lib/google-calendar/sync-company";
+import { bumpConnectionSyncGeneration } from "@/lib/google-calendar/connection-generation";
+import { acquireSyncLease, releaseSyncLease } from "@/lib/google-calendar/sync-lease";
+import { syncCompanyGoogleCalendar } from "@/lib/google-calendar/sync-company";
+import { upsertCalendarListPreservingSelection } from "@/lib/google-calendar/calendar-list";
 
 export type GoogleCalendarActionResult =
   | { ok: true }
@@ -36,20 +34,11 @@ export async function refreshGoogleCalendarListAction(
   }
 
   const accessToken = await getValidAccessToken(admin, conn.id, companyId);
-  const calendars = await listCalendars(accessToken);
-  const rows = calendars.map((c) => ({
-    connection_id: conn.id,
-    company_id: companyId,
-    google_calendar_id: c.id,
-    summary: c.summary || c.id,
-    updated_at: new Date().toISOString(),
-  }));
-  if (rows.length > 0) {
-    const { error } = await admin
-      .from("google_calendar_selected_calendars")
-      .upsert(rows, { onConflict: "connection_id,google_calendar_id" });
-    if (error) return { ok: false, error: error.message };
-  }
+  await upsertCalendarListPreservingSelection(admin, {
+    connectionId: conn.id,
+    companyId,
+    accessToken,
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/settings");
@@ -76,32 +65,40 @@ export async function saveGoogleCalendarSelectionAction(
     .eq("connection_id", conn.id);
   if (listErr) return { ok: false, error: listErr.message };
 
+  let selectionChanged = false;
   for (const cal of allCals ?? []) {
     const nextSelected = selectedSet.has(cal.google_calendar_id as string);
     if (cal.selected === nextSelected) continue;
-    await admin
+    selectionChanged = true;
+    const { error: updErr } = await admin
       .from("google_calendar_selected_calendars")
       .update({
         selected: nextSelected,
-        sync_token: nextSelected ? null : null,
+        sync_token: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", cal.id);
+    if (updErr) return { ok: false, error: updErr.message };
     if (!nextSelected) {
-      await admin
+      const { error: delErr } = await admin
         .from("google_calendar_events")
         .delete()
         .eq("company_id", companyId)
         .eq("google_calendar_id", cal.google_calendar_id);
+      if (delErr) return { ok: false, error: delErr.message };
     }
   }
 
+  if (selectionChanged) {
+    await bumpConnectionSyncGeneration(admin, conn.id);
+  }
+
   const workerId = `manual-${Date.now()}`;
-  if (await tryAcquireSyncLock(admin, companyId, workerId)) {
+  if (await acquireSyncLease(admin, companyId, workerId)) {
     try {
       await syncCompanyGoogleCalendar(admin, companyId);
     } finally {
-      await releaseSyncLock(admin, companyId);
+      await releaseSyncLease(admin, companyId, workerId);
     }
   }
 

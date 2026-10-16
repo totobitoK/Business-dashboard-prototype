@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { isGoogleCalendarIntegrationConfigured } from "@/lib/google-calendar/config";
+import { isGoogleCalendarIntegrationConfigured, SYNC_RUN_TIME_BUDGET_MS } from "@/lib/google-calendar/config";
+import { syncCompanyGoogleCalendar, releaseSyncLock } from "@/lib/google-calendar/sync-company";
+import { acquireSyncLease } from "@/lib/google-calendar/sync-lease";
 import {
-  releaseSyncLock,
-  syncCompanyGoogleCalendar,
-  tryAcquireSyncLock,
-} from "@/lib/google-calendar/sync-company";
+  listCronSyncCandidates,
+  recoverStaleSyncingConnections,
+} from "@/lib/google-calendar/sync-cron-scheduler";
 
 export const maxDuration = 60;
-
-const MAX_COMPANIES_PER_RUN = 5;
 
 export async function GET(request: Request) {
   const auth = request.headers.get("authorization");
@@ -23,44 +22,38 @@ export async function GET(request: Request) {
   }
 
   const admin = createServiceClient();
-  const { data: connections, error } = await admin
-    .from("google_calendar_connections")
-    .select("company_id, status")
-    .is("disconnected_at", null)
-    .in("status", ["connected", "error"])
-    .order("last_sync_at", { ascending: true, nullsFirst: true })
-    .limit(MAX_COMPANIES_PER_RUN);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  const recovered = await recoverStaleSyncingConnections(admin);
+  const candidates = await listCronSyncCandidates(admin);
 
   const results: { companyId: string; result: string }[] = [];
-  for (const row of connections ?? []) {
-    const companyId = row.company_id as string;
+  const runStarted = Date.now();
+
+  for (const row of candidates) {
+    if (Date.now() - runStarted >= SYNC_RUN_TIME_BUDGET_MS - 2000) {
+      results.push({ companyId: row.company_id, result: "cron_time_budget" });
+      break;
+    }
+
+    const companyId = row.company_id;
     const workerId = `cron-${Date.now()}-${companyId.slice(0, 8)}`;
-    const acquired = await tryAcquireSyncLock(admin, companyId, workerId);
+    const acquired = await acquireSyncLease(admin, companyId, workerId);
     if (!acquired) {
       results.push({ companyId, result: "locked" });
       continue;
     }
     try {
-      const { data: hasSelected } = await admin
-        .from("google_calendar_selected_calendars")
-        .select("id")
-        .eq("company_id", companyId)
-        .eq("selected", true)
-        .limit(1);
-      if (!hasSelected?.length) {
-        results.push({ companyId, result: "no_calendars_selected" });
-        continue;
+      const sync = await syncCompanyGoogleCalendar(admin, companyId, {
+        deadlineMs: Math.min(SYNC_RUN_TIME_BUDGET_MS, 45_000),
+      });
+      if (sync.ok && sync.partial) {
+        results.push({ companyId, result: sync.reason ?? "partial" });
+      } else {
+        results.push({ companyId, result: sync.ok ? "synced" : sync.reason });
       }
-      const sync = await syncCompanyGoogleCalendar(admin, companyId);
-      results.push({ companyId, result: sync.ok ? "synced" : sync.reason });
     } finally {
-      await releaseSyncLock(admin, companyId);
+      await releaseSyncLock(admin, companyId, workerId);
     }
   }
 
-  return NextResponse.json({ ok: true, results });
+  return NextResponse.json({ ok: true, recovered, results });
 }

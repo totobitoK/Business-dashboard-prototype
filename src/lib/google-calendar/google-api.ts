@@ -4,6 +4,7 @@ import {
   IMPORT_WINDOW_FUTURE_DAYS,
   IMPORT_WINDOW_PAST_DAYS,
 } from "./config";
+import { classifyHttpStatus, classifyOAuthTokenError, GoogleApiError } from "./google-errors";
 
 export type GoogleTokenResponse = {
   access_token: string;
@@ -68,10 +69,11 @@ export async function refreshAccessToken(params: {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
+  const bodyText = await res.text();
   if (!res.ok) {
-    throw new Error(`TOKEN_REFRESH_FAILED:${res.status}`);
+    throw await classifyOAuthTokenError(res.status, bodyText);
   }
-  return (await res.json()) as GoogleTokenResponse;
+  return JSON.parse(bodyText) as GoogleTokenResponse;
 }
 
 export async function fetchGoogleUserEmail(accessToken: string): Promise<{
@@ -113,12 +115,15 @@ export function importWindowBounds(now = new Date()): { timeMin: string; timeMax
   return { timeMin: min.toISOString(), timeMax: max.toISOString() };
 }
 
+export type EventsListQuery =
+  | { type: "incremental"; syncToken: string }
+  | { type: "full"; timeMin: string; timeMax: string };
+
 export async function listEventsPage(params: {
   accessToken: string;
   calendarId: string;
-  syncToken?: string | null;
+  query: EventsListQuery;
   pageToken?: string;
-  now?: Date;
 }): Promise<{
   items: GoogleEventItem[];
   nextPageToken?: string;
@@ -131,21 +136,22 @@ export async function listEventsPage(params: {
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("showDeleted", "true");
 
-  if (params.syncToken) {
-    url.searchParams.set("syncToken", params.syncToken);
+  if (params.pageToken) {
+    url.searchParams.set("pageToken", params.pageToken);
+  } else if (params.query.type === "incremental") {
+    url.searchParams.set("syncToken", params.query.syncToken);
   } else {
-    const { timeMin, timeMax } = importWindowBounds(params.now);
-    url.searchParams.set("timeMin", timeMin);
-    url.searchParams.set("timeMax", timeMax);
+    url.searchParams.set("timeMin", params.query.timeMin);
+    url.searchParams.set("timeMax", params.query.timeMax);
   }
-  if (params.pageToken) url.searchParams.set("pageToken", params.pageToken);
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${params.accessToken}` } });
   if (res.status === 410) {
     throw new Error("SYNC_TOKEN_EXPIRED");
   }
   if (!res.ok) {
-    throw new Error(`EVENTS_LIST_FAILED:${res.status}`);
+    const kind = classifyHttpStatus(res.status);
+    throw new GoogleApiError(kind, res.status, `EVENTS_LIST_FAILED:${res.status}`);
   }
   const json = (await res.json()) as {
     items?: GoogleEventItem[];

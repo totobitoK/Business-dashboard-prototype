@@ -3,7 +3,10 @@ import {
   type ConnectorDefinition,
   type ConnectorImplementationStatus,
 } from "./connector-catalog";
-import { isGoogleCalendarIntegrationConfigured } from "./google-calendar/config";
+import {
+  isGoogleCalendarIntegrationConfigured,
+  isGoogleCalendarInternalConnectEnabled,
+} from "./google-calendar/config";
 
 /** Customer-facing site phase — separate from internal engineering status. */
 export type ConnectorPublicPhase = "private_build" | "launch";
@@ -17,7 +20,12 @@ export function getConnectorPublicPhase(): ConnectorPublicPhase {
 export function connectorCanConnect(entry: ConnectorDefinition): boolean {
   if (entry.implementationStatus !== "operational") return false;
   if (entry.id === "google-calendar") {
-    return isGoogleCalendarIntegrationConfigured();
+    if (!isGoogleCalendarIntegrationConfigured()) return false;
+    if (entry.implementationStatus === "operational") return true;
+    return (
+      entry.implementationStatus === "in_development" &&
+      isGoogleCalendarInternalConnectEnabled()
+    );
   }
   return true;
 }

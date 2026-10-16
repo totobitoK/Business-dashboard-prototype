@@ -5,11 +5,8 @@ import { requireCompanyOwner } from "@/lib/auth/authorization";
 import { consumeOAuthState } from "@/lib/google-calendar/oauth-state";
 import { finishGoogleCalendarOAuth } from "@/lib/google-calendar/finish-oauth";
 import { isGoogleCalendarIntegrationConfigured } from "@/lib/google-calendar/config";
-import {
-  releaseSyncLock,
-  syncCompanyGoogleCalendar,
-  tryAcquireSyncLock,
-} from "@/lib/google-calendar/sync-company";
+import { syncCompanyGoogleCalendar, releaseSyncLock } from "@/lib/google-calendar/sync-company";
+import { acquireSyncLease } from "@/lib/google-calendar/sync-lease";
 
 function settingsRedirect(origin: string, params: Record<string, string>) {
   const u = new URL("/dashboard/settings", origin);
@@ -70,11 +67,11 @@ export async function GET(request: Request) {
   }
 
   const workerId = `oauth-${Date.now()}`;
-  if (await tryAcquireSyncLock(admin, consumed.companyId, workerId)) {
+  if (await acquireSyncLease(admin, consumed.companyId, workerId)) {
     try {
       await syncCompanyGoogleCalendar(admin, consumed.companyId);
     } finally {
-      await releaseSyncLock(admin, consumed.companyId);
+      await releaseSyncLock(admin, consumed.companyId, workerId);
     }
   }
 
