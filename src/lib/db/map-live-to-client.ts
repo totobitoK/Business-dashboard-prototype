@@ -123,7 +123,7 @@ export function mapLiveProjectBundleToClient(bundle: LiveProjectBundle): Client 
 }
 
 export function intakeDraftVersion(bundle: LiveProjectBundle): number {
-  return bundle.intake?.draft_version ?? 1;
+  return bundle.intake?.draft_version ?? 0;
 }
 
 export function publishedScopeRevisionRowId(bundle: LiveProjectBundle): string | undefined {

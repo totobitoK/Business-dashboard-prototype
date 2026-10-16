@@ -10,7 +10,7 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:isolation": "RUN_SUPABASE_ISOLATION_TESTS=1 vitest run src/lib/supabase/tenant-isolation.test.ts",
-    "test:milestone2": "RUN_SUPABASE_MILESTONE2_TESTS=1 vitest run src/lib/supabase/milestone2-live-writes.test.ts",
+    "test:milestone2": "RUN_SUPABASE_MILESTONE2_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/supabase/milestone2-live-writes.test.ts src/lib/supabase/milestone2-scope-repair.test.ts",
     "seed:dev": "node scripts/seed-dev-users.mjs"
   },
   "dependencies": {

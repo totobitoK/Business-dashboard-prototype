@@ -32,6 +32,9 @@ function mapRpcError(message: string): string {
   if (message.includes("UNPUBLISHED_MATERIAL")) {
     return "Scope is being updated. Wait for RavenView to publish the latest revision before accepting.";
   }
+  if (message.includes("SCOPE_REVIEW_REQUIRED")) {
+    return "Scope needs an admin review before it can be accepted. Contact RavenView for help.";
+  }
   if (message.includes("INTAKE_VALIDATION") || message.includes("VALIDATION_ERROR")) {
     const detail = message.split(":").slice(1).join(":").trim();
     return detail || "Please complete all required intake fields.";
