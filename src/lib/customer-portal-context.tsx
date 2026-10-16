@@ -374,5 +374,5 @@ export function useCustomerPortal() {
 }
 
 export function buildCustomerPortalPreviewUrl(workspaceId: string): string {
-  return `/dashboard?workspace=${encodeURIComponent(workspaceId)}`;
+  return `/demo/dashboard?workspace=${encodeURIComponent(workspaceId)}`;
 }

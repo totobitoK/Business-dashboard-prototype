@@ -14,7 +14,7 @@ export async function exportScopeCardToServer(
   const card = buildScopeCard(client, client.scopeCardVersion ?? 1);
 
   try {
-    const response = await fetch("/api/scope-card", {
+    const response = await fetch("/api/demo/scope-card", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ card }),

@@ -15,7 +15,7 @@ import {
   MILESTONE_LABELS,
 } from "@/lib/client-milestones";
 import { isScopePricingConfirmed } from "@/lib/onboarding";
-import { clientRoutes, dashboardRoutes } from "@/lib/routes";
+import { clientRoutes, demoDashboardRoutes as dashboardRoutes } from "@/lib/routes";
 import type { Client } from "@/lib/types";
 import type { CustomerPortalStage } from "@/lib/customer-portal-stage";
 

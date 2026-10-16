@@ -1,34 +1,54 @@
+export const dynamic = "force-dynamic";
+
 import type { Metadata } from "next";
-import { CustomerPortalBanner } from "@/components/customer/CustomerPortalBanner";
-import { CustomerPortalNav } from "@/components/customer/CustomerPortalNav";
-import { CustomerPortalQuerySync } from "@/lib/customer-portal-context";
-import { CustomerPortalWorkspaceGate } from "@/components/customer/CustomerPortalWorkspaceGate";
-import { ClientStoreProvider } from "@/lib/client-store";
-import { CustomerPortalProvider } from "@/lib/customer-portal-context";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth/authorization";
 import { getMarketingPageTitle } from "@/lib/branding";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: `Customer portal | ${getMarketingPageTitle().split("|")[0]?.trim()}`,
-  description: "Customer portal prototype — local demo only",
+  description: "Live customer workspace — read-only milestone",
 };
 
-export default function DashboardLayout({
+export default async function LiveDashboardLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
+  const supabase = await createClient();
+  const ctx = await getAuthContext(supabase);
+  if (!ctx) {
+    redirect("/login?next=/dashboard");
+  }
+  if (ctx.isPlatformAdmin) {
+    redirect("/admin/clients");
+  }
+  if (ctx.companyIds.length === 0) {
+    redirect("/login?error=no_company");
+  }
+
   return (
-    <ClientStoreProvider>
-      <CustomerPortalProvider>
-        <CustomerPortalQuerySync />
-        <div className="min-h-screen bg-white text-ink">
-          <CustomerPortalBanner />
-          <CustomerPortalNav />
-          <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-            <CustomerPortalWorkspaceGate>{children}</CustomerPortalWorkspaceGate>
-          </main>
+    <div className="min-h-screen bg-white text-ink">
+      <header className="border-b border-purple-100 bg-white">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
+          <span className="text-sm font-semibold">Your RavenView project</span>
+          <div className="flex items-center gap-3 text-xs text-ink-muted">
+            <span>Read-only — scope, preview, and settings save in a later milestone</span>
+            <form action="/auth/logout" method="post">
+              <button type="submit" className="text-sm font-medium text-purple hover:underline">
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
-      </CustomerPortalProvider>
-    </ClientStoreProvider>
+      </header>
+      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">{children}</main>
+      <footer className="mx-auto max-w-4xl px-4 pb-10 text-xs text-ink-muted sm:px-6">
+        Prefer the interactive prototype?{" "}
+        <Link href="/demo/dashboard" className="font-medium text-purple hover:underline">
+          Open the local demo portal
+        </Link>
+      </footer>
+    </div>
   );
 }

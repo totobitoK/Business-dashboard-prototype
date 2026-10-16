@@ -29,6 +29,8 @@ yarn-error.log*
 
 # env files
 .env*.local
+.dev-seed-credentials.json
+supabase/.seed-dev-run.sql
 
 # typescript
 *.tsbuildinfo

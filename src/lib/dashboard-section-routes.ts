@@ -1,4 +1,12 @@
-import { DASHBOARD, dashboardRoutes } from "./routes";
+import { DASHBOARD, DEMO_DASHBOARD, dashboardRoutes, demoDashboardRoutes } from "./routes";
+
+export function dashboardBaseFromPathname(pathname: string): string {
+  return pathname.startsWith(DEMO_DASHBOARD) ? DEMO_DASHBOARD : DASHBOARD;
+}
+
+export function dashboardRoutesForPathname(pathname: string) {
+  return pathname.startsWith(DEMO_DASHBOARD) ? demoDashboardRoutes : dashboardRoutes;
+}
 
 export type DashboardSectionId = "overview" | "revenue" | "schedule";
 
@@ -26,9 +34,10 @@ export const DASHBOARD_SECTIONS: {
 
 export function dashboardSectionHref(
   workspaceId: string,
-  sectionId: DashboardSectionId = "overview"
+  sectionId: DashboardSectionId = "overview",
+  basePath: string = dashboardRoutes.home
 ): string {
-  const url = new URL(dashboardRoutes.home, "http://local");
+  const url = new URL(basePath, "http://local");
   url.searchParams.set("workspace", workspaceId);
   if (sectionId !== "overview") {
     url.searchParams.set("section", sectionId);
@@ -40,10 +49,12 @@ export function resolveDashboardSection(
   pathname: string,
   searchParams: Pick<URLSearchParams, "get">
 ): DashboardSectionId {
-  if (pathname.startsWith(`${DASHBOARD}/revenue`)) return "revenue";
-  if (pathname.startsWith(`${DASHBOARD}/schedule`)) return "schedule";
+  const base = dashboardBaseFromPathname(pathname);
+  const routes = dashboardRoutesForPathname(pathname);
+  if (pathname.startsWith(`${base}/revenue`)) return "revenue";
+  if (pathname.startsWith(`${base}/schedule`)) return "schedule";
 
-  if (pathname === dashboardRoutes.home || pathname === DASHBOARD) {
+  if (pathname === routes.home || pathname === base) {
     const section = searchParams.get("section");
     if (section === "revenue" || section === "schedule") return section;
     return "overview";

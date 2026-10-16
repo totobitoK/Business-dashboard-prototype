@@ -4,7 +4,7 @@ import type { ComponentType } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { adminRoutes } from "@/lib/routes";
+import { adminRoutes, demoAdminRoutes } from "@/lib/routes";
 import { useSidebar } from "@/lib/sidebar-context";
 import { RavenViewWordmark } from "./RavenViewWordmark";
 
@@ -78,18 +78,31 @@ function SidebarInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { collapsed, toggle, mobileOpen, setMobileOpen } = useSidebar();
+  const routes = pathname.startsWith("/demo/admin") ? demoAdminRoutes : adminRoutes;
+  const navGroupsForPath = navGroups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => ({
+      ...item,
+      href: item.href
+        .replace(adminRoutes.dashboard, routes.dashboard)
+        .replace(adminRoutes.revenue, routes.revenue)
+        .replace(adminRoutes.clients, routes.clients)
+        .replace(adminRoutes.onboarding, routes.onboarding)
+        .replace(adminRoutes.activity, routes.activity),
+    })),
+  }));
 
   const currentFilter = searchParams.get("filter");
 
   function isActive(item: NavItem) {
     if (item.filter) {
-      return pathname === adminRoutes.clients && currentFilter === item.filter;
+      return pathname === routes.clients && currentFilter === item.filter;
     }
-    if (item.href === adminRoutes.dashboard) {
-      return pathname === adminRoutes.dashboard;
+    if (item.href === routes.dashboard) {
+      return pathname === routes.dashboard;
     }
-    if (item.href === adminRoutes.clients) {
-      return pathname === adminRoutes.clients && !currentFilter;
+    if (item.href === routes.clients) {
+      return pathname === routes.clients && !currentFilter;
     }
     return pathname.startsWith(item.href);
   }
@@ -127,7 +140,7 @@ function SidebarInner() {
           <RavenViewWordmark
             linked
             collapsed={collapsed}
-            href={adminRoutes.dashboard}
+            href={routes.dashboard}
           />
           {!collapsed && (
             <button
@@ -156,7 +169,7 @@ function SidebarInner() {
           className="flex-1 overflow-y-auto px-2 py-3"
           aria-label="Main navigation"
         >
-          {navGroups.map((group) => (
+          {navGroupsForPath.map((group) => (
             <div key={group.label} className="mb-4 last:mb-0">
               {!collapsed && (
                 <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-widest text-purple">

@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { RavenViewWordmark } from "@/components/RavenViewWordmark";
-import { dashboardRoutes, marketingRoutes } from "@/lib/routes";
-
-const links = [
-  { href: dashboardRoutes.home, label: "Home" },
-  { href: dashboardRoutes.connections, label: "Connections" },
-  { href: dashboardRoutes.settings, label: "Settings" },
-];
+import { dashboardRoutesForPathname } from "@/lib/dashboard-section-routes";
+import { marketingRoutes } from "@/lib/routes";
 
 export function CustomerPortalNav() {
   const pathname = usePathname();
+  const dashboardRoutes = dashboardRoutesForPathname(pathname);
+  const links = [
+    { href: dashboardRoutes.home, label: "Home" },
+    { href: dashboardRoutes.connections, label: "Connections" },
+    { href: dashboardRoutes.settings, label: "Settings" },
+  ];
 
   return (
     <header className="border-b border-purple-100 bg-white">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CONNECTION_STATUS_LABELS } from "@/lib/client-milestones";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
-import { dashboardRoutes } from "@/lib/routes";
+import { demoDashboardRoutes as dashboardRoutes } from "@/lib/routes";
 
 function formatSync(iso?: string): string {
   if (!iso) return "Not synced yet (demo)";

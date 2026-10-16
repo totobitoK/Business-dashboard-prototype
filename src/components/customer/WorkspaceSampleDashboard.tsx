@@ -59,7 +59,7 @@ import {
 import { ReportingPeriodCustomRange } from "@/components/customer/ReportingPeriodCustomRange";
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import { getOperationsListDensity } from "@/lib/operations-list-density";
-import { dashboardRoutes } from "@/lib/routes";
+import { demoDashboardRoutes as dashboardRoutes } from "@/lib/routes";
 import {
   OVERVIEW_KPI_LABELS,
   REVENUE_KPI_LABELS,

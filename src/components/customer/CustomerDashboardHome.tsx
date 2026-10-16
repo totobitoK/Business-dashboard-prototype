@@ -130,11 +130,11 @@ export function CustomerDashboardHome() {
 
       <p className="text-xs text-ink-muted">
         Connections and layout preferences are under{" "}
-        <Link href="/dashboard/connections" className="font-semibold text-purple">
+        <Link href="/demo/dashboard/connections" className="font-semibold text-purple">
           Connections
         </Link>{" "}
         and{" "}
-        <Link href="/dashboard/settings" className="font-semibold text-purple">
+        <Link href="/demo/dashboard/settings" className="font-semibold text-purple">
           Settings
         </Link>
         .

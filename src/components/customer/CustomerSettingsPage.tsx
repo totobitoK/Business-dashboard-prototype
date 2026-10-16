@@ -5,7 +5,7 @@ import { useState } from "react";
 import { LAYOUT_CUSTOMIZE_THEMES } from "@/lib/layout-customize-themes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import type { WorkspaceThemeId } from "@/lib/customer-portal-context";
-import { dashboardRoutes } from "@/lib/routes";
+import { demoDashboardRoutes as dashboardRoutes } from "@/lib/routes";
 import { DashboardAppearancePreview } from "@/components/customer/DashboardAppearancePreview";
 import { DashboardKpiChipPicker } from "@/components/customer/DashboardKpiChipPicker";
 import { DashboardChipGroup } from "@/components/customer/dashboard-controls";

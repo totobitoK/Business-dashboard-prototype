@@ -16,9 +16,9 @@ import {
   marketingConnectionsHref,
 } from "@/lib/marketing-data-sources";
 import {
-  adminRoutes,
   clientRoutes,
-  dashboardRoutes,
+  demoAdminRoutes,
+  demoDashboardRoutes,
   marketingRoutes,
 } from "@/lib/routes";
 
@@ -344,11 +344,14 @@ export function MarketingHomePage() {
         <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-4 px-5 sm:flex-row sm:items-center sm:px-8">
           <RavenViewWordmark size="lg" />
           <div className="flex flex-wrap gap-4 text-sm font-medium text-ink">
-            <Link href={dashboardRoutes.home} className="hover:text-purple">
+            <Link href={demoDashboardRoutes.home} className="hover:text-purple">
               Customer portal (demo)
             </Link>
-            <Link href={adminRoutes.dashboard} className="hover:text-purple">
-              Admin (prototype)
+            <Link href={demoAdminRoutes.dashboard} className="hover:text-purple">
+              Admin (demo)
+            </Link>
+            <Link href="/login" className="hover:text-purple">
+              Sign in (live)
             </Link>
             <span>
               © {new Date().getFullYear()} {branding.fullName}
