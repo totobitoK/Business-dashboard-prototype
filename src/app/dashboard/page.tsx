@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { liveClientRoutes } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/server";
+import { parseSetupPaymentObligation } from "@/lib/setup-payment-summary";
 
 export default async function LiveCustomerDashboardPage() {
   const supabase = await createClient();
@@ -17,13 +18,17 @@ export default async function LiveCustomerDashboardPage() {
 
   const summaries = await Promise.all(
     projects.map(async (p) => {
-      const { data } = await supabase.rpc("member_get_setup_payment_summary", {
+      const { data, error } = await supabase.rpc("member_get_setup_payment_summary", {
         p_project_id: p.id,
       });
-      return { projectId: p.id, summary: data };
+      return {
+        projectId: p.id,
+        summary: parseSetupPaymentObligation(data),
+        error: error?.message ?? null,
+      };
     })
   );
-  const summaryById = new Map(summaries.map((s) => [s.projectId, s.summary]));
+  const summaryById = new Map(summaries.map((s) => [s.projectId, s]));
 
   return (
     <div className="space-y-6">
@@ -34,15 +39,9 @@ export default async function LiveCustomerDashboardPage() {
 
       <div className="space-y-4">
         {projects.map((p) => {
-          const summary = summaryById.get(p.id) as
-            | {
-                setup_fee: number;
-                received: number;
-                remaining: number;
-                overpayment: number;
-                fully_paid: boolean;
-              }
-            | undefined;
+          const entry = summaryById.get(p.id);
+          const summary = entry?.summary;
+          const summaryError = entry?.error;
           const isActive = p.status === "active";
 
           return (
@@ -75,32 +74,49 @@ export default async function LiveCustomerDashboardPage() {
                 </p>
               )}
 
-              {summary ? (
+              {summaryError ? (
+                <p className="mt-4 text-sm text-red-800">
+                  Setup payment summary could not be loaded. Please refresh or contact RavenView
+                  support if this persists.
+                </p>
+              ) : summary ? (
                 <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                   <div>
                     <dt className="text-ink-muted">Setup fee</dt>
                     <dd className="font-medium">
-                      <CurrencyAmount amount={Number(summary.setup_fee)} />
+                      {summary.fee_confirmed && summary.setup_fee !== null ? (
+                        <CurrencyAmount amount={summary.setup_fee} />
+                      ) : (
+                        <span className="text-ink-muted">Awaiting confirmation</span>
+                      )}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-ink-muted">Recorded payments</dt>
                     <dd className="font-medium">
-                      <CurrencyAmount amount={Number(summary.received)} />
+                      <CurrencyAmount amount={summary.received} />
                     </dd>
                   </div>
                   <div>
                     <dt className="text-ink-muted">
-                      {Number(summary.overpayment) > 0 ? "Overpayment" : "Remaining"}
+                      {summary.fee_confirmed &&
+                      summary.overpayment !== null &&
+                      summary.overpayment > 0
+                        ? "Overpayment"
+                        : "Remaining"}
                     </dt>
                     <dd className="font-medium">
-                      <CurrencyAmount
-                        amount={
-                          Number(summary.overpayment) > 0
-                            ? Number(summary.overpayment)
-                            : Number(summary.remaining)
-                        }
-                      />
+                      {summary.fee_confirmed ? (
+                        <CurrencyAmount
+                          amount={
+                            summary.overpayment !== null && summary.overpayment > 0
+                              ? summary.overpayment
+                              : (summary.remaining ?? 0)
+                          }
+                        />
+                      ) : (
+                        <span className="text-ink-muted">—</span>
+                      )}
                     </dd>
                   </div>
                 </dl>

@@ -11,6 +11,8 @@ export interface LiveProjectPaymentRow {
   record_source: string;
   payment_method: string | null;
   method_reference: string | null;
+  provider_name: string | null;
+  external_transaction_id: string | null;
   voided_at: string | null;
   void_reason: string | null;
   replaces_payment_id: string | null;
@@ -24,7 +26,7 @@ export async function loadProjectPayments(
   const { data, error } = await supabase
     .from("project_payments")
     .select(
-      "id, project_id, payment_date, amount, type, note, record_source, payment_method, method_reference, voided_at, void_reason, replaces_payment_id, created_at"
+      "id, project_id, payment_date, amount, type, note, record_source, payment_method, method_reference, provider_name, external_transaction_id, voided_at, void_reason, replaces_payment_id, created_at"
     )
     .eq("project_id", projectId)
     .order("payment_date", { ascending: false })
@@ -49,6 +51,8 @@ export function mapLivePaymentsToClientPayments(rows: LiveProjectPaymentRow[]): 
     recordSource: row.record_source as Payment["recordSource"],
     methodReference: row.method_reference ?? undefined,
     paymentMethod: row.payment_method ?? undefined,
+    providerName: row.provider_name ?? undefined,
+    externalTransactionId: row.external_transaction_id ?? undefined,
     voidedAt: row.voided_at ?? undefined,
     replacesPaymentId: row.replaces_payment_id ?? undefined,
   }));

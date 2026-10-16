@@ -77,8 +77,11 @@ export function mapLiveProjectBundleToClient(bundle: LiveProjectBundle): Client 
     bundle.setupPaymentSummary?.received ??
     sumValidSetupPayments(paymentRows);
   const setupFee =
-    bundle.setupPaymentSummary?.setup_fee ??
-    (published ? Number(published.setup_fee) : Number(p.setup_fee));
+    bundle.setupPaymentSummary?.fee_confirmed && bundle.setupPaymentSummary.setup_fee !== null
+      ? bundle.setupPaymentSummary.setup_fee
+      : published
+        ? Number(published.setup_fee)
+        : Number(p.setup_fee);
   const payments = mapLivePaymentsToClientPayments(paymentRows);
 
   const adminMilestones: ClientMilestone[] = [];

@@ -46,7 +46,7 @@ export default async function LiveAdminProjectPage({
       <LiveProjectPaymentsActivation
         project={p}
         payments={bundle.payments ?? []}
-        setupSummary={bundle.setupPaymentSummary}
+        setupSummary={bundle.adminSetupPaymentSummary}
       />
     </div>
   );

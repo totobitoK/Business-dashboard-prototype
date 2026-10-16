@@ -125,11 +125,13 @@ export async function loadProjectBundleForAdmin(
       true
     ),
     loadProjectPayments(supabase, projectId),
-    supabase.rpc("member_get_setup_payment_summary", { p_project_id: projectId }),
+    supabase.rpc("admin_get_setup_payment_summary", { p_project_id: projectId }),
   ]);
 
   if (adminDraftRes.error) throw new Error(adminDraftRes.error.message);
   if (summaryRes.error) throw new Error(summaryRes.error.message);
+
+  const adminSummary = summaryRes.data as LiveProjectBundle["adminSetupPaymentSummary"];
 
   return {
     project: project as LiveProjectBundle["project"],
@@ -137,6 +139,7 @@ export async function loadProjectBundleForAdmin(
     adminScopeDraft: adminDraftRes.data as LiveProjectBundle["adminScopeDraft"],
     ...buildPreview,
     payments,
-    setupPaymentSummary: summaryRes.data as LiveProjectBundle["setupPaymentSummary"],
+    setupPaymentSummary: adminSummary?.obligation,
+    adminSetupPaymentSummary: adminSummary,
   };
 }

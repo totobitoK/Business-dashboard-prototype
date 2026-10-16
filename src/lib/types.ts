@@ -71,6 +71,10 @@ export interface Payment {
   paymentMethod?: string;
   /** Check number, transfer ref, etc. (offline recordings) */
   methodReference?: string;
+  /** Processor id when recordSource is online (e.g. stripe). */
+  providerName?: string;
+  /** Provider-unique transaction id for deduplicated ledger rows. */
+  externalTransactionId?: string;
   voidedAt?: string;
   replacesPaymentId?: string;
 }

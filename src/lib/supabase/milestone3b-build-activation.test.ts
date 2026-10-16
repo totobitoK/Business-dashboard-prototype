@@ -172,7 +172,7 @@ describe("Milestone 3B setup payments and activation", () => {
   async function recordPayment(
     projectId: string,
     amount: number,
-    idempotencyKey?: string
+    idempotencyKey: string = crypto.randomUUID()
   ) {
     return admin.rpc("admin_record_setup_payment", {
       p_project_id: projectId,
@@ -180,7 +180,7 @@ describe("Milestone 3B setup payments and activation", () => {
       p_payment_date: "2026-03-01",
       p_payment_method: "Check",
       p_method_reference: "test",
-      p_idempotency_key: idempotencyKey ?? null,
+      p_idempotency_key: idempotencyKey,
     });
   }
 
@@ -197,6 +197,64 @@ describe("Milestone 3B setup payments and activation", () => {
     return pub;
   }
 
+  it("manual setup payments stay offline without provider ledger ids", async () => {
+    const projectId = await newProject("m3b-ledger-offline");
+    const pay = await recordPayment(projectId, 100);
+    expect(pay.error).toBeNull();
+    const { data: rows, error } = await admin
+      .from("project_payments")
+      .select("record_source, provider_name, external_transaction_id")
+      .eq("project_id", projectId);
+    expect(error).toBeNull();
+    expect(rows).toHaveLength(1);
+    expect(rows![0].record_source).toBe("offline");
+    expect(rows![0].provider_name).toBeNull();
+    expect(rows![0].external_transaction_id).toBeNull();
+  });
+
+  it("requires idempotency key and rejects payload mismatch on reuse", async () => {
+    const projectId = await newProject("m3b-idem-hard");
+    const missing = await admin.rpc("admin_record_setup_payment", {
+      p_project_id: projectId,
+      p_amount: 100,
+      p_payment_date: "2026-03-01",
+      p_payment_method: "Check",
+      p_idempotency_key: "   ",
+    });
+    expect(missing.error?.message).toMatch(/IDEMPOTENCY_KEY_REQUIRED/i);
+
+    const key = "idem-" + crypto.randomUUID();
+    const first = await recordPayment(projectId, 250, key);
+    const replay = await recordPayment(projectId, 250, key);
+    expect(first.error).toBeNull();
+    expect(replay.error).toBeNull();
+    expect((replay.data as { idempotent_replay: boolean }).idempotent_replay).toBe(true);
+
+    const conflict = await recordPayment(projectId, 300, key);
+    expect(conflict.error?.message).toMatch(/IDEMPOTENCY_KEY_PAYLOAD_MISMATCH/i);
+  });
+
+  it("does not expose unpublished draft setup fee to customers", async () => {
+    const projectId = await newProject("m3b-fee-private", 7500);
+    const summary = await userA.rpc("member_get_setup_payment_summary", {
+      p_project_id: projectId,
+    });
+    expect(summary.error).toBeNull();
+    const data = summary.data as {
+      fee_confirmed: boolean;
+      setup_fee: number | null;
+    };
+    expect(data.fee_confirmed).toBe(false);
+    expect(data.setup_fee).toBeNull();
+
+    const adminSummary = await admin.rpc("admin_get_setup_payment_summary", {
+      p_project_id: projectId,
+    });
+    expect(Number((adminSummary.data as { draft_setup_fee_estimate: number }).draft_setup_fee_estimate)).toBe(
+      7500
+    );
+  });
+
   it("customer cannot record setup payments; cross-tenant denied", async () => {
     const projectId = await newProject("m3b-deny-pay");
     const customerPay = await userA.rpc("admin_record_setup_payment", {
@@ -204,6 +262,7 @@ describe("Milestone 3B setup payments and activation", () => {
       p_amount: 100,
       p_payment_date: "2026-03-01",
       p_payment_method: "Check",
+      p_idempotency_key: crypto.randomUUID(),
     });
     expect(customerPay.error?.message).toMatch(/FORBIDDEN/i);
 
@@ -214,11 +273,12 @@ describe("Milestone 3B setup payments and activation", () => {
       p_amount: 100,
       p_payment_date: "2026-03-01",
       p_payment_method: "Check",
+      p_idempotency_key: crypto.randomUUID(),
     });
     expect(cross.error?.message).toMatch(/FORBIDDEN/i);
   });
 
-  it("supports partial, full, zero-fee, and overpayment totals", async () => {
+  it("supports partial, full, zero-fee, and overpayment totals after scope publish", async () => {
     const zeroId = await newProject("m3b-zero", 0);
     await publishScopeAccepted(zeroId);
     let summary = await userA.rpc("member_get_setup_payment_summary", {
@@ -228,6 +288,7 @@ describe("Milestone 3B setup payments and activation", () => {
     expect((summary.data as { fully_paid: boolean }).fully_paid).toBe(true);
 
     const partialId = await newProject("m3b-partial", 1000);
+    await publishScopeAccepted(partialId);
     await recordPayment(partialId, 400);
     summary = await userA.rpc("member_get_setup_payment_summary", { p_project_id: partialId });
     expect(Number((summary.data as { remaining: number }).remaining)).toBe(600);
@@ -237,23 +298,11 @@ describe("Milestone 3B setup payments and activation", () => {
     expect(Number((summary.data as { remaining: number }).remaining)).toBe(0);
 
     const overId = await newProject("m3b-over", 500);
+    await publishScopeAccepted(overId);
     await recordPayment(overId, 650);
     summary = await userA.rpc("member_get_setup_payment_summary", { p_project_id: overId });
     expect(Number((summary.data as { overpayment: number }).overpayment)).toBe(150);
     expect((summary.data as { fully_paid: boolean }).fully_paid).toBe(true);
-  });
-
-  it("deduplicates payment creation via idempotency key", async () => {
-    const projectId = await newProject("m3b-idem");
-    const key = "idem-key-" + crypto.randomUUID();
-    const first = await recordPayment(projectId, 250, key);
-    const second = await recordPayment(projectId, 250, key);
-    expect(first.error).toBeNull();
-    expect(second.error).toBeNull();
-    expect((second.data as { idempotent_replay: boolean }).idempotent_replay).toBe(true);
-    expect((first.data as { payment_id: string }).payment_id).toBe(
-      (second.data as { payment_id: string }).payment_id
-    );
   });
 
   it("voids payment with reason and optional replacement; preserves voided row", async () => {
@@ -266,6 +315,7 @@ describe("Milestone 3B setup payments and activation", () => {
       p_replacement_amount: 450,
       p_replacement_date: "2026-03-02",
       p_replacement_method: "Wire",
+      p_replacement_idempotency_key: crypto.randomUUID(),
     });
     expect(voided.error).toBeNull();
     const rows = await admin.from("project_payments").select("*").eq("project_id", projectId);
@@ -273,6 +323,20 @@ describe("Milestone 3B setup payments and activation", () => {
     const original = rows.data?.find((r) => r.id === paymentId);
     expect(original?.voided_at).toBeTruthy();
     expect(original?.void_reason).toMatch(/Wrong amount/i);
+  });
+
+  it("rejects voiding non-setup payments", async () => {
+    const projectId = await newProject("m3b-void-deny");
+    const inserted = await admin.rpc("admin_milestone2_test_insert_non_setup_payment", {
+      p_project_id: projectId,
+      p_type: "subscription",
+    });
+    expect(inserted.error).toBeNull();
+    const voidRes = await admin.rpc("admin_void_setup_payment", {
+      p_payment_id: inserted.data as string,
+      p_void_reason: "Should not apply",
+    });
+    expect(voidRes.error?.message).toMatch(/NOT_SETUP_PAYMENT/i);
   });
 
   it("blocks activation until eligible; idempotent when already active", async () => {

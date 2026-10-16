@@ -11,6 +11,15 @@ function mapPaymentRpcError(message: string): string {
   if (message.includes("INVALID_AMOUNT")) return "Enter a valid payment amount.";
   if (message.includes("INVALID_DATE")) return "Enter a valid payment date.";
   if (message.includes("METHOD_REQUIRED")) return "Payment method is required.";
+  if (message.includes("IDEMPOTENCY_KEY_REQUIRED")) {
+    return "Payment could not be recorded safely; refresh and try again.";
+  }
+  if (message.includes("IDEMPOTENCY_KEY_PAYLOAD_MISMATCH")) {
+    return "This payment retry conflicted with a different amount or date. Start a new payment.";
+  }
+  if (message.includes("NOT_SETUP_PAYMENT")) {
+    return "Only setup payments can be voided from this screen.";
+  }
   if (message.includes("VOID_REASON_REQUIRED")) return "A void reason is required.";
   if (message.includes("ALREADY_VOIDED")) return "This payment was already voided.";
   if (message.includes("ACTIVATION_BLOCKED")) {
@@ -26,7 +35,7 @@ export async function adminRecordSetupPaymentAction(input: {
   paymentDate: string;
   paymentMethod: string;
   methodReference?: string;
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }): Promise<
   | { ok: true; paymentId: string; idempotentReplay: boolean }
   | { ok: false; error: string }
@@ -34,13 +43,17 @@ export async function adminRecordSetupPaymentAction(input: {
   const supabase = await createClient();
   await requirePlatformAdmin(supabase);
 
+  if (!input.idempotencyKey.trim()) {
+    return { ok: false, error: "Payment could not be recorded safely; refresh and try again." };
+  }
+
   const { data, error } = await supabase.rpc("admin_record_setup_payment", {
     p_project_id: input.projectId,
     p_amount: input.amount,
     p_payment_date: input.paymentDate,
     p_payment_method: input.paymentMethod,
     p_method_reference: input.methodReference ?? null,
-    p_idempotency_key: input.idempotencyKey ?? null,
+    p_idempotency_key: input.idempotencyKey.trim(),
   });
 
   if (error) {
@@ -71,7 +84,7 @@ export async function adminVoidSetupPaymentAction(input: {
     paymentDate: string;
     paymentMethod: string;
     methodReference?: string;
-    idempotencyKey?: string;
+    idempotencyKey: string;
   };
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
@@ -85,7 +98,7 @@ export async function adminVoidSetupPaymentAction(input: {
     p_replacement_date: rep?.paymentDate ?? null,
     p_replacement_method: rep?.paymentMethod ?? null,
     p_replacement_reference: rep?.methodReference ?? null,
-    p_replacement_idempotency_key: rep?.idempotencyKey ?? null,
+    p_replacement_idempotency_key: rep?.idempotencyKey?.trim() ?? null,
   });
 
   if (error) {
@@ -179,11 +192,20 @@ export async function memberGetSetupPaymentSummaryAction(projectId: string) {
     throw new Error(error.message);
   }
 
-  return data as {
-    setup_fee: number;
-    received: number;
-    remaining: number;
-    overpayment: number;
-    fully_paid: boolean;
-  };
+  return data;
+}
+
+export async function adminGetSetupPaymentSummaryAction(projectId: string) {
+  const supabase = await createClient();
+  await requirePlatformAdmin(supabase);
+
+  const { data, error } = await supabase.rpc("admin_get_setup_payment_summary", {
+    p_project_id: projectId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
 }

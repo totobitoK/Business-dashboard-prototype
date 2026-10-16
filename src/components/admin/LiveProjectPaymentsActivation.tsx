@@ -10,6 +10,8 @@ import {
 } from "@/lib/actions/milestone3b-rpc";
 import type { LiveClientProject, LiveProjectPayment } from "@/lib/db/live-types";
 import { parseOfflinePaymentAmount, todayDateInputValue } from "@/lib/offline-payment-input";
+import { newSetupPaymentOperationKey } from "@/lib/setup-payment-idempotency";
+import type { AdminSetupPaymentSummary } from "@/lib/setup-payment-summary";
 
 export function LiveProjectPaymentsActivation({
   project,
@@ -18,13 +20,7 @@ export function LiveProjectPaymentsActivation({
 }: {
   project: LiveClientProject;
   payments: LiveProjectPayment[];
-  setupSummary?: {
-    setup_fee: number;
-    received: number;
-    remaining: number;
-    overpayment: number;
-    fully_paid: boolean;
-  };
+  setupSummary?: AdminSetupPaymentSummary;
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -38,7 +34,7 @@ export function LiveProjectPaymentsActivation({
   const [paymentDate, setPaymentDate] = useState(todayDateInputValue());
   const [method, setMethod] = useState("Check");
   const [reference, setReference] = useState("");
-  const [idempotencyKey, setIdempotencyKey] = useState("");
+  const [paymentOpKey, setPaymentOpKey] = useState(() => newSetupPaymentOperationKey());
 
   const refreshEligibility = useCallback(() => {
     startTransition(async () => {
@@ -57,10 +53,13 @@ export function LiveProjectPaymentsActivation({
     refreshEligibility();
   }, [refreshEligibility]);
 
-  const fee = setupSummary?.setup_fee ?? Number(project.setup_fee);
-  const received = setupSummary?.received ?? 0;
-  const remaining = setupSummary?.remaining ?? Math.max(fee - received, 0);
-  const over = setupSummary?.overpayment ?? Math.max(received - fee, 0);
+  const obligation = setupSummary?.obligation;
+  const feeConfirmed = obligation?.fee_confirmed === true;
+  const fee = feeConfirmed ? (obligation?.setup_fee ?? 0) : null;
+  const received = obligation?.received ?? 0;
+  const remaining = feeConfirmed ? (obligation?.remaining ?? 0) : null;
+  const over = feeConfirmed ? (obligation?.overpayment ?? 0) : null;
+  const draftEstimate = setupSummary?.draft_setup_fee_estimate ?? null;
 
   function recordPayment(e: React.FormEvent) {
     e.preventDefault();
@@ -70,6 +69,7 @@ export function LiveProjectPaymentsActivation({
       setMessage(parsed.error);
       return;
     }
+    const opKey = paymentOpKey;
     startTransition(async () => {
       const res = await adminRecordSetupPaymentAction({
         projectId: project.id,
@@ -77,15 +77,15 @@ export function LiveProjectPaymentsActivation({
         paymentDate,
         paymentMethod: method.trim(),
         methodReference: reference.trim() || undefined,
-        idempotencyKey: idempotencyKey.trim() || undefined,
+        idempotencyKey: opKey,
       });
       if (!res.ok) {
         setMessage(res.error);
         return;
       }
+      setPaymentOpKey(newSetupPaymentOperationKey());
       setMessage(res.idempotentReplay ? "Payment already recorded (idempotent)." : "Payment recorded.");
       setAmount("");
-      setIdempotencyKey("");
       refreshEligibility();
       window.location.reload();
     });
@@ -135,15 +135,20 @@ export function LiveProjectPaymentsActivation({
     <section className="rounded-xl border border-black/10 bg-white p-5 shadow-soft">
       <h2 className="text-lg font-semibold text-ink">Setup payments & activation</h2>
       <p className="mt-1 text-sm text-ink-muted">
-        Offline setup payments only. Recording payments or approving previews does not activate the
-        project.
+        Manual offline setup payments only (separate from future card/processor integration). The
+        shared ledger reserves provider name and external transaction id for Stripe later. Recording
+        payments or approving previews does not activate the project.
       </p>
 
       <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-4">
         <div>
-          <dt className="text-ink-muted">Setup fee</dt>
+          <dt className="text-ink-muted">Published setup fee</dt>
           <dd className="font-semibold">
-            <CurrencyAmount amount={fee} />
+            {feeConfirmed && fee !== null ? (
+              <CurrencyAmount amount={fee} />
+            ) : (
+              <span className="text-ink-muted">Awaiting scope publish</span>
+            )}
           </dd>
         </div>
         <div>
@@ -155,18 +160,34 @@ export function LiveProjectPaymentsActivation({
         <div>
           <dt className="text-ink-muted">Remaining</dt>
           <dd className="font-semibold">
-            <CurrencyAmount amount={remaining} />
+            {feeConfirmed && remaining !== null ? (
+              <CurrencyAmount amount={remaining} />
+            ) : (
+              <span className="text-ink-muted">—</span>
+            )}
           </dd>
         </div>
         <div>
           <dt className="text-ink-muted">Overpayment</dt>
           <dd className="font-semibold">
-            <CurrencyAmount amount={over} />
+            {feeConfirmed && over !== null ? (
+              <CurrencyAmount amount={over} />
+            ) : (
+              <span className="text-ink-muted">—</span>
+            )}
           </dd>
         </div>
       </dl>
 
-      <form onSubmit={recordPayment} className="mt-4 grid gap-3 sm:grid-cols-2">
+      {draftEstimate !== null && !feeConfirmed ? (
+        <p className="mt-2 text-sm text-amber-900">
+          Unpublished admin draft estimate (not customer-visible):{" "}
+          <CurrencyAmount amount={draftEstimate} className="inline font-semibold" />
+        </p>
+      ) : null}
+
+      <h3 className="mt-4 text-sm font-semibold text-ink">Record manual payment</h3>
+      <form onSubmit={recordPayment} className="mt-2 grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
           <span className="font-medium text-ink">Amount</span>
           <input
@@ -207,16 +228,6 @@ export function LiveProjectPaymentsActivation({
             className="mt-1 w-full rounded-lg border border-black/10 px-3 py-2"
           />
         </label>
-        <label className="block text-sm sm:col-span-2">
-          <span className="font-medium text-ink">Idempotency key (optional)</span>
-          <input
-            type="text"
-            value={idempotencyKey}
-            onChange={(e) => setIdempotencyKey(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-black/10 px-3 py-2"
-            placeholder="Reuse to prevent duplicate charges on retry"
-          />
-        </label>
         <div className="sm:col-span-2">
           <button
             type="submit"
@@ -237,12 +248,14 @@ export function LiveProjectPaymentsActivation({
             >
               <span>
                 {p.payment_date} · <CurrencyAmount amount={Number(p.amount)} className="inline" /> ·{" "}
-                {p.payment_method ?? "—"}
+                {p.record_source === "online" && p.provider_name
+                  ? `${p.provider_name}${p.external_transaction_id ? ` · ${p.external_transaction_id}` : ""}`
+                  : `Manual · ${p.payment_method ?? "—"}`}
                 {p.voided_at ? (
                   <span className="ml-2 text-amber-800">Voided: {p.void_reason}</span>
                 ) : null}
               </span>
-              {!p.voided_at ? (
+              {!p.voided_at && p.type === "setup" ? (
                 <button
                   type="button"
                   disabled={pending}

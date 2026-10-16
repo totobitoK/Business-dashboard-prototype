@@ -37,6 +37,8 @@ export interface LiveProjectPayment {
   record_source: string;
   payment_method: string | null;
   method_reference: string | null;
+  provider_name: string | null;
+  external_transaction_id: string | null;
   voided_at: string | null;
   void_reason: string | null;
   replaces_payment_id: string | null;
@@ -156,11 +158,6 @@ export interface LiveProjectBundle {
   readyPreviewApproval?: LivePreviewRevisionApproval | null;
   previewHistory?: LivePreviewRevision[];
   payments?: LiveProjectPayment[];
-  setupPaymentSummary?: {
-    setup_fee: number;
-    received: number;
-    remaining: number;
-    overpayment: number;
-    fully_paid: boolean;
-  };
+  setupPaymentSummary?: import("@/lib/setup-payment-summary").SetupPaymentObligation;
+  adminSetupPaymentSummary?: import("@/lib/setup-payment-summary").AdminSetupPaymentSummary;
 }
