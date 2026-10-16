@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { WORKSPACE_ALPINE_HVAC } from "../customer-workspaces";
+import { WORKSPACE_ALPINE_HVAC, WORKSPACE_MERIDIAN_RETAIL } from "../customer-workspaces";
 import { loadDevSeedCredentials } from "./load-dev-seed-credentials";
 import {
   createMilestone2TestProject,
@@ -309,15 +309,57 @@ describe("Milestone 3A build progress and preview review", () => {
     expect(customerAdmin.error?.message).toMatch(/FORBIDDEN/i);
   });
 
-  it("rejects unknown workspace mapping on publish", async () => {
-    const projectId = await newProject("m3a-bad-ws");
+  it.each([
+    ["empty", ""],
+    ["whitespace", "   "],
+    ["unknown", "ws-unknown"],
+  ])("rejects %s workspace mapping on publish", async (_label, demoWorkspaceId) => {
+    const projectId = await newProject(`m3a-bad-ws-${_label}`);
     await publishScopeAccepted(projectId);
     await markBuildReady(projectId);
     const bad = await admin.rpc("admin_publish_preview_ready", {
       p_project_id: projectId,
-      p_demo_workspace_id: "ws-unknown",
+      p_demo_workspace_id: demoWorkspaceId,
     });
     expect(bad.error?.message).toMatch(/INVALID_DEMO_WORKSPACE/i);
+  });
+
+  it("rejects null workspace mapping on publish", async () => {
+    const projectId = await newProject("m3a-bad-ws-null");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const bad = await admin.rpc("admin_publish_preview_ready", {
+      p_project_id: projectId,
+      p_demo_workspace_id: null,
+    });
+    expect(bad.error?.message).toMatch(/INVALID_DEMO_WORKSPACE/i);
+  });
+
+  it("accepts valid workspace mappings on publish", async () => {
+    const projectId = await newProject("m3a-good-ws");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const meridian = await admin.rpc("admin_publish_preview_ready", {
+      p_project_id: projectId,
+      p_demo_workspace_id: WORKSPACE_MERIDIAN_RETAIL,
+    });
+    expect(meridian.error).toBeNull();
+  });
+
+  it("rejects invalid workspace mapping on approval", async () => {
+    const projectId = await newProject("m3a-bad-ws-approve");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const pub = await publishPreview(projectId);
+    await admin.rpc("admin_milestone3a_test_set_preview_workspace", {
+      p_preview_revision_id: pub.preview_revision_id,
+      p_demo_workspace_id: "  ",
+    });
+    const blocked = await userA.rpc("customer_approve_preview", {
+      p_project_id: projectId,
+      p_preview_revision_id: pub.preview_revision_id,
+    });
+    expect(blocked.error?.message).toMatch(/INVALID_DEMO_WORKSPACE/i);
   });
 
   it("blocks preview publish when material scope edits are unpublished", async () => {
@@ -395,4 +437,164 @@ describe("Milestone 3A build progress and preview review", () => {
     });
     expect(blocked.error?.message).toMatch(/BUILD_PREREQUISITES_INCOMPLETE/i);
   });
+
+  it("rejects approval when guided setup is cleared after preview is ready", async () => {
+    const projectId = await newProject("m3a-clear-guided-approve");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const pub = await publishPreview(projectId);
+    await admin.rpc("admin_update_build_progress", {
+      p_project_id: projectId,
+      p_guided_setup_complete: false,
+    });
+    const blocked = await userA.rpc("customer_approve_preview", {
+      p_project_id: projectId,
+      p_preview_revision_id: pub.preview_revision_id,
+    });
+    expect(blocked.error?.message).toMatch(/BUILD_PREREQUISITES_INCOMPLETE|STALE_PREVIEW/i);
+    const row = await admin
+      .from("client_projects")
+      .select("current_ready_preview_id")
+      .eq("id", projectId)
+      .single();
+    expect(row.data?.current_ready_preview_id).toBeNull();
+  });
+
+  it("invalidates current eligibility when discovery is cleared after approval", async () => {
+    const projectId = await newProject("m3a-clear-discovery");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const pub = await publishPreview(projectId);
+    expect(
+      (
+        await userA.rpc("customer_approve_preview", {
+          p_project_id: projectId,
+          p_preview_revision_id: pub.preview_revision_id,
+        })
+      ).error
+    ).toBeNull();
+
+    const approvalsBefore = await admin
+      .from("preview_revision_approvals")
+      .select("id")
+      .eq("project_id", projectId);
+    expect(approvalsBefore.data?.length).toBe(1);
+
+    await admin.rpc("admin_update_build_progress", {
+      p_project_id: projectId,
+      p_discovery_complete: false,
+    });
+
+    const project = await admin
+      .from("client_projects")
+      .select("current_ready_preview_id, preview_feedback_unresolved")
+      .eq("id", projectId)
+      .single();
+    expect(project.data?.current_ready_preview_id).toBeNull();
+    expect(project.data?.preview_feedback_unresolved).toBe(true);
+
+    const approvalsAfter = await admin
+      .from("preview_revision_approvals")
+      .select("id")
+      .eq("project_id", projectId);
+    expect(approvalsAfter.data?.length).toBe(1);
+  });
+
+  it("progress-note-only build updates preserve preview eligibility", async () => {
+    const projectId = await newProject("m3a-note-only");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const pub = await publishPreview(projectId);
+    await admin.rpc("admin_update_build_progress", {
+      p_project_id: projectId,
+      p_customer_progress_note: "Still building — no prerequisite change.",
+    });
+    const row = await admin
+      .from("client_projects")
+      .select("current_ready_preview_id")
+      .eq("id", projectId)
+      .single();
+    expect(row.data?.current_ready_preview_id).toBe(pub.preview_revision_id);
+
+    const approve = await userA.rpc("customer_approve_preview", {
+      p_project_id: projectId,
+      p_preview_revision_id: pub.preview_revision_id,
+    });
+    expect(approve.error).toBeNull();
+  });
+
+  it("requires new preview approval after prerequisites are restored", async () => {
+    const projectId = await newProject("m3a-restore-pre");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const v1 = await publishPreview(projectId);
+    await userA.rpc("customer_approve_preview", {
+      p_project_id: projectId,
+      p_preview_revision_id: v1.preview_revision_id,
+    });
+
+    await admin.rpc("admin_update_build_progress", {
+      p_project_id: projectId,
+      p_guided_setup_complete: false,
+    });
+
+    await admin.rpc("admin_update_build_progress", {
+      p_project_id: projectId,
+      p_guided_setup_complete: true,
+    });
+
+    const stale = await userA.rpc("customer_approve_preview", {
+      p_project_id: projectId,
+      p_preview_revision_id: v1.preview_revision_id,
+    });
+    expect(stale.error?.message).toMatch(/STALE_PREVIEW|PREVIEW_NOT_READY|BUILD_PREREQUISITES/i);
+
+    await markBuildReady(projectId);
+    const v2 = await publishPreview(projectId);
+    expect(v2.preview_revision).toBeGreaterThan(v1.preview_revision);
+
+    const fresh = await userA.rpc("customer_approve_preview", {
+      p_project_id: projectId,
+      p_preview_revision_id: v2.preview_revision_id,
+    });
+    expect(fresh.error).toBeNull();
+
+    const approvals = await admin
+      .from("preview_revision_approvals")
+      .select("preview_revision_id")
+      .eq("project_id", projectId);
+    expect(approvals.data?.length).toBe(2);
+  }, 15000);
+
+  it("concurrent prerequisite revocation and approval leave no current eligibility", async () => {
+    const projectId = await newProject("m3a-concurrent-revoke");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const pub = await publishPreview(projectId);
+
+    await Promise.all([
+      admin.rpc("admin_update_build_progress", {
+        p_project_id: projectId,
+        p_discovery_complete: false,
+      }),
+      userA.rpc("customer_approve_preview", {
+        p_project_id: projectId,
+        p_preview_revision_id: pub.preview_revision_id,
+      }),
+    ]);
+
+    const project = await admin
+      .from("client_projects")
+      .select("current_ready_preview_id")
+      .eq("id", projectId)
+      .single();
+    expect(project.data?.current_ready_preview_id).toBeNull();
+
+    const ready = await admin
+      .from("preview_revisions")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("status", "ready");
+    expect(ready.data?.length ?? 0).toBe(0);
+  }, 15000);
 });
