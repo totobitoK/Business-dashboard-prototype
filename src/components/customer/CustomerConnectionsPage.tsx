@@ -111,11 +111,10 @@ export function CustomerConnectionsPage() {
       )}
 
       <div className="space-y-3 border-t border-purple-100 pt-6">
-        <h2 className="text-lg font-semibold text-ink">Connector catalog</h2>
+        <h2 className="text-lg font-semibold text-ink">Available connections</h2>
         <p className="text-sm text-ink-muted">
-          Full lineup RavenView is building toward. Only integrations marked
-          available (none in this prototype) would show an active Connect action.
-          Planned providers stay read-only until engineering and your scope align.
+          Connect actions appear only for integrations that are operational and
+          configured for your project—not during private build teasers.
         </p>
         <ConnectorCatalogList />
       </div>

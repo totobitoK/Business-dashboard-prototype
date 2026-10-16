@@ -393,23 +393,18 @@ export function ClientOnboardingForm({
                 <p className="mb-2 text-xs text-red-600">{errors.selectedTools}</p>
               )}
               <div className="space-y-2">
-                {DATA_SOURCE_TOOLS.map(({ id, label, statusLabel }) => (
+                {DATA_SOURCE_TOOLS.map(({ id, label }) => (
                   <label
                     key={id}
-                    className="flex cursor-pointer items-start gap-3 rounded-lg border border-purple-100 px-3 py-2.5 hover:bg-purple-50/40"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-purple-100 px-3 py-2.5 hover:bg-purple-50/40"
                   >
                     <input
                       type="checkbox"
                       checked={answers.selectedTools?.includes(id) ?? false}
                       onChange={() => toggleTool(id)}
-                      className="mt-0.5 rounded border-purple-300 text-purple focus:ring-purple"
+                      className="rounded border-purple-300 text-purple focus:ring-purple"
                     />
-                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-sm font-medium text-ink">{label}</span>
-                      <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-dark">
-                        {statusLabel}
-                      </span>
-                    </span>
+                    <span className="text-sm font-medium text-ink">{label}</span>
                   </label>
                 ))}
               </div>

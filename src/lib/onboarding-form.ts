@@ -4,16 +4,15 @@ import type {
   ClientOnboardingDraft,
   DataSourceTool,
 } from "./types";
-import { CONNECTOR_TOOL_LABELS, ONBOARDING_CONNECTORS } from "./connector-catalog";
+import { CONNECTOR_TOOL_LABELS } from "./connector-catalog";
+import { getOnboardingConnectorChoices } from "./connector-presentation";
 
 export const DATA_SOURCE_TOOLS: {
   id: DataSourceTool;
   label: string;
-  statusLabel: string;
-}[] = ONBOARDING_CONNECTORS.map((c) => ({
+}[] = getOnboardingConnectorChoices().map((c) => ({
   id: c.id,
   label: c.label,
-  statusLabel: c.statusLabel,
 }));
 
 export const TOOL_LABELS: Record<DataSourceTool, string> = CONNECTOR_TOOL_LABELS;

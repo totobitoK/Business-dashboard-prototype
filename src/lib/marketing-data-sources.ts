@@ -1,11 +1,11 @@
-import { MARKETING_CONNECTORS } from "./connector-catalog";
+import { getPublicMarketingConnectors, getPublicStatusBadge } from "./connector-presentation";
 
 export const marketingConnectionsHref = "#integrations";
 
-/** Sources shown on marketing — derived from the shared connector catalog. */
-export const MARKETING_DATA_SOURCES = MARKETING_CONNECTORS.map((c) => ({
+/** Public marketing list — empty during private build until connectors are operational. */
+export const MARKETING_DATA_SOURCES = getPublicMarketingConnectors().map((c) => ({
   id: c.id,
   label: c.label,
-  status: c.statusLabel,
   description: c.shortDescription,
+  status: getPublicStatusBadge(c),
 }));

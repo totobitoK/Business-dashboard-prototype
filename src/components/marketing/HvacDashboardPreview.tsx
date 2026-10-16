@@ -1,4 +1,4 @@
-import { MARKETING_DATA_SOURCES } from "@/lib/marketing-data-sources";
+import { MARKETING_ILLUSTRATION_SOURCE_LABELS } from "@/lib/connector-catalog";
 
 /**
  * Static illustrative HVAC dashboard — not connected to live data or the internal CRM.
@@ -55,10 +55,10 @@ export function HvacDashboardPreview() {
 
       <div className="border-b border-purple-100 bg-purple-50/40 px-4 py-3 sm:px-5">
         <div className="flex flex-wrap items-center gap-2">
-          {MARKETING_DATA_SOURCES.map((source, i) => (
+          {MARKETING_ILLUSTRATION_SOURCE_LABELS.map((label, i) => (
             <SourcePill
-              key={source.id}
-              label={source.label}
+              key={label}
+              label={label}
               className={pillStyles[i % pillStyles.length]}
             />
           ))}

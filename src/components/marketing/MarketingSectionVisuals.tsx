@@ -128,6 +128,18 @@ export function ProcessTimelineVisual() {
 }
 
 export function IntegrationsVisual() {
+  if (MARKETING_DATA_SOURCES.length === 0) {
+    return (
+      <div className="rounded-xl border border-purple-100 bg-white px-4 py-5 shadow-soft">
+        <p className="text-sm font-semibold text-ink">Scope-first connections</p>
+        <p className="mt-2 text-sm text-ink-muted">
+          Operational connectors will be listed here at launch. Until then, we
+          confirm sources and API access during discovery—not from logos on this page.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {MARKETING_DATA_SOURCES.map((item) => (
@@ -137,13 +149,15 @@ export function IntegrationsVisual() {
         >
           <div className="min-w-0">
             <span className="font-semibold text-ink">{item.label}</span>
-            {"description" in item && item.description ? (
+            {item.description ? (
               <p className="mt-1 text-xs text-ink-muted">{item.description}</p>
             ) : null}
           </div>
-          <span className="shrink-0 rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple">
-            {item.status}
-          </span>
+          {item.status ? (
+            <span className="shrink-0 rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple">
+              {item.status}
+            </span>
+          ) : null}
         </div>
       ))}
     </div>

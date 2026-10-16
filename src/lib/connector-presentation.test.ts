@@ -1,0 +1,39 @@
+import { describe, expect, it } from "vitest";
+import { CONNECTOR_DEFINITIONS } from "./connector-catalog";
+import {
+  connectorCanConnect,
+  getConnectorPublicPhase,
+  getPublicMarketingConnectors,
+  getPublicStatusBadge,
+} from "./connector-presentation";
+
+describe("connector presentation policy", () => {
+  it("hides public marketing connectors during private build", () => {
+    expect(getConnectorPublicPhase()).toBe("private_build");
+    expect(getPublicMarketingConnectors("private_build")).toHaveLength(0);
+  });
+
+  it("shows no public status badges during private build", () => {
+    for (const c of CONNECTOR_DEFINITIONS) {
+      expect(getPublicStatusBadge(c, "private_build")).toBeNull();
+    }
+  });
+
+  it("at launch advertises operational connectors and optional coming soon teasers only", () => {
+    const launchList = getPublicMarketingConnectors("launch");
+    expect(launchList.every((c) => c.implementationStatus === "operational" || c.publicTeaser === "coming_soon")).toBe(
+      true
+    );
+    expect(launchList.some((c) => c.implementationStatus === "candidate")).toBe(false);
+  });
+
+  it("gates Connect on operational status only", () => {
+    expect(CONNECTOR_DEFINITIONS.some(connectorCanConnect)).toBe(false);
+    expect(
+      connectorCanConnect({
+        ...CONNECTOR_DEFINITIONS[0]!,
+        implementationStatus: "operational",
+      })
+    ).toBe(true);
+  });
+});

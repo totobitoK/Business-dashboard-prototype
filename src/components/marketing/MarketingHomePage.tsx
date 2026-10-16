@@ -137,30 +137,36 @@ export function MarketingHomePage() {
                 pricing are confirmed.
               </p>
               <div className="mt-8 border-t border-purple-100 pt-6">
-                <p className="text-sm font-semibold text-ink">
-                  Data sources in our connector roadmap
-                </p>
+                <p className="text-sm font-semibold text-ink">Data sources for your dashboard</p>
                 <p className="mt-1 text-sm text-ink">
-                  Final connections are agreed in scope—{" "}
+                  We agree connections during scope review—not every tool is self-serve on day
+                  one.{" "}
                   <a
                     href={marketingConnectionsHref}
                     className="font-semibold text-purple underline-offset-2 hover:underline"
                   >
-                    see connection status
+                    How connections work
                   </a>
                 </p>
-                <ul className="mt-3 flex flex-wrap gap-2">
-                  {MARKETING_DATA_SOURCES.map((source) => (
-                    <li key={source.id}>
-                      <a
-                        href={marketingConnectionsHref}
-                        className="inline-block rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-ink transition-colors hover:border-purple hover:bg-purple-50 hover:text-purple"
-                      >
-                        {source.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                {MARKETING_DATA_SOURCES.length > 0 ? (
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {MARKETING_DATA_SOURCES.map((source) => (
+                      <li key={source.id}>
+                        <a
+                          href={marketingConnectionsHref}
+                          className="inline-block rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-ink transition-colors hover:border-purple hover:bg-purple-50 hover:text-purple"
+                        >
+                          {source.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-3 text-sm text-ink-muted">
+                    We are in a private build phase; public connector advertising appears only
+                    when integrations are operational for customers.
+                  </p>
+                )}
                 <ul className="mt-6 space-y-2.5 text-sm font-medium text-ink">
                   <HeroTrustPoint>
                     Layout and metrics shaped to your business, not a template
@@ -268,19 +274,20 @@ export function MarketingHomePage() {
         >
           <SplitSection visual={<IntegrationsVisual />}>
             <SectionEyebrow>Data connections</SectionEyebrow>
-            <SectionTitle>Connector lineup — not all live yet</SectionTitle>
+            <SectionTitle>Connections agreed in scope</SectionTitle>
             <p className="mt-4 text-base leading-relaxed text-ink sm:text-lg">
-              RavenView is building toward QuickBooks Online, Google Calendar,
-              Google Sheets, Square, HubSpot, Google Ads, Meta Ads, and Excel /
-              CSV imports. Google Calendar is the first engineering milestone;
-              other providers are planned and appear as &ldquo;Coming soon&rdquo;
-              until their integrations ship.
+              Your dashboard pulls from the systems you already use—accounting,
+              calendar, CRM, ads, payments, and spreadsheets—once we confirm what
+              data is available through official APIs and what belongs in your
+              launch scope. We do not advertise connectors until they are
+              operational for customers.
             </p>
             <p className="mt-4 text-sm leading-relaxed text-ink sm:text-base">
-              Displaying a logo or name does not mean your account can connect
-              today. Final sources depend on discovery and agreed scope. Payments
-              to {branding.name} (setup and subscription) use Stripe separately —
-              that is not the same as connecting your business data sources.
+              During our private build, you will not see &ldquo;Coming soon&rdquo;
+              badges on the marketing site. Intake may still record tools you rely
+              on for discovery; that is not a connection. Payments to {branding.name}{" "}
+              (setup and subscription) use Stripe separately from your business data
+              sources.
             </p>
           </SplitSection>
         </section>
