@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { WORKSPACE_ALPINE_HVAC, WORKSPACE_MERIDIAN_RETAIL } from "../customer-workspaces";
 import { loadDevSeedCredentials } from "./load-dev-seed-credentials";
@@ -7,6 +7,11 @@ import {
   deleteMilestone2TestProject,
   readCompanyIdBySlug,
 } from "./milestone2-test-fixtures";
+import {
+  createM3aNonTestDisposableProject,
+  deleteM3aNonTestDisposableProject,
+  fingerprintAcmeSharedSeedProjects,
+} from "./milestone3a-disposable-fixture";
 
 const USER_A = "member-a@acme.dev";
 const USER_B = "member-b@beta.dev";
@@ -53,6 +58,7 @@ const scopeDraft = {
 describe("Milestone 3A build progress and preview review", () => {
   const check = prereq();
   const created: string[] = [];
+  const disposableCreated: string[] = [];
 
   if (!check.ok) {
     if (process.env.RUN_SUPABASE_MILESTONE3A_TESTS === "1") {
@@ -74,6 +80,7 @@ describe("Milestone 3A build progress and preview review", () => {
   let admin: SupabaseClient;
   let userA: SupabaseClient;
   let userB: SupabaseClient;
+  let sharedSeedFingerprint: string;
 
   beforeAll(async () => {
     admin = await signIn(url, pubKey, ADMIN, seed.users[ADMIN]!);
@@ -81,12 +88,21 @@ describe("Milestone 3A build progress and preview review", () => {
     userB = await signIn(url, pubKey, USER_B, seed.users[USER_B]!);
     companyAId = await readCompanyIdBySlug(admin, "acme-hvac");
     companyBId = await readCompanyIdBySlug(admin, "beta-retail");
+    sharedSeedFingerprint = await fingerprintAcmeSharedSeedProjects(admin, companyAId);
   });
 
   afterEach(async () => {
+    while (disposableCreated.length) {
+      await deleteM3aNonTestDisposableProject(admin, disposableCreated.pop()!);
+    }
     while (created.length) {
       await deleteMilestone2TestProject(admin, created.pop()!);
     }
+  });
+
+  afterAll(async () => {
+    const after = await fingerprintAcmeSharedSeedProjects(admin, companyAId);
+    expect(after).toBe(sharedSeedFingerprint);
   });
 
   async function newProject(label: string) {
@@ -97,7 +113,7 @@ describe("Milestone 3A build progress and preview review", () => {
 
   async function publishScopeAccepted(
     projectId: string,
-    contact: typeof scopeContact = scopeContact
+    contact: Omit<typeof scopeContact, "email"> & { email?: string } = scopeContact
   ) {
     await admin.rpc("admin_save_scope_draft", {
       p_project_id: projectId,
@@ -138,27 +154,19 @@ describe("Milestone 3A build progress and preview review", () => {
     return data as { preview_revision_id: string; preview_revision: number };
   }
 
-  function isMilestone2TestProjectRow(row: { email?: string | null; company_name?: string | null }) {
-    const email = row.email ?? "";
-    const companyName = row.company_name ?? "";
-    return /^m2-.*@test\.local$/i.test(email) || companyName.startsWith("M2 ");
+  async function newNonTestDisposable(label: string) {
+    const id = await createM3aNonTestDisposableProject(admin, companyAId, label);
+    disposableCreated.push(id);
+    return id;
   }
 
-  async function readNonTestSeedProjectId() {
-    const { data, error } = await admin
-      .from("client_projects")
-      .select("id, email, company_name")
-      .eq("company_id", companyAId)
-      .order("created_at", { ascending: true });
-    if (error) {
-      throw new Error(`Could not list acme projects: ${error.message}`);
-    }
-    const row = (data ?? []).find((p) => !isMilestone2TestProjectRow(p));
-    if (!row?.id) {
-      throw new Error("Non-test seed project missing for acme-hvac.");
-    }
-    return row.id as string;
-  }
+  /** Omit email so admin_save_scope_draft preserves the disposable fixture address. */
+  const nonTestFixtureScopeContact = {
+    company_name: "M3A Fixture Scope Co",
+    contact_name: "Alex",
+    phone: "555-0100",
+    website: "",
+  };
 
   it("admin publishes preview → customer approves; payments and status unchanged", async () => {
     const projectId = await newProject("m3a-approve");
@@ -406,14 +414,8 @@ describe("Milestone 3A build progress and preview review", () => {
   });
 
   it("denies test workspace RPC on non-test projects and leaves preview and approvals unchanged", async () => {
-    const projectId = await readNonTestSeedProjectId();
-    await publishScopeAccepted(projectId, {
-      company_name: "Acme Seed QA Co",
-      contact_name: "Alex",
-      email: "seed-non-test@acme.dev",
-      phone: "555-0100",
-      website: "",
-    });
+    const projectId = await newNonTestDisposable("rpc-deny-non-test");
+    await publishScopeAccepted(projectId, nonTestFixtureScopeContact);
     await markBuildReady(projectId);
     const pub = await publishPreview(projectId);
     expect(
