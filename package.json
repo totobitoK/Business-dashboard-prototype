@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:isolation": "RUN_SUPABASE_ISOLATION_TESTS=1 vitest run src/lib/supabase/tenant-isolation.test.ts",
+    "seed:dev": "node scripts/seed-dev-users.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

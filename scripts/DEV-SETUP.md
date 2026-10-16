@@ -8,6 +8,8 @@ Copy `.env.example` to `.env.local` and set:
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SECRET_KEY` (server only — never commit)
 
+`npm run seed:dev` and `npm test` load `.env.local` automatically (see [`src/lib/load-env-local.ts`](../src/lib/load-env-local.ts)).
+
 ## 2. Auth settings (Supabase dashboard)
 
 - **Disable public sign-ups** (Auth → Providers → Email).
@@ -18,7 +20,7 @@ Copy `.env.example` to `.env.local` and set:
 ## 3. Seed development tenants
 
 ```bash
-node scripts/seed-dev-users.mjs
+npm run seed:dev
 ```
 
 Random per-user passwords are written to **`.dev-seed-credentials.json`** (gitignored, mode 600). They are not printed to the console.
@@ -31,15 +33,25 @@ Random per-user passwords are written to **`.dev-seed-credentials.json`** (gitig
 
 ## 4. Isolation tests
 
-With `.env.local` loaded:
+```bash
+npm run test:isolation
+```
+
+Or the full suite (isolation tests skip unless `RUN_SUPABASE_ISOLATION_TESTS=1`):
 
 ```bash
-RUN_SUPABASE_ISOLATION_TESTS=1 npm test -- src/lib/supabase/tenant-isolation.test.ts
+npm test
+RUN_SUPABASE_ISOLATION_TESTS=1 npm run test:isolation
 ```
 
 Tests use **publishable key + signInWithPassword** only (no service role).
 
-## 5. Routes
+## 5. Scope-card filesystem exports
+
+- **Demo** exports → `clients/demo/` via `/api/demo/scope-card` (development only).
+- **Live** exports → `clients/` via `/api/scope-card` (platform admin, development only).
+
+## 6. Routes
 
 | URL | Mode |
 |-----|------|

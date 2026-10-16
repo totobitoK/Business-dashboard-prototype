@@ -11,6 +11,9 @@ import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { loadEnvLocalFiles } from "./load-env-local.mjs";
+
+loadEnvLocalFiles(process.cwd());
 
 const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY;

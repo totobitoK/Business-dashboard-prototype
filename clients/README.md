@@ -2,6 +2,9 @@
 
 This folder holds **scope-card JSON files** — the agent contract for each accepted client.
 
+- **`clients/`** — live exports (platform admin, development server only).
+- **`clients/demo/`** — demo prototype exports from `/api/demo/scope-card` (development only; separate from live files).
+
 ## Who reads and writes
 
 - **RavenView (the app) is the writer.** Files are created or updated when an admin accepts a scope card from the client book.

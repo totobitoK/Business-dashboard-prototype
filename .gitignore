@@ -39,3 +39,4 @@ next-env.d.ts
 # scope-card exports (runtime writes; sample file is tracked)
 /clients/*.json
 !/clients/northline-supply.json
+/clients/demo/

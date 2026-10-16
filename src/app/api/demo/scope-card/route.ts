@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
-import { resolveScopeCardWrite } from "@/lib/scope-card-writer";
+import {
+  assertFilesystemScopeExportAllowed,
+  resolveScopeCardWrite,
+} from "@/lib/scope-card-writer";
 import type { ScopeCard } from "@/lib/scope-card";
 
-/** Demo-only scope card export (local filesystem). Not for live tenant data. */
+/** Demo-only scope card export → clients/demo/ (development only). */
 export async function POST(request: Request) {
   try {
+    try {
+      assertFilesystemScopeExportAllowed();
+    } catch {
+      return NextResponse.json(
+        { error: "Scope-card filesystem export is disabled outside development." },
+        { status: 403 }
+      );
+    }
+
     const body = (await request.json()) as { card?: ScopeCard };
     if (!body.card?.client_id) {
       return NextResponse.json(
@@ -13,7 +25,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await resolveScopeCardWrite(body.card);
+    const result = await resolveScopeCardWrite(body.card, "demo");
 
     return NextResponse.json({
       ok: true,
