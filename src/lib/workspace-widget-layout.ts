@@ -43,6 +43,9 @@ export interface WorkspaceLayoutSettings {
   revenueHiddenKpis: RevenueKpiId[];
 }
 
+/** Alias used by customer portal context and settings UI. */
+export type WorkspaceAppearanceSettings = WorkspaceLayoutSettings;
+
 export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutSettings = {
   themeId: "purple",
   showCompactMetrics: false,

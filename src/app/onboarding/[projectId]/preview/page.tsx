@@ -1,7 +1,7 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { WorkspaceSampleDashboard } from "@/components/customer/WorkspaceSampleDashboard";
-import { CustomerPortalProvider } from "@/lib/customer-portal-context";
+import { LiveProjectPreviewView } from "@/components/onboarding/LiveProjectPreviewView";
 import { mapLiveProjectBundleToClient } from "@/lib/db/map-live-to-client";
 import { loadProjectBundle } from "@/lib/db/project-detail.server";
 import { isValidWorkspaceId } from "@/lib/customer-workspaces";
@@ -63,15 +63,17 @@ export default async function LiveProjectPreviewPage({
         </div>
       </div>
       <div className="mx-auto max-w-6xl p-4">
-        <CustomerPortalProvider forcedWorkspaceId={workspaceId}>
-          <WorkspaceSampleDashboard
+        <Suspense fallback={<p className="text-sm text-ink-muted">Loading preview…</p>}>
+          <LiveProjectPreviewView
+            projectId={projectId}
+            workspaceId={workspaceId}
             changesRequestedNote={
               client.previewChangeRequest
                 ? `Change request on file (${getPreviewRevisionLabel(client)}).`
                 : undefined
             }
           />
-        </CustomerPortalProvider>
+        </Suspense>
       </div>
     </div>
   );

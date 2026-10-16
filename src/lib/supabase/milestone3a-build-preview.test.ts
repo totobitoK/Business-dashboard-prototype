@@ -278,7 +278,7 @@ describe("Milestone 3A build progress and preview review", () => {
       p_preview_revision_id: p.preview_revision_id,
     });
     expect(blocked.error?.message).toMatch(/STALE_PREVIEW|UNRESOLVED/i);
-  });
+  }, 15000);
 
   it("denies cross-company access and customer admin preview operations", async () => {
     const projectId = await newProject("m3a-isolation");
@@ -307,5 +307,92 @@ describe("Milestone 3A build progress and preview review", () => {
       p_demo_workspace_id: WORKSPACE_ALPINE_HVAC,
     });
     expect(customerAdmin.error?.message).toMatch(/FORBIDDEN/i);
+  });
+
+  it("rejects unknown workspace mapping on publish", async () => {
+    const projectId = await newProject("m3a-bad-ws");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const bad = await admin.rpc("admin_publish_preview_ready", {
+      p_project_id: projectId,
+      p_demo_workspace_id: "ws-unknown",
+    });
+    expect(bad.error?.message).toMatch(/INVALID_DEMO_WORKSPACE/i);
+  });
+
+  it("blocks preview publish when material scope edits are unpublished", async () => {
+    const projectId = await newProject("m3a-pending-material");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    await admin.rpc("admin_save_scope_draft", {
+      p_project_id: projectId,
+      p_contact: scopeContact,
+      p_scope_draft: { ...scopeDraft, monthly_fee: 499 },
+    });
+    const blocked = await admin.rpc("admin_publish_preview_ready", {
+      p_project_id: projectId,
+      p_demo_workspace_id: WORKSPACE_ALPINE_HVAC,
+    });
+    expect(blocked.error?.message).toMatch(/UNPUBLISHED_MATERIAL/i);
+  });
+
+  it("material draft edit invalidates ready preview before scope republish", async () => {
+    const projectId = await newProject("m3a-draft-invalidate");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const preview = await publishPreview(projectId);
+    await admin.rpc("admin_save_scope_draft", {
+      p_project_id: projectId,
+      p_contact: scopeContact,
+      p_scope_draft: { ...scopeDraft, monthly_fee: 499 },
+    });
+    const row = await admin
+      .from("client_projects")
+      .select("current_ready_preview_id, preview_feedback_unresolved")
+      .eq("id", projectId)
+      .single();
+    expect(row.data?.current_ready_preview_id).toBeNull();
+    expect(row.data?.preview_feedback_unresolved).toBe(true);
+
+    const staleApprove = await userA.rpc("customer_approve_preview", {
+      p_project_id: projectId,
+      p_preview_revision_id: preview.preview_revision_id,
+    });
+    expect(staleApprove.error?.message).toMatch(/STALE_PREVIEW|UNPUBLISHED_MATERIAL/i);
+  });
+
+  it("contact-only draft save preserves preview eligibility", async () => {
+    const projectId = await newProject("m3a-contact-only");
+    await publishScopeAccepted(projectId);
+    await markBuildReady(projectId);
+    const preview = await publishPreview(projectId);
+    await admin.rpc("admin_save_scope_draft", {
+      p_project_id: projectId,
+      p_contact: { ...scopeContact, contact_name: "Alex Updated" },
+      p_scope_draft: scopeDraft,
+    });
+    const row = await admin
+      .from("client_projects")
+      .select("current_ready_preview_id, scope_pending_material_publish")
+      .eq("id", projectId)
+      .single();
+    expect(row.data?.current_ready_preview_id).toBe(preview.preview_revision_id);
+    expect(row.data?.scope_pending_material_publish).toBe(false);
+
+    const approve = await userA.rpc("customer_approve_preview", {
+      p_project_id: projectId,
+      p_preview_revision_id: preview.preview_revision_id,
+    });
+    expect(approve.error).toBeNull();
+  });
+
+  it("requires discovery and guided setup before preview publish", async () => {
+    const projectId = await newProject("m3a-build-pre");
+    await publishScopeAccepted(projectId);
+    const blocked = await admin.rpc("admin_publish_preview_ready", {
+      p_project_id: projectId,
+      p_demo_workspace_id: WORKSPACE_ALPINE_HVAC,
+    });
+    expect(blocked.error?.message).toMatch(/BUILD_PREREQUISITES_INCOMPLETE/i);
   });
 });

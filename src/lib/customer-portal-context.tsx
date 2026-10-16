@@ -1,70 +1,39 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import type { LayoutCustomizeTheme } from "./layout-customize-themes";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { LAYOUT_CUSTOMIZE_THEMES } from "./layout-customize-themes";
 import {
   CUSTOMER_DEMO_WORKSPACES,
   getDefaultWorkspaceId,
   getWorkspaceById,
   isValidWorkspaceId,
-  type CustomerWorkspaceMeta,
 } from "./customer-workspaces";
 import { useClientStore } from "./client-store";
-import type { Client } from "./types";
 import {
   DEFAULT_WORKSPACE_LAYOUT,
   normalizeLayoutSettings,
   type DashboardWidgetId,
   type OverviewKpiId,
   type RevenueKpiId,
-  type WorkspaceLayoutSettings,
+  type WorkspaceAppearanceSettings,
 } from "./workspace-widget-layout";
 import { moveKpi, toggleKpiHidden } from "./workspace-kpi-layout";
+import {
+  CustomerPortalContext,
+  type CustomerPortalContextValue,
+  useCustomerPortal as useCustomerPortalShared,
+} from "./customer-portal-context-shared";
 
 const WORKSPACE_STORAGE_KEY = "customer-portal-demo-workspace";
 const SETTINGS_STORAGE_KEY = "customer-portal-workspace-settings";
 
 export type WorkspaceThemeId = (typeof LAYOUT_CUSTOMIZE_THEMES)[number]["id"];
 
-export type WorkspaceAppearanceSettings = WorkspaceLayoutSettings;
+export type { WorkspaceAppearanceSettings } from "./workspace-widget-layout";
 
 const defaultSettings: WorkspaceAppearanceSettings = DEFAULT_WORKSPACE_LAYOUT;
 
 type SettingsMap = Record<string, WorkspaceAppearanceSettings>;
-
-interface CustomerPortalContextValue {
-  workspaces: CustomerWorkspaceMeta[];
-  workspaceId: string;
-  workspace: CustomerWorkspaceMeta | null;
-  workspaceInvalid: boolean;
-  /** Increments on workspace change — key transient UI state to workspace. */
-  workspaceSessionKey: number;
-  client: Client | undefined;
-  setWorkspaceId: (id: string) => void;
-  settings: WorkspaceAppearanceSettings;
-  updateSettings: (patch: Partial<WorkspaceAppearanceSettings>) => void;
-  resetLayoutToDefaults: () => void;
-  moveWidget: (id: DashboardWidgetId, direction: "up" | "down") => void;
-  toggleWidgetHidden: (id: DashboardWidgetId) => void;
-  moveOverviewKpi: (id: OverviewKpiId, direction: "up" | "down") => void;
-  toggleOverviewKpiHidden: (id: OverviewKpiId) => void;
-  moveRevenueKpi: (id: RevenueKpiId, direction: "up" | "down") => void;
-  toggleRevenueKpiHidden: (id: RevenueKpiId) => void;
-  theme: LayoutCustomizeTheme;
-}
-
-const CustomerPortalContext = createContext<CustomerPortalContextValue | null>(
-  null
-);
 
 function loadSettings(): SettingsMap {
   try {
@@ -90,33 +59,16 @@ function resolveWorkspaceIdFromQuery(): string | null {
   return isValidWorkspaceId(param) ? param : "__invalid__";
 }
 
-export function CustomerPortalProvider({
-  children,
-  forcedWorkspaceId,
-}: {
-  children: ReactNode;
-  /** Live preview: lock sample data to a project-specific workspace (never cross-tenant). */
-  forcedWorkspaceId?: string;
-}) {
+/** Demo dashboard portal — persisted workspace selection and demo CRM client binding. */
+export function CustomerPortalProvider({ children }: { children: ReactNode }) {
   const { clients } = useClientStore();
-  const lockedWorkspace =
-    forcedWorkspaceId && isValidWorkspaceId(forcedWorkspaceId) ? forcedWorkspaceId : null;
-  const [workspaceId, setWorkspaceIdState] = useState(() =>
-    lockedWorkspace ?? getDefaultWorkspaceId()
-  );
+  const [workspaceId, setWorkspaceIdState] = useState(getDefaultWorkspaceId);
   const [workspaceInvalid, setWorkspaceInvalid] = useState(false);
   const [settingsMap, setSettingsMap] = useState<SettingsMap>({});
   const [portalSynced, setPortalSynced] = useState(false);
   const [workspaceSessionKey, setWorkspaceSessionKey] = useState(0);
 
   useEffect(() => {
-    if (lockedWorkspace) {
-      setWorkspaceIdState(lockedWorkspace);
-      setWorkspaceInvalid(false);
-      setSettingsMap(loadSettings());
-      setPortalSynced(true);
-      return;
-    }
     const fromQuery = resolveWorkspaceIdFromQuery();
     if (fromQuery === "__invalid__") {
       setWorkspaceInvalid(true);
@@ -139,7 +91,7 @@ export function CustomerPortalProvider({
     }
     setSettingsMap(loadSettings());
     setPortalSynced(true);
-  }, [lockedWorkspace]);
+  }, []);
 
   useEffect(() => {
     if (!portalSynced || workspaceInvalid || !workspaceId) return;
@@ -317,7 +269,7 @@ export function CustomerPortalProvider({
     [workspaceId, workspaceInvalid]
   );
 
-  const value = useMemo(
+  const value = useMemo<CustomerPortalContextValue>(
     () => ({
       workspaces: CUSTOMER_DEMO_WORKSPACES,
       workspaceId,
@@ -336,6 +288,7 @@ export function CustomerPortalProvider({
       moveRevenueKpi,
       toggleRevenueKpiHidden,
       theme,
+      liveSamplePreview: false,
     }),
     [
       workspaceId,
@@ -364,11 +317,11 @@ export function CustomerPortalProvider({
   );
 }
 
-/** Applies ?workspace= on navigation (overrides stored demo selection). */
 export function CustomerPortalQuerySync() {
-  const { setWorkspaceId } = useCustomerPortal();
+  const { setWorkspaceId, liveSamplePreview } = useCustomerPortalShared();
 
   useEffect(() => {
+    if (liveSamplePreview) return;
     function applyFromUrl() {
       const param = new URLSearchParams(window.location.search).get("workspace");
       if (param && isValidWorkspaceId(param)) {
@@ -378,17 +331,13 @@ export function CustomerPortalQuerySync() {
     applyFromUrl();
     window.addEventListener("popstate", applyFromUrl);
     return () => window.removeEventListener("popstate", applyFromUrl);
-  }, [setWorkspaceId]);
+  }, [setWorkspaceId, liveSamplePreview]);
 
   return null;
 }
 
 export function useCustomerPortal() {
-  const ctx = useContext(CustomerPortalContext);
-  if (!ctx) {
-    throw new Error("useCustomerPortal must be used within CustomerPortalProvider");
-  }
-  return ctx;
+  return useCustomerPortalShared();
 }
 
 export function buildCustomerPortalPreviewUrl(workspaceId: string): string {

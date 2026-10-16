@@ -35,6 +35,18 @@ function mapPreviewRpcError(message: string): string {
   if (message.includes("SCOPE_NOT_ACCEPTED")) {
     return "Customer must accept scope before preview review.";
   }
+  if (message.includes("UNPUBLISHED_MATERIAL")) {
+    return "Scope has unpublished material changes. Publish scope before preview review.";
+  }
+  if (message.includes("SCOPE_REVIEW_REQUIRED")) {
+    return "Scope needs admin review before preview can proceed.";
+  }
+  if (message.includes("INVALID_DEMO_WORKSPACE")) {
+    return "Sample workspace mapping is not configured for this project.";
+  }
+  if (message.includes("BUILD_PREREQUISITES_INCOMPLETE")) {
+    return "Complete discovery and guided setup before marking a preview ready.";
+  }
   return message;
 }
 

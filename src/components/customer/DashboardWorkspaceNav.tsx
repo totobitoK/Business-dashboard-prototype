@@ -12,10 +12,12 @@ import { useCustomerPortal } from "@/lib/customer-portal-context";
 export function DashboardWorkspaceNav({ embedded = false }: { embedded?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { workspaceId, theme } = useCustomerPortal();
+  const { workspaceId, theme, navigationBase } = useCustomerPortal();
   const active = resolveDashboardSection(pathname, searchParams);
 
   if (!workspaceId) return null;
+
+  const linkBase = navigationBase ?? undefined;
 
   const base = embedded
     ? "border-white/20 bg-white/10"
@@ -28,7 +30,11 @@ export function DashboardWorkspaceNav({ embedded = false }: { embedded?: boolean
     >
       {DASHBOARD_SECTIONS.map((section) => {
         const isActive = section.id === active;
-        const href = dashboardSectionHref(workspaceId, section.id);
+        const href = dashboardSectionHref(
+          workspaceId,
+          section.id,
+          linkBase ?? undefined
+        );
         return (
           <Link
             key={section.id}

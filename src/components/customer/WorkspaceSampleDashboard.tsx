@@ -203,7 +203,15 @@ export function WorkspaceSampleDashboard({
   changesRequestedNote?: string;
   mode?: "overview" | "revenue";
 }) {
-  const { workspaceId, theme, settings, workspaceSessionKey } = useCustomerPortal();
+  const {
+    workspaceId,
+    theme,
+    settings,
+    workspaceSessionKey,
+    navigationBase,
+    liveSamplePreview,
+  } = useCustomerPortal();
+  const sectionLinkBase = navigationBase ?? dashboardRoutes.home;
   const data = getWorkspaceBusinessData(workspaceId);
 
   const [preset, setPreset] = useState<ReportingPeriodPreset>("mtd");
@@ -482,6 +490,7 @@ export function WorkspaceSampleDashboard({
         computed={computed}
         overviewKpiIds={visibleOverviewKpis}
         revenueKpiIds={visibleRevenueKpis}
+        liveSamplePreview={liveSamplePreview}
       />
     ),
     collections_chart: <CollectionsTrendChart trend={computed.trend} theme={theme} />,
@@ -535,7 +544,7 @@ export function WorkspaceSampleDashboard({
           setSelectedJobId(null);
         }}
         formatDateTime={formatAppointmentDateTime}
-        scheduleHref={dashboardSectionHref(workspaceId, "schedule")}
+        scheduleHref={dashboardSectionHref(workspaceId, "schedule", sectionLinkBase)}
         embedded
         bare
       />
@@ -768,7 +777,7 @@ export function WorkspaceSampleDashboard({
                 subtitleAlign: "center" as const,
                 headerAside: (
                   <Link
-                    href={dashboardSectionHref(workspaceId, "schedule")}
+                    href={dashboardSectionHref(workspaceId, "schedule", sectionLinkBase)}
                     className={`inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${theme.filterSecondaryButton}`}
                   >
                     Open schedule
@@ -890,6 +899,7 @@ function MetricsKpiGrid({
   computed,
   overviewKpiIds,
   revenueKpiIds,
+  liveSamplePreview,
 }: {
   mode: "overview" | "revenue";
   compact: boolean;
@@ -897,6 +907,7 @@ function MetricsKpiGrid({
   computed: MetricsKpiComputed;
   overviewKpiIds: OverviewKpiId[];
   revenueKpiIds: RevenueKpiId[];
+  liveSamplePreview?: boolean;
 }) {
   const ids = mode === "revenue" ? revenueKpiIds : overviewKpiIds;
 
@@ -905,14 +916,21 @@ function MetricsKpiGrid({
       <p
         className={`rounded-lg border border-dashed px-4 py-6 text-center text-sm text-ink-muted ${theme.kpiEmptyState}`}
       >
-        No KPI cards selected.{" "}
-        <Link
-          href={dashboardRoutes.settings}
-          className={`font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
-        >
-          Choose KPIs in Appearance & layout
-        </Link>
-        .
+        No KPI cards selected.
+        {liveSamplePreview ? (
+          " Layout customization is not available on the live sample preview."
+        ) : (
+          <>
+            {" "}
+            <Link
+              href={dashboardRoutes.settings}
+              className={`font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
+            >
+              Choose KPIs in Appearance & layout
+            </Link>
+            .
+          </>
+        )}
       </p>
     );
   }

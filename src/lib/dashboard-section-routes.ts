@@ -38,17 +38,27 @@ export function dashboardSectionHref(
   basePath: string = dashboardRoutes.home
 ): string {
   const url = new URL(basePath, "http://local");
-  url.searchParams.set("workspace", workspaceId);
+  const liveProjectPreview = basePath.includes("/onboarding/") && basePath.endsWith("/preview");
+  if (!liveProjectPreview) {
+    url.searchParams.set("workspace", workspaceId);
+  }
   if (sectionId !== "overview") {
     url.searchParams.set("section", sectionId);
   }
-  return `${url.pathname}?${url.searchParams.toString()}`;
+  const qs = url.searchParams.toString();
+  return qs ? `${url.pathname}?${qs}` : url.pathname;
 }
 
 export function resolveDashboardSection(
   pathname: string,
   searchParams: Pick<URLSearchParams, "get">
 ): DashboardSectionId {
+  if (pathname.includes("/onboarding/") && pathname.endsWith("/preview")) {
+    const section = searchParams.get("section");
+    if (section === "revenue" || section === "schedule") return section;
+    return "overview";
+  }
+
   const base = dashboardBaseFromPathname(pathname);
   const routes = dashboardRoutesForPathname(pathname);
   if (pathname.startsWith(`${base}/revenue`)) return "revenue";
