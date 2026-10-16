@@ -100,7 +100,10 @@ export function mapLiveProjectBundleToClient(bundle: LiveProjectBundle): Client 
     onboardingFormStatus: formStatus,
     onboardingDraft: draft,
     onboardingSubmission: submission,
-    scopeRevision: p.scope_draft_revision,
+    scopeRevision:
+      p.published_revision > 0 && p.scope_pending_material_publish
+        ? p.published_revision + 1
+        : p.published_revision,
     publishedScopeRevision:
       p.published_revision > 0 ? p.published_revision : undefined,
     scopePublishedAt: published?.published_at,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ClientOnboardingForm } from "@/components/onboarding/ClientOnboardingForm";
 import { ScopeAcceptancePanel } from "@/components/onboarding/ScopeAcceptancePanel";
@@ -12,9 +12,11 @@ import {
   submitIntakeAction,
 } from "@/lib/actions/milestone2-rpc";
 import { isMilestoneComplete } from "@/lib/client-milestones";
+import { LiveIntakePersistQueue } from "@/lib/onboarding-live-intake-persist";
 import type { OnboardingIntakeApi } from "@/lib/onboarding-intake-api";
 import type { OnboardingScopeApi } from "@/lib/onboarding-scope-api";
-import type { Client } from "@/lib/types";
+import type { Client, ClientOnboardingAnswers, ClientOnboardingDraft } from "@/lib/types";
+import { toFullAnswers } from "@/lib/onboarding-form";
 
 export function LiveOnboardingJourney({
   client,
@@ -24,7 +26,15 @@ export function LiveOnboardingJourney({
   initialDraftVersion: number;
 }) {
   const router = useRouter();
-  const [draftVersion, setDraftVersion] = useState(initialDraftVersion);
+  const queueRef = useRef<LiveIntakePersistQueue | null>(null);
+  if (!queueRef.current) {
+    queueRef.current = new LiveIntakePersistQueue(initialDraftVersion);
+  }
+  const queue = queueRef.current;
+
+  useEffect(() => {
+    queue.setDraftVersion(initialDraftVersion);
+  }, [initialDraftVersion, queue]);
 
   const refresh = useCallback(() => {
     router.refresh();
@@ -32,23 +42,39 @@ export function LiveOnboardingJourney({
 
   const intakeApi: OnboardingIntakeApi = useMemo(
     () => ({
-      draftVersion,
-      setDraftVersion,
-      async saveOnboardingDraft(projectId, draft) {
-        const result = await saveIntakeDraftAction(projectId, draftVersion, draft);
-        if (result.ok) {
-          setDraftVersion(result.draftVersion);
-          refresh();
-        }
+      get draftVersion() {
+        return queue.getDraftVersion();
+      },
+      setDraftVersion(version: number) {
+        queue.setDraftVersion(version);
+      },
+      async saveOnboardingDraft(projectId: string, draft: ClientOnboardingDraft) {
+        const result = await queue.enqueueSave(projectId, draft, async (id, expected, d) => {
+          const res = await saveIntakeDraftAction(id, expected, d);
+          if (!res.ok) {
+            return {
+              ok: false as const,
+              error: res.error,
+              conflict: res.error.includes("out of date"),
+            };
+          }
+          return { ok: true as const, draftVersion: res.draftVersion };
+        });
+        if (result.ok) refresh();
         return result;
       },
-      async submitOnboarding(projectId, answers) {
-        const result = await submitIntakeAction(projectId, draftVersion, answers);
+      async submitOnboarding(projectId: string, answers: ClientOnboardingAnswers) {
+        await queue.waitUntilIdle();
+        const full = toFullAnswers(answers);
+        const result = await queue.enqueueSubmit(projectId, full, async (id, expected, sub) => {
+          const res = await submitIntakeAction(id, expected, sub);
+          return res.ok ? { ok: true as const } : { ok: false as const, error: res.error };
+        });
         if (result.ok) refresh();
         return result;
       },
     }),
-    [draftVersion, refresh]
+    [queue, refresh]
   );
 
   const scopeApi: OnboardingScopeApi = useMemo(

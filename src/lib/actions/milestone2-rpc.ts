@@ -29,6 +29,13 @@ function mapRpcError(message: string): string {
     return "Scope revision does not match the published snapshot.";
   }
   if (message.includes("NOTE_REQUIRED")) return "Please describe the changes you need.";
+  if (message.includes("UNPUBLISHED_MATERIAL")) {
+    return "Scope is being updated. Wait for RavenView to publish the latest revision before accepting.";
+  }
+  if (message.includes("INTAKE_VALIDATION") || message.includes("VALIDATION_ERROR")) {
+    const detail = message.split(":").slice(1).join(":").trim();
+    return detail || "Please complete all required intake fields.";
+  }
   return message;
 }
 

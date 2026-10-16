@@ -197,4 +197,59 @@ describe("OnboardingFormAutosaveCoordinator", () => {
 
     expect(await coordinator.persistNavigation(2, { company: "Co" })).toBe(false);
   });
+
+  it("serializes overlapping saves and preserves newer typing after slow save", async () => {
+    vi.useFakeTimers();
+    let persistCalls = 0;
+    const coordinator = new OnboardingFormAutosaveCoordinator(
+      AUTOSAVE_MS,
+      () => true,
+      async () => {
+        persistCalls += 1;
+        const call = persistCalls;
+        await new Promise((r) => setTimeout(r, call === 1 ? 100 : 10));
+        return { ok: true };
+      }
+    );
+
+    coordinator.scheduleAutosave(1, { company: "First", contactName: "", email: "" });
+    vi.advanceTimersByTime(AUTOSAVE_MS);
+    coordinator.scheduleAutosave(1, { company: "Second", contactName: "", email: "" });
+    vi.advanceTimersByTime(AUTOSAVE_MS);
+    await vi.runAllTimersAsync();
+
+    expect(persistCalls).toBeGreaterThanOrEqual(2);
+    vi.useRealTimers();
+  });
+
+  it("waitUntilIdle resolves after in-flight navigation save", async () => {
+    const coordinator = new OnboardingFormAutosaveCoordinator(
+      AUTOSAVE_MS,
+      () => true,
+      async () => ({ ok: true })
+    );
+
+    const saving = coordinator.persistNavigation(2, {
+      company: "Co",
+      contactName: "N",
+      email: "e@e.com",
+    });
+    await expect(coordinator.waitUntilIdle()).resolves.toBeUndefined();
+    expect(await saving).toBe(true);
+  });
+
+  it("surfaces conflict errors from persistence", async () => {
+    const errors: string[] = [];
+    const coordinator = new OnboardingFormAutosaveCoordinator(
+      AUTOSAVE_MS,
+      () => true,
+      async () => ({ ok: false, error: "out of date", conflict: true }),
+      (_status, err) => {
+        if (err) errors.push(err);
+      }
+    );
+
+    expect(await coordinator.persistNavigation(2, { company: "Co" })).toBe(false);
+    expect(errors.some((e) => e.includes("out of date"))).toBe(true);
+  });
 });

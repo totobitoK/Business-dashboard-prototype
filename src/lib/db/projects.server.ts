@@ -3,6 +3,10 @@ import {
   requirePlatformAdmin,
   requireProjectAccess,
 } from "@/lib/auth/authorization";
+import {
+  CLIENT_PROJECT_ADMIN_COLUMNS,
+  CLIENT_PROJECT_MEMBER_COLUMNS,
+} from "@/lib/db/project-columns";
 import type { LiveClientProject, LiveCompany } from "@/lib/db/live-types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,7 +16,7 @@ export async function listAllProjectsForAdmin(): Promise<LiveClientProject[]> {
 
   const { data, error } = await supabase
     .from("client_projects")
-    .select("*")
+    .select(CLIENT_PROJECT_ADMIN_COLUMNS)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -27,7 +31,7 @@ export async function listProjectsForMember(): Promise<LiveClientProject[]> {
 
   const { data, error } = await supabase
     .from("client_projects")
-    .select("*")
+    .select(CLIENT_PROJECT_MEMBER_COLUMNS)
     .in("company_id", ctx.companyIds)
     .order("created_at", { ascending: false });
 
@@ -43,7 +47,7 @@ export async function getProjectByIdForUser(
 
   const { data, error } = await supabase
     .from("client_projects")
-    .select("*")
+    .select(CLIENT_PROJECT_MEMBER_COLUMNS)
     .eq("id", projectId)
     .single();
 

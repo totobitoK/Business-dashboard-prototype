@@ -32,7 +32,7 @@ export default async function LiveAdminProjectPage({
       <Link href={adminRoutes.clients} className="text-sm font-medium text-purple hover:underline">
         ← All clients
       </Link>
-      <LiveProjectScopeEditor project={p} />
+      <LiveProjectScopeEditor project={p} adminScopeDraft={bundle.adminScopeDraft} />
     </div>
   );
 }

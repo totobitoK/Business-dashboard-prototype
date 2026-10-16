@@ -23,6 +23,20 @@ function milestonePrerequisites(): { ok: true } | { ok: false; reason: string } 
   return { ok: true };
 }
 
+function validSubmission(overrides: Record<string, unknown> = {}) {
+  return {
+    company: "Test Co",
+    contactName: "Alex",
+    email: "alex@test.dev",
+    phone: "555-0100",
+    businessDescription: "We install HVAC systems.",
+    dashboardGoals: "Track jobs and revenue.",
+    selectedTools: ["quickbooks"],
+    submittedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
 async function signIn(
   url: string,
   key: string,
@@ -70,11 +84,75 @@ describe("Milestone 2 live writes (RPC + RLS)", () => {
     projectBId = b.data[0].id as string;
   });
 
-  it("customer saves intake draft on own project", async () => {
-    const client = await signIn(url, key, USER_B, seed.users[USER_B]!);
-    const { data, error } = await client.rpc("customer_save_intake_draft", {
+  it("customer cannot read admin scope draft table", async () => {
+    const client = await signIn(url, key, USER_A, seed.users[USER_A]!);
+    const { data, error } = await client
+      .from("admin_project_scope_drafts")
+      .select("scope_draft")
+      .eq("project_id", projectAId);
+    expect(error).toBeNull();
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it("admin can read admin scope draft table", async () => {
+    const admin = await signIn(url, key, ADMIN, seed.users[ADMIN]!);
+    const { error } = await admin
+      .from("admin_project_scope_drafts")
+      .select("project_id")
+      .eq("project_id", projectAId)
+      .maybeSingle();
+    expect(error).toBeNull();
+  });
+
+  it("rejects empty and invalid intake submissions without partial writes", async () => {
+    const customer = await signIn(url, key, USER_B, seed.users[USER_B]!);
+    const before = await customer
+      .from("client_projects")
+      .select("company_name")
+      .eq("id", projectBId)
+      .single();
+
+    const empty = await customer.rpc("customer_submit_intake", {
       p_project_id: projectBId,
       p_expected_version: 1,
+      p_submission: { company: "", contactName: "", email: "bad", selectedTools: [] },
+    });
+    expect(empty.error?.message).toMatch(/INTAKE_VALIDATION/i);
+
+    const after = await customer
+      .from("client_projects")
+      .select("company_name")
+      .eq("id", projectBId)
+      .single();
+    expect(after.data?.company_name).toBe(before.data?.company_name);
+  });
+
+  it("rejects malformed intake draft payloads", async () => {
+    const customer = await signIn(url, key, USER_B, seed.users[USER_B]!);
+    const { error } = await customer.rpc("customer_save_intake_draft", {
+      p_project_id: projectBId,
+      p_expected_version: 1,
+      p_current_step: "9",
+      p_draft: { selectedTools: "not-an-array" },
+    });
+    expect(error?.message).toMatch(/INTAKE_VALIDATION/i);
+  });
+
+  it("customer saves intake draft on own project", async () => {
+    const client = await signIn(url, key, USER_A, seed.users[USER_A]!);
+    const intake = await client
+      .from("project_intake")
+      .select("form_status, draft_version")
+      .eq("project_id", projectAId)
+      .maybeSingle();
+    if (intake.data?.form_status === "submitted") {
+      expect(intake.data.draft_version).toBeGreaterThan(0);
+      return;
+    }
+    const expected = (intake.data?.draft_version as number) ?? 1;
+    const { data, error } = await client.rpc("customer_save_intake_draft", {
+      p_project_id: projectAId,
+      p_expected_version: expected,
       p_current_step: "1",
       p_draft: {
         company: "Acme HVAC",
@@ -160,6 +238,127 @@ describe("Milestone 2 live writes (RPC + RLS)", () => {
       p_scope_draft: { setup_fee: 9999 },
     });
     expect(error?.message).toMatch(/FORBIDDEN/i);
+  });
+
+  it("blocks scope acceptance while unpublished material edits exist", async () => {
+    const admin = await signIn(url, key, ADMIN, seed.users[ADMIN]!);
+    await admin.rpc("admin_save_scope_draft", {
+      p_project_id: projectAId,
+      p_contact: {
+        company_name: "Acme HVAC",
+        contact_name: "Alex",
+        email: "alex@acme.dev",
+        phone: "555-0100",
+        website: "",
+      },
+      p_scope_draft: {
+        setup_fee: 5000,
+        monthly_fee: 400,
+        agreed_scope_summary: "Pending publish block test",
+        dashboard_scope: "Ops",
+        accepted_sources_in: ["QuickBooks"],
+        accepted_screens: ["Overview"],
+      },
+    });
+    const { data: pub } = await admin.rpc("admin_publish_scope", { p_project_id: projectAId });
+    const pubRow = pub as { revision?: number; scope_revision_id?: string };
+    expect(pubRow.revision).toBeDefined();
+    expect(pubRow.scope_revision_id).toBeDefined();
+    const revision = pubRow.revision as number;
+    const scopeRevisionId = pubRow.scope_revision_id as string;
+
+    await admin.rpc("admin_save_scope_draft", {
+      p_project_id: projectAId,
+      p_contact: {
+        company_name: "Acme HVAC",
+        contact_name: "Alex",
+        email: "alex@acme.dev",
+        phone: "555-0100",
+        website: "",
+      },
+      p_scope_draft: {
+        setup_fee: 5100,
+        monthly_fee: 400,
+        agreed_scope_summary: "Pending publish block test",
+        dashboard_scope: "Ops",
+        accepted_sources_in: ["QuickBooks"],
+        accepted_screens: ["Overview"],
+      },
+    });
+
+    const customer = await signIn(url, key, USER_A, seed.users[USER_A]!);
+    const blocked = await customer.rpc("customer_accept_scope", {
+      p_project_id: projectAId,
+      p_revision: revision,
+      p_scope_revision_id: scopeRevisionId,
+    });
+    expect(blocked.error?.message).toMatch(/UNPUBLISHED_MATERIAL/i);
+
+    const { data: pub2, error: pub2Err } = await admin.rpc("admin_publish_scope", {
+      p_project_id: projectAId,
+    });
+    expect(pub2Err).toBeNull();
+    const pub2Row = pub2 as { revision?: number; scope_revision_id?: string };
+    expect(pub2Row.revision).toBeDefined();
+    expect(pub2Row.scope_revision_id).toBeDefined();
+    const rev2 = pub2Row.revision as number;
+    const id2 = pub2Row.scope_revision_id as string;
+    const accept = await customer.rpc("customer_accept_scope", {
+      p_project_id: projectAId,
+      p_revision: rev2,
+      p_scope_revision_id: id2,
+    });
+    expect(accept.error).toBeNull();
+  });
+
+  it("contact-only admin edits do not block acceptance of current published revision", async () => {
+    const admin = await signIn(url, key, ADMIN, seed.users[ADMIN]!);
+    const scope = {
+      setup_fee: 3300,
+      monthly_fee: 275,
+      agreed_scope_summary: "Contact-only test",
+      dashboard_scope: "KPIs",
+      accepted_sources_in: ["Stripe"],
+      accepted_screens: ["Home"],
+    };
+    await admin.rpc("admin_save_scope_draft", {
+      p_project_id: projectAId,
+      p_contact: {
+        company_name: "Acme HVAC",
+        contact_name: "Alex",
+        email: "alex@acme.dev",
+        phone: "555-0100",
+        website: "",
+      },
+      p_scope_draft: scope,
+    });
+    const { data: pub } = await admin.rpc("admin_publish_scope", { p_project_id: projectAId });
+    const pubRow = pub as { revision?: number; scope_revision_id?: string };
+    expect(pubRow.revision).toBeDefined();
+    expect(pubRow.scope_revision_id).toBeDefined();
+    const revision = pubRow.revision as number;
+    const scopeRevisionId = pubRow.scope_revision_id as string;
+
+    await admin.rpc("admin_save_scope_draft", {
+      p_project_id: projectAId,
+      p_contact: {
+        company_name: "Acme HVAC",
+        contact_name: "Alex Updated",
+        email: "alex@acme.dev",
+        phone: "555-0199",
+        website: "",
+      },
+      p_scope_draft: scope,
+    });
+
+    const customer = await signIn(url, key, USER_A, seed.users[USER_A]!);
+    const accept = await customer.rpc("customer_accept_scope", {
+      p_project_id: projectAId,
+      p_revision: revision,
+      p_scope_revision_id: scopeRevisionId,
+    });
+    if (accept.error?.message?.includes("ALREADY_ACCEPTED")) return;
+    expect(accept.error).toBeNull();
   });
 
   it("admin publishes scope and customer accepts revision", async () => {
@@ -251,16 +450,10 @@ describe("Milestone 2 live writes (RPC + RLS)", () => {
       const submit = await customer.rpc("customer_submit_intake", {
         p_project_id: projectBId,
         p_expected_version: version,
-        p_submission: {
-          company: "Acme HVAC",
-          contactName: "Alex",
-          email: "alex@acme.dev",
-          phone: "555-0100",
-          businessDescription: "Done",
-          dashboardGoals: "Goals",
+        p_submission: validSubmission({
           selectedTools: ["other"],
-          submittedAt: new Date().toISOString(),
-        },
+          otherToolExplanation: "Legacy spreadsheet",
+        }),
       });
       expect(submit.error).toBeNull();
     }

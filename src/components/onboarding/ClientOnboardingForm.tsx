@@ -34,7 +34,7 @@ export function ClientOnboardingForm({
   intakeApi: OnboardingIntakeApi;
   embedded?: boolean;
 }) {
-  const { saveOnboardingDraft, submitOnboarding, setDraftVersion } = intakeApi;
+  const { submitOnboarding } = intakeApi;
   const clientIdRef = useRef(client.id);
   const submittedRef = useRef(client.onboardingFormStatus === "submitted");
 
@@ -61,6 +61,9 @@ export function ClientOnboardingForm({
     }
   }, [client.onboardingFormStatus]);
 
+  const intakeApiRef = useRef(intakeApi);
+  intakeApiRef.current = intakeApi;
+
   const autosaveRef = useRef<OnboardingFormAutosaveCoordinator | null>(null);
   const autosaveClientIdRef = useRef<string | null>(null);
   if (!autosaveRef.current || autosaveClientIdRef.current !== client.id) {
@@ -71,11 +74,18 @@ export function ClientOnboardingForm({
         clientIdRef.current === client.id &&
         client.onboardingFormStatus !== "submitted",
       async (draft) => {
-        const result = await saveOnboardingDraft(client.id, draft);
-        if (result.ok && result.draftVersion != null) {
-          setDraftVersion(result.draftVersion);
+        try {
+          const result = await intakeApiRef.current.saveOnboardingDraft(client.id, draft);
+          if (result.ok && result.draftVersion != null) {
+            intakeApiRef.current.setDraftVersion(result.draftVersion);
+          }
+          return result;
+        } catch {
+          return {
+            ok: false,
+            error: "Could not save — check your connection and try again.",
+          };
         }
-        return result;
       },
       (status, error) => {
         setSaveStatus(status);
@@ -187,14 +197,25 @@ export function ClientOnboardingForm({
       return;
     }
     setSubmitError(null);
-    const full = toFullAnswers(answers);
-    const result = await submitOnboarding(client.id, full);
-    if (!result.ok) {
-      setSubmitError(result.error ?? "Could not submit — try again.");
-      return;
+    try {
+      await autosave.waitUntilIdle();
+      const saved = await autosave.persistLatestPending(step, answers);
+      if (!saved) {
+        setSubmitError(saveError ?? "Could not save your latest answers before submitting.");
+        return;
+      }
+      await autosave.waitUntilIdle();
+      const full = toFullAnswers(answers);
+      const result = await submitOnboarding(client.id, full);
+      if (!result.ok) {
+        setSubmitError(result.error ?? "Could not submit — try again.");
+        return;
+      }
+      submittedRef.current = true;
+      setSubmitted(true);
+    } catch {
+      setSubmitError("Could not submit — check your connection and try again.");
     }
-    submittedRef.current = true;
-    setSubmitted(true);
   }
 
   if (submitted && !embedded) {

@@ -7,7 +7,7 @@ import {
   adminSaveScopeDraftAction,
   type AdminScopeDraftInput,
 } from "@/lib/actions/milestone2-rpc";
-import type { LiveClientProject } from "@/lib/db/live-types";
+import type { LiveAdminScopeDraft, LiveClientProject } from "@/lib/db/live-types";
 
 function parseList(value: string): string[] {
   return value
@@ -20,8 +20,11 @@ function formatList(values: string[] | undefined): string {
   return (values ?? []).join(", ");
 }
 
-function seedFromProject(project: LiveClientProject): AdminScopeDraftInput {
-  const draft = project.scope_admin_draft ?? {};
+function seedFromProject(
+  project: LiveClientProject,
+  adminScopeDraft: LiveAdminScopeDraft | null | undefined
+): AdminScopeDraftInput {
+  const draft = adminScopeDraft?.scope_draft ?? {};
   return {
     company_name: project.company_name,
     contact_name: project.contact_name,
@@ -37,9 +40,18 @@ function seedFromProject(project: LiveClientProject): AdminScopeDraftInput {
   };
 }
 
-export function LiveProjectScopeEditor({ project }: { project: LiveClientProject }) {
+export function LiveProjectScopeEditor({
+  project,
+  adminScopeDraft,
+}: {
+  project: LiveClientProject;
+  adminScopeDraft?: LiveAdminScopeDraft | null;
+}) {
   const router = useRouter();
-  const initial = useMemo(() => seedFromProject(project), [project]);
+  const initial = useMemo(
+    () => seedFromProject(project, adminScopeDraft),
+    [project, adminScopeDraft]
+  );
   const [draft, setDraft] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -99,8 +111,9 @@ export function LiveProjectScopeEditor({ project }: { project: LiveClientProject
         <div>
           <h2 className="text-lg font-semibold text-ink">Scope & contact</h2>
           <p className="text-sm text-ink-muted">
-            Published revision: {project.published_revision || "none"} · Draft revision:{" "}
-            {project.scope_draft_revision}
+            Published revision: {project.published_revision || "none"} · Material draft gen:{" "}
+            {adminScopeDraft?.material_generation ?? 0}
+            {project.scope_pending_material_publish ? " · unpublished material changes" : ""}
           </p>
         </div>
         {!editing ? (
@@ -108,7 +121,7 @@ export function LiveProjectScopeEditor({ project }: { project: LiveClientProject
             type="button"
             className="rounded-lg border border-purple-100 px-3 py-1.5 text-sm font-semibold text-ink hover:bg-purple-50"
             onClick={() => {
-              setDraft(seedFromProject(project));
+              setDraft(seedFromProject(project, adminScopeDraft));
               setEditing(true);
               setMessage(null);
               setError(null);

@@ -14,10 +14,18 @@ export interface LiveClientProject {
   onboarding_path: "full" | "payment-only";
   target_launch_date: string | null;
   dashboard_scope: string | null;
-  scope_admin_draft: Record<string, unknown>;
   published_revision: number;
-  scope_draft_revision: number;
+  scope_pending_material_publish: boolean;
+  scope_material_published_generation?: number;
   created_at: string;
+  updated_at: string;
+}
+
+export interface LiveAdminScopeDraft {
+  project_id: string;
+  company_id: string;
+  scope_draft: Record<string, unknown>;
+  material_generation: number;
   updated_at: string;
 }
 
@@ -77,4 +85,5 @@ export interface LiveProjectBundle {
   publishedScope: LiveScopeRevision | null;
   scopeAcceptance: LiveScopeAcceptance | null;
   scopeChangeRequest: LiveScopeChangeRequest | null;
+  adminScopeDraft?: LiveAdminScopeDraft | null;
 }
