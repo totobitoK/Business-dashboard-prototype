@@ -120,8 +120,12 @@ export function isMilestoneComplete(client: Client, milestone: ClientMilestone):
     case "scope-confirmed":
       return hasScopeConfirmed(client);
     case "deposit":
+      if (isLiveBuildPreviewTrack(client)) return hasScopeConfirmed(client);
       return isDepositPaid(client);
     case "final-balance":
+      if (isLiveBuildPreviewTrack(client)) {
+        return isPreviewApprovedForCurrentRevision(client);
+      }
       return isFinalBalancePaid(client);
     case "active":
       return client.status === "active";
@@ -207,7 +211,16 @@ export function getPortalJourneyBookends(client: Client): {
   };
 }
 
+export function isLiveBuildPreviewTrack(client: Client): boolean {
+  return client.liveBuildPreviewTrack === true;
+}
+
+function paymentGateSatisfied(client: Client): boolean {
+  return isDepositPaid(client) || isLiveBuildPreviewTrack(client);
+}
+
 export function canShowDepositPreview(client: Client): boolean {
+  if (isLiveBuildPreviewTrack(client)) return false;
   if (client.onboardingPath === "payment-only") {
     return (
       client.paymentOnlyPrepConfirmed === true && hasScopeConfirmed(client)
@@ -226,7 +239,7 @@ export function canShowFinalPaymentPreview(client: Client): boolean {
 }
 
 export function canShowGuidedDataSetup(client: Client): boolean {
-  return isDepositPaid(client) && hasScopeConfirmed(client);
+  return paymentGateSatisfied(client) && hasScopeConfirmed(client);
 }
 
 export function syncGuidedConnectionsFromScope(client: Client): GuidedConnection[] {

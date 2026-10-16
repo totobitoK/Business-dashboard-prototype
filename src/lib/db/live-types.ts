@@ -18,8 +18,52 @@ export interface LiveClientProject {
   scope_pending_material_publish: boolean;
   scope_material_published_generation?: number;
   scope_material_review_required?: boolean;
+  preview_feedback_unresolved?: boolean;
+  current_ready_preview_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface LiveProjectBuildProgress {
+  project_id: string;
+  company_id: string;
+  discovery_completed_at: string | null;
+  guided_setup_completed_at: string | null;
+  building_active: boolean;
+  customer_progress_note: string | null;
+  outstanding_customer_requests: string[];
+  next_update_message: string | null;
+  updated_at: string;
+}
+
+export interface LivePreviewRevision {
+  id: string;
+  project_id: string;
+  company_id: string;
+  preview_revision: number;
+  scope_revision_id: string;
+  scope_revision: number;
+  demo_workspace_id: string | null;
+  status: "draft" | "ready" | "withdrawn";
+  ready_at: string | null;
+  created_at: string;
+}
+
+export interface LivePreviewRevisionFeedback {
+  id: string;
+  preview_revision_id: string;
+  project_id: string;
+  feedback: string;
+  created_at: string;
+  submitted_by: string | null;
+}
+
+export interface LivePreviewRevisionApproval {
+  id: string;
+  preview_revision_id: string;
+  project_id: string;
+  approved_at: string;
+  approved_by: string | null;
 }
 
 export interface LiveAdminScopeDraft {
@@ -87,4 +131,9 @@ export interface LiveProjectBundle {
   scopeAcceptance: LiveScopeAcceptance | null;
   scopeChangeRequest: LiveScopeChangeRequest | null;
   adminScopeDraft?: LiveAdminScopeDraft | null;
+  buildProgress?: LiveProjectBuildProgress | null;
+  readyPreview?: LivePreviewRevision | null;
+  readyPreviewFeedback?: LivePreviewRevisionFeedback | null;
+  readyPreviewApproval?: LivePreviewRevisionApproval | null;
+  previewHistory?: LivePreviewRevision[];
 }

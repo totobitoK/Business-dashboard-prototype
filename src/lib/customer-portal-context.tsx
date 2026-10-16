@@ -90,15 +90,33 @@ function resolveWorkspaceIdFromQuery(): string | null {
   return isValidWorkspaceId(param) ? param : "__invalid__";
 }
 
-export function CustomerPortalProvider({ children }: { children: ReactNode }) {
+export function CustomerPortalProvider({
+  children,
+  forcedWorkspaceId,
+}: {
+  children: ReactNode;
+  /** Live preview: lock sample data to a project-specific workspace (never cross-tenant). */
+  forcedWorkspaceId?: string;
+}) {
   const { clients } = useClientStore();
-  const [workspaceId, setWorkspaceIdState] = useState(getDefaultWorkspaceId);
+  const lockedWorkspace =
+    forcedWorkspaceId && isValidWorkspaceId(forcedWorkspaceId) ? forcedWorkspaceId : null;
+  const [workspaceId, setWorkspaceIdState] = useState(() =>
+    lockedWorkspace ?? getDefaultWorkspaceId()
+  );
   const [workspaceInvalid, setWorkspaceInvalid] = useState(false);
   const [settingsMap, setSettingsMap] = useState<SettingsMap>({});
   const [portalSynced, setPortalSynced] = useState(false);
   const [workspaceSessionKey, setWorkspaceSessionKey] = useState(0);
 
   useEffect(() => {
+    if (lockedWorkspace) {
+      setWorkspaceIdState(lockedWorkspace);
+      setWorkspaceInvalid(false);
+      setSettingsMap(loadSettings());
+      setPortalSynced(true);
+      return;
+    }
     const fromQuery = resolveWorkspaceIdFromQuery();
     if (fromQuery === "__invalid__") {
       setWorkspaceInvalid(true);
@@ -121,7 +139,7 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
     }
     setSettingsMap(loadSettings());
     setPortalSynced(true);
-  }, []);
+  }, [lockedWorkspace]);
 
   useEffect(() => {
     if (!portalSynced || workspaceInvalid || !workspaceId) return;

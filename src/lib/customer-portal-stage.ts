@@ -11,6 +11,7 @@ import {
   hasUnresolvedPreviewFeedback,
   isPreviewApprovedForCurrentRevision,
 } from "./preview-review";
+import { isLiveBuildPreviewTrack } from "./client-milestones";
 import type { Client } from "./types";
 
 export type CustomerPortalStage =
@@ -38,6 +39,7 @@ export function getCustomerPortalStage(client: Client): CustomerPortalStage {
   if (client.status === "active") return "live";
 
   if (isPreviewApprovedForCurrentRevision(client)) {
+    if (isLiveBuildPreviewTrack(client)) return "approved-awaiting-launch";
     if (!isFinalBalancePaid(client)) return "approved-balance-due";
     return "approved-awaiting-launch";
   }
@@ -49,9 +51,10 @@ export function getCustomerPortalStage(client: Client): CustomerPortalStage {
     return "preview-ready";
   }
 
+  const depositOk = isDepositPaid(client) || isLiveBuildPreviewTrack(client);
   if (
     isMilestoneComplete(client, "building") &&
-    isDepositPaid(client) &&
+    depositOk &&
     isMilestoneComplete(client, "guided-data-setup")
   ) {
     return "preview-ready";
@@ -75,7 +78,7 @@ export function getCustomerPortalStage(client: Client): CustomerPortalStage {
     return "onboarding";
   }
 
-  if (!isScopePricingConfirmed(client) || !isDepositPaid(client)) {
+  if (!isScopePricingConfirmed(client) || (!isDepositPaid(client) && !isLiveBuildPreviewTrack(client))) {
     return "scope-and-deposit";
   }
 

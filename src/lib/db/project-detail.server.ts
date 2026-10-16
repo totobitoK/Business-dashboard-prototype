@@ -1,8 +1,9 @@
 import { requireProjectAccess, requirePlatformAdmin } from "@/lib/auth/authorization";
 import {
   CLIENT_PROJECT_ADMIN_COLUMNS,
-  CLIENT_PROJECT_MEMBER_COLUMNS,
+  CLIENT_PROJECT_MEMBER_COLUMNS_WITH_PREVIEW,
 } from "@/lib/db/project-columns";
+import { loadBuildPreviewData } from "@/lib/db/load-build-preview.server";
 import type { LiveProjectBundle } from "@/lib/db/live-types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -60,7 +61,7 @@ export async function loadProjectBundle(projectId: string): Promise<LiveProjectB
 
   const { data: project, error: projectError } = await supabase
     .from("client_projects")
-    .select(CLIENT_PROJECT_MEMBER_COLUMNS)
+    .select(CLIENT_PROJECT_MEMBER_COLUMNS_WITH_PREVIEW)
     .eq("id", projectId)
     .single();
 
@@ -70,10 +71,17 @@ export async function loadProjectBundle(projectId: string): Promise<LiveProjectB
 
   const publishedRevision = (project.published_revision as number) ?? 0;
   const related = await loadRelatedScopeData(supabase, projectId, publishedRevision);
+  const buildPreview = await loadBuildPreviewData(
+    supabase,
+    projectId,
+    project.current_ready_preview_id as string | null | undefined,
+    false
+  );
 
   return {
     project: project as LiveProjectBundle["project"],
     ...related,
+    ...buildPreview,
   };
 }
 
@@ -94,13 +102,19 @@ export async function loadProjectBundleForAdmin(
   }
 
   const publishedRevision = (project.published_revision as number) ?? 0;
-  const [related, adminDraftRes] = await Promise.all([
+  const [related, adminDraftRes, buildPreview] = await Promise.all([
     loadRelatedScopeData(supabase, projectId, publishedRevision),
     supabase
       .from("admin_project_scope_drafts")
       .select("*")
       .eq("project_id", projectId)
       .maybeSingle(),
+    loadBuildPreviewData(
+      supabase,
+      projectId,
+      project.current_ready_preview_id as string | null | undefined,
+      true
+    ),
   ]);
 
   if (adminDraftRes.error) throw new Error(adminDraftRes.error.message);
@@ -109,5 +123,6 @@ export async function loadProjectBundleForAdmin(
     project: project as LiveProjectBundle["project"],
     ...related,
     adminScopeDraft: adminDraftRes.data as LiveProjectBundle["adminScopeDraft"],
+    ...buildPreview,
   };
 }

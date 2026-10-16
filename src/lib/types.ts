@@ -214,6 +214,13 @@ export interface Client {
   previewRevisionVersion?: number;
   previewApprovedRevision?: number;
   previewFeedbackUnresolved?: boolean;
+  /** Live milestone 3A — build/preview without payment or activation. */
+  liveBuildPreviewTrack?: boolean;
+  /** Current ready preview revision row (live). */
+  previewRevisionRowId?: string;
+  demoWorkspaceId?: string;
+  outstandingCustomerRequests?: string[];
+  buildNextUpdateMessage?: string;
   /** Set when admin activates — used for archived reactivation without bypassing never-launched clients. */
   launchedAt?: string;
 }

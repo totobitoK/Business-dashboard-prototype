@@ -4,6 +4,10 @@ import type { Client } from "./types";
 /** Customer-visible open requests — only when recorded on the client. */
 export function getOutstandingCustomerRequests(client: Client): string[] {
   const items: string[] = [];
+  for (const line of client.outstandingCustomerRequests ?? []) {
+    const trimmed = line.trim();
+    if (trimmed) items.push(trimmed);
+  }
   if (client.previewFeedbackUnresolved && client.previewChangeRequest?.trim()) {
     items.push(client.previewChangeRequest.trim());
   }

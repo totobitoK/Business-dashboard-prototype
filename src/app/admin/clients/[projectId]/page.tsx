@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LiveProjectBuildPreviewEditor } from "@/components/admin/LiveProjectBuildPreviewEditor";
 import { LiveProjectScopeEditor } from "@/components/admin/LiveProjectScopeEditor";
 import { PageHeader } from "@/components/PageHeader";
 import { adminRoutes } from "@/lib/routes";
@@ -33,6 +34,14 @@ export default async function LiveAdminProjectPage({
         ← All clients
       </Link>
       <LiveProjectScopeEditor project={p} adminScopeDraft={bundle.adminScopeDraft} />
+      <LiveProjectBuildPreviewEditor
+        project={p}
+        buildProgress={bundle.buildProgress}
+        readyPreview={bundle.readyPreview}
+        readyPreviewFeedback={bundle.readyPreviewFeedback}
+        readyPreviewApproval={bundle.readyPreviewApproval}
+        previewHistory={bundle.previewHistory}
+      />
     </div>
   );
 }

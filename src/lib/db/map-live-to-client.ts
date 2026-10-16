@@ -4,12 +4,14 @@ import type {
 } from "@/lib/db/live-types";
 import type {
   Client,
+  ClientMilestone,
   ClientOnboardingAnswers,
   ClientOnboardingDraft,
   ClientOnboardingSubmission,
   OnboardingFormStatus,
   PublishedScopeSnapshot,
 } from "@/lib/types";
+import { liveClientRoutes } from "@/lib/routes";
 
 function asOnboardingFormStatus(status: string): OnboardingFormStatus {
   if (status === "submitted") return "submitted";
@@ -62,6 +64,24 @@ export function mapLiveProjectBundleToClient(bundle: LiveProjectBundle): Client 
   const published = bundle.publishedScope;
   const acceptance = bundle.scopeAcceptance;
   const changeReq = bundle.scopeChangeRequest;
+  const build = bundle.buildProgress;
+  const readyPreview = bundle.readyPreview;
+  const previewApproval = bundle.readyPreviewApproval;
+  const previewFeedback = bundle.readyPreviewFeedback;
+
+  const adminMilestones: ClientMilestone[] = [];
+  if (build?.discovery_completed_at) adminMilestones.push("discovery");
+  if (build?.guided_setup_completed_at) adminMilestones.push("guided-data-setup");
+  if (build?.building_active || readyPreview?.status === "ready") {
+    adminMilestones.push("building");
+  }
+  if (
+    previewApproval &&
+    readyPreview &&
+    previewApproval.preview_revision_id === readyPreview.id
+  ) {
+    adminMilestones.push("client-review");
+  }
 
   const draft = intake
     ? parseDraft(intake.draft ?? {}, intake.current_step)
@@ -119,6 +139,22 @@ export function mapLiveProjectBundleToClient(bundle: LiveProjectBundle): Client 
     acceptedSourcesIn: published?.accepted_sources_in ?? [],
     acceptedScreens: published?.accepted_screens ?? [],
     agreedScopeSummary: published?.agreed_scope_summary ?? undefined,
+    liveBuildPreviewTrack: true,
+    adminCompletedMilestones: adminMilestones,
+    buildStatusNote: build?.customer_progress_note ?? undefined,
+    outstandingCustomerRequests: build?.outstanding_customer_requests ?? [],
+    buildNextUpdateMessage: build?.next_update_message ?? undefined,
+    previewRevisionVersion: readyPreview?.preview_revision,
+    previewRevisionRowId: readyPreview?.id,
+    demoWorkspaceId: readyPreview?.demo_workspace_id ?? undefined,
+    previewApprovedAt: previewApproval?.approved_at,
+    previewApprovedRevision: previewApproval ? readyPreview?.preview_revision : undefined,
+    previewChangeRequest: previewFeedback?.feedback,
+    previewFeedbackUnresolved: p.preview_feedback_unresolved === true,
+    dashboardPreviewUrl:
+      readyPreview?.demo_workspace_id && readyPreview.status === "ready"
+        ? `${liveClientRoutes.onboarding(p.id)}/preview`
+        : undefined,
   };
 }
 

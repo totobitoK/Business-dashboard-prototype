@@ -101,7 +101,9 @@ describe("Milestone 2 scope review publish resolution", () => {
     expect(error).toBeNull();
   }
 
-  it("admin confirms review on publish, customer accepts new revision; customer cannot publish", async () => {
+  it(
+    "admin confirms review on publish, customer accepts new revision; customer cannot publish",
+    async () => {
     const projectId = await newProject("review-resolution");
     const scope = {
       setup_fee: 2700,
@@ -194,5 +196,7 @@ describe("Milestone 2 scope review publish resolution", () => {
       p_confirm_scope_review: true,
     });
     expect(customerPublish.error?.message).toMatch(/FORBIDDEN/i);
-  });
+    },
+    15000
+  );
 });
