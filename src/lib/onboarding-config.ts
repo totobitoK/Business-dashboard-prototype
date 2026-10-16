@@ -1,10 +1,10 @@
 /** Default discovery call booking (override with NEXT_PUBLIC_DISCOVERY_SCHEDULING_URL). */
 export const DEFAULT_DISCOVERY_SCHEDULING_URL =
-  "https://calendly.com/bookwithravenview";
+  "https://calendly.com/scheduleravenview";
 
 /** Default guided data-setup call (override with NEXT_PUBLIC_GUIDED_SETUP_SCHEDULING_URL). */
 export const DEFAULT_GUIDED_SETUP_SCHEDULING_URL =
-  "https://calendly.com/bookwithravenview";
+  "https://calendly.com/scheduleravenview";
 
 /**
  * Client onboarding configuration (non-brand).

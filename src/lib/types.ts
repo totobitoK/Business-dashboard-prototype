@@ -137,6 +137,8 @@ export interface PublishedScopeSnapshot {
   acceptedScreens: string[];
   agreedScopeSummary?: string;
   dashboardScope?: string;
+  /** Live DB row id for scope_revisions (customer acceptance RPC). */
+  revisionRowId?: string;
 }
 
 export type ScopeCustomerAcceptanceSource = "customer";

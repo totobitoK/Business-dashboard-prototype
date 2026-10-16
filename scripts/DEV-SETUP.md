@@ -31,18 +31,23 @@ Random per-user passwords are written to **`.dev-seed-credentials.json`** (gitig
 | `member-a@acme.dev` | Acme company member → `/dashboard` |
 | `member-b@beta.dev` | Beta company member → `/dashboard` |
 
-## 4. Isolation tests
+## 4. Database tests
+
+**Tenant isolation (run before enabling live writes):**
 
 ```bash
 npm run test:isolation
 ```
 
-Or the full suite (isolation tests skip unless `RUN_SUPABASE_ISOLATION_TESTS=1`):
+Fails with an explicit error if env or `.dev-seed-credentials.json` is missing (does not treat skipped checks as pass).
+
+**Milestone 2 RPC writes (intake, scope publish/accept):**
 
 ```bash
-npm test
-RUN_SUPABASE_ISOLATION_TESTS=1 npm run test:isolation
+npm run test:milestone2
 ```
+
+`npm test` skips both isolation and milestone2 suites unless their `RUN_*` env vars are set.
 
 Tests use **publishable key + signInWithPassword** only (no service role).
 
@@ -56,5 +61,6 @@ Tests use **publishable key + signInWithPassword** only (no service role).
 | URL | Mode |
 |-----|------|
 | `/demo/admin`, `/demo/dashboard`, `/demo/onboarding` | Browser localStorage demo |
-| `/admin`, `/dashboard` | Live Supabase (milestone 1 read-only) |
+| `/admin`, `/dashboard`, `/onboarding/[projectId]` | Live Supabase (auth required) |
+| `/admin/clients/[projectId]` | Platform admin scope draft + publish |
 | `/login` | Email/password sign-in |

@@ -41,9 +41,32 @@ import {
 } from "@/lib/onboarding-config";
 import { formatToolsList } from "@/lib/metrics";
 import { hasCustomerAcceptedCurrentPublishedScope } from "@/lib/scope-acceptance";
+import { useMemo } from "react";
+import { useClientStore } from "@/lib/client-store";
+import { createDemoIntakeApi } from "@/lib/onboarding-intake-api";
+import { createDemoScopeApi } from "@/lib/onboarding-scope-api";
+import type { OnboardingIntakeApi } from "@/lib/onboarding-intake-api";
+import type { OnboardingScopeApi } from "@/lib/onboarding-scope-api";
 import type { Client } from "@/lib/types";
 
-export function ClientOnboardingJourney({ client }: { client: Client }) {
+export function ClientOnboardingJourney({
+  client,
+  intakeApi,
+  scopeApi,
+}: {
+  client: Client;
+  intakeApi?: OnboardingIntakeApi;
+  scopeApi?: OnboardingScopeApi;
+}) {
+  const store = useClientStore();
+  const resolvedIntakeApi = useMemo(
+    () => intakeApi ?? createDemoIntakeApi(store),
+    [intakeApi, store]
+  );
+  const resolvedScopeApi = useMemo(
+    () => scopeApi ?? createDemoScopeApi(store),
+    [scopeApi, store]
+  );
   const schedulingUrl = getDiscoverySchedulingUrl();
   const progress = getOnboardingProgressSummary(client);
   const blockers = getOnboardingJourneyBlockers(client);
@@ -150,12 +173,12 @@ export function ClientOnboardingJourney({ client }: { client: Client }) {
 
           {currentTask.phaseKey === "intake" && client.onboardingPath === "full" && (
             <div className="mt-4">
-              <ClientOnboardingForm client={client} embedded />
+              <ClientOnboardingForm client={client} intakeApi={resolvedIntakeApi} embedded />
             </div>
           )}
 
           {currentTask.phaseKey === "scope" && (
-            <ScopeAcceptancePanel client={client} />
+            <ScopeAcceptancePanel client={client} scopeApi={resolvedScopeApi} />
           )}
 
           {currentTask.phaseKey === "deposit" && canShowDepositPreview(client) && (
@@ -261,6 +284,8 @@ export function ClientOnboardingJourney({ client }: { client: Client }) {
                       client={client}
                       phaseKey={phase.key}
                       schedulingUrl={schedulingUrl}
+                      intakeApi={resolvedIntakeApi}
+                      scopeApi={resolvedScopeApi}
                     />
                   </div>
                 )}
@@ -277,10 +302,14 @@ function StepDetail({
   client,
   phaseKey,
   schedulingUrl,
+  intakeApi,
+  scopeApi,
 }: {
   client: Client;
   phaseKey: string;
   schedulingUrl: string;
+  intakeApi: OnboardingIntakeApi;
+  scopeApi: OnboardingScopeApi;
 }) {
   switch (phaseKey) {
     case "intake":
@@ -298,7 +327,7 @@ function StepDetail({
           </p>
         );
       }
-      return <ClientOnboardingForm client={client} embedded />;
+      return <ClientOnboardingForm client={client} intakeApi={intakeApi} embedded />;
     case "discovery":
       return (
         <DiscoverySnippet
@@ -308,7 +337,7 @@ function StepDetail({
         />
       );
     case "scope":
-      return <ScopeAcceptancePanel client={client} />;
+      return <ScopeAcceptancePanel client={client} scopeApi={scopeApi} />;
     case "deposit":
       return <DepositPhase client={client} />;
     case "guided":

@@ -7,7 +7,11 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (!url || !key) {
-    if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
+    if (
+      pathname.startsWith("/admin") ||
+      pathname.startsWith("/dashboard") ||
+      pathname.startsWith("/onboarding")
+    ) {
       return NextResponse.redirect(new URL("/login?error=config", request.url));
     }
     return NextResponse.next();
@@ -35,7 +39,9 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const needsAuth =
-    pathname.startsWith("/admin") || pathname.startsWith("/dashboard");
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/onboarding");
 
   if (needsAuth && !user) {
     const loginUrl = request.nextUrl.clone();
@@ -48,5 +54,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/dashboard/:path*"],
+  matcher: ["/admin/:path*", "/dashboard/:path*", "/onboarding/:path*"],
 };

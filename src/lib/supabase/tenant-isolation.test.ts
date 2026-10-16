@@ -40,7 +40,15 @@ describe("Supabase tenant isolation (authenticated clients)", () => {
   const prereq = isolationPrerequisites();
 
   if (!prereq.ok) {
-    it.skip(`skipped — ${prereq.reason}`, () => {});
+    if (process.env.RUN_SUPABASE_ISOLATION_TESTS === "1") {
+      it(`missing isolation prerequisites (${prereq.reason})`, () => {
+        throw new Error(
+          `Isolation tests require ${prereq.reason}. npm run test:isolation must fail when configuration is incomplete.`
+        );
+      });
+    } else {
+      it.skip(`skipped — ${prereq.reason}`, () => {});
+    }
     return;
   }
 

@@ -37,6 +37,14 @@ export const clientRoutes = {
   onboardingPayment: (clientId: string) => `/demo/onboarding/${clientId}/payment`,
 } as const;
 
+export const liveClientRoutes = {
+  onboarding: (projectId: string) => `/onboarding/${projectId}`,
+} as const;
+
+export const liveAdminRoutes = {
+  project: (projectId: string) => `${ADMIN}/clients/${projectId}`,
+} as const;
+
 export const dashboardRoutes = {
   home: DASHBOARD,
   revenue: `${DASHBOARD}/revenue`,

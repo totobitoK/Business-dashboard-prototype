@@ -11,8 +11,8 @@ import {
 } from "@/lib/onboarding-form";
 import { normalizeDraftStep } from "@/lib/onboarding-draft";
 import { OnboardingFormAutosaveCoordinator } from "@/lib/onboarding-form-autosave";
-import { useClientStore } from "@/lib/client-store";
 import { formatToolsList } from "@/lib/metrics";
+import type { OnboardingIntakeApi } from "@/lib/onboarding-intake-api";
 import type { Client, ClientOnboardingAnswers } from "@/lib/types";
 
 const STEP_LABELS = ["Business details", "Your dashboard", "Current tools"];
@@ -27,12 +27,14 @@ function stepFromDraft(client: Client): 1 | 2 | 3 | "review" {
 
 export function ClientOnboardingForm({
   client,
+  intakeApi,
   embedded = false,
 }: {
   client: Client;
+  intakeApi: OnboardingIntakeApi;
   embedded?: boolean;
 }) {
-  const { saveOnboardingDraft, submitOnboarding } = useClientStore();
+  const { saveOnboardingDraft, submitOnboarding, setDraftVersion } = intakeApi;
   const clientIdRef = useRef(client.id);
   const submittedRef = useRef(client.onboardingFormStatus === "submitted");
 
@@ -68,7 +70,13 @@ export function ClientOnboardingForm({
         !submittedRef.current &&
         clientIdRef.current === client.id &&
         client.onboardingFormStatus !== "submitted",
-      (draft) => saveOnboardingDraft(client.id, draft),
+      async (draft) => {
+        const result = await saveOnboardingDraft(client.id, draft);
+        if (result.ok && result.draftVersion != null) {
+          setDraftVersion(result.draftVersion);
+        }
+        return result;
+      },
       (status, error) => {
         setSaveStatus(status);
         if (status === "error") {
@@ -124,14 +132,14 @@ export function ClientOnboardingForm({
     updateField("selectedTools", next);
   }
 
-  function persistNavigation(
+  async function persistNavigation(
     nextStep: 1 | 2 | 3 | "review",
     nextAnswers: Partial<ClientOnboardingAnswers>
-  ): boolean {
+  ): Promise<boolean> {
     return autosave.persistNavigation(nextStep, nextAnswers);
   }
 
-  function goNext() {
+  async function goNext() {
     if (step === 1) {
       const e = validateStep1(answers);
       if (Object.keys(e).length) {
@@ -139,7 +147,7 @@ export function ClientOnboardingForm({
         return;
       }
       const nextStep = 2 as const;
-      if (!persistNavigation(nextStep, answers)) return;
+      if (!(await persistNavigation(nextStep, answers))) return;
       setStep(nextStep);
     } else if (step === 2) {
       const e = validateStep2(answers);
@@ -148,7 +156,7 @@ export function ClientOnboardingForm({
         return;
       }
       const nextStep = 3 as const;
-      if (!persistNavigation(nextStep, answers)) return;
+      if (!(await persistNavigation(nextStep, answers))) return;
       setStep(nextStep);
     } else if (step === 3) {
       const e = validateStep3(answers);
@@ -156,19 +164,19 @@ export function ClientOnboardingForm({
         setErrors(e);
         return;
       }
-      if (!persistNavigation("review", answers)) return;
+      if (!(await persistNavigation("review", answers))) return;
       setStep("review");
     }
   }
 
-  function goBack() {
+  async function goBack() {
     const nextStep =
       step === "review" ? 3 : step === 3 ? 2 : step === 2 ? 1 : 1;
-    if (!persistNavigation(nextStep, answers)) return;
+    if (!(await persistNavigation(nextStep, answers))) return;
     setStep(nextStep);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     autosave.cancelPending();
     const e1 = validateStep1(answers);
     const e2 = validateStep2(answers);
@@ -180,7 +188,7 @@ export function ClientOnboardingForm({
     }
     setSubmitError(null);
     const full = toFullAnswers(answers);
-    const result = submitOnboarding(client.id, full);
+    const result = await submitOnboarding(client.id, full);
     if (!result.ok) {
       setSubmitError(result.error ?? "Could not submit — try again.");
       return;

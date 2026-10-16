@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
-import { useClientStore } from "@/lib/client-store";
+import type { OnboardingScopeApi } from "@/lib/onboarding-scope-api";
+import { scopeRevisionRowIdFromClient } from "@/lib/onboarding-scope-api";
 import { getDepositAmount, getSetupBalanceRemaining } from "@/lib/client-milestones";
 import { formatToolsList } from "@/lib/metrics";
 import {
@@ -15,8 +16,14 @@ import {
 } from "@/lib/scope-acceptance";
 import type { Client } from "@/lib/types";
 
-export function ScopeAcceptancePanel({ client }: { client: Client }) {
-  const { acceptCustomerScopePricing, requestCustomerScopeChanges } = useClientStore();
+export function ScopeAcceptancePanel({
+  client,
+  scopeApi,
+}: {
+  client: Client;
+  scopeApi: OnboardingScopeApi;
+}) {
+  const { acceptCustomerScopePricing, requestCustomerScopeChanges } = scopeApi;
   const [changeNote, setChangeNote] = useState("");
   const [showChangeForm, setShowChangeForm] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(
@@ -153,17 +160,27 @@ export function ScopeAcceptancePanel({ client }: { client: Client }) {
             type="button"
             className="rounded-lg bg-purple px-4 py-2 text-sm font-semibold text-white hover:bg-purple-dark"
             onClick={() => {
-              setMessage(null);
-              const rev = client.publishedScopeRevision!;
-              const result = acceptCustomerScopePricing(client.id, rev);
-              if (!result.ok) {
-                setMessage({
-                  type: "error",
-                  text: result.error ?? "Could not save acceptance on this device.",
-                });
-                return;
-              }
-              setMessage({ type: "success", text: "Scope & pricing accepted." });
+              void (async () => {
+                setMessage(null);
+                const rev = client.publishedScopeRevision!;
+                const rowId = scopeRevisionRowIdFromClient(client);
+                if (!rowId) {
+                  setMessage({
+                    type: "error",
+                    text: "Published scope snapshot is missing. Refresh and try again.",
+                  });
+                  return;
+                }
+                const result = await acceptCustomerScopePricing(client.id, rev, rowId);
+                if (!result.ok) {
+                  setMessage({
+                    type: "error",
+                    text: result.error ?? "Could not save acceptance.",
+                  });
+                  return;
+                }
+                setMessage({ type: "success", text: "Scope & pricing accepted." });
+              })();
             }}
           >
             Accept scope & pricing
@@ -193,18 +210,21 @@ export function ScopeAcceptancePanel({ client }: { client: Client }) {
             type="button"
             className="rounded-lg border border-purple-100 px-4 py-2 text-sm font-semibold text-ink hover:bg-purple-50"
             onClick={() => {
-              setMessage(null);
-              const result = requestCustomerScopeChanges(client.id, changeNote);
-              if (!result.ok) {
-                setMessage({
-                  type: "error",
-                  text: result.error ?? "Could not save your request.",
-                });
-                return;
-              }
-              setShowChangeForm(false);
-              setChangeNote("");
-              setMessage({ type: "success", text: "Change request sent to RavenView." });
+              void (async () => {
+                setMessage(null);
+                const rev = client.publishedScopeRevision!;
+                const result = await requestCustomerScopeChanges(client.id, rev, changeNote);
+                if (!result.ok) {
+                  setMessage({
+                    type: "error",
+                    text: result.error ?? "Could not save your request.",
+                  });
+                  return;
+                }
+                setShowChangeForm(false);
+                setChangeNote("");
+                setMessage({ type: "success", text: "Change request sent to RavenView." });
+              })();
             }}
           >
             Send change request

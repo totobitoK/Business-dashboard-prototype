@@ -33,7 +33,7 @@ export default async function LiveDashboardLayout({
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <span className="text-sm font-semibold">Your RavenView project</span>
           <div className="flex items-center gap-3 text-xs text-ink-muted">
-            <span>Read-only — scope, preview, and settings save in a later milestone</span>
+            <span>Intake and scope review are live — payments, preview, and settings come later</span>
             <form action="/auth/logout" method="post">
               <button type="submit" className="text-sm font-medium text-purple hover:underline">
                 Sign out

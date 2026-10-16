@@ -40,7 +40,7 @@ describe("OnboardingFormAutosaveCoordinator", () => {
     vi.useRealTimers();
   });
 
-  it("typing then immediate Next keeps destination step when stale timer fires", () => {
+  it("typing then immediate Next keeps destination step when stale timer fires", async () => {
     const mem = memoryStorage();
     const clientId = "autosave-race";
     mem.write(
@@ -72,7 +72,7 @@ describe("OnboardingFormAutosaveCoordinator", () => {
       contactName: "On step 2",
       email: "a@example.com",
     };
-    expect(coordinator.persistNavigation(2, answersStep2)).toBe(true);
+    expect(await coordinator.persistNavigation(2, answersStep2)).toBe(true);
 
     vi.advanceTimersByTime(AUTOSAVE_MS);
 
@@ -81,7 +81,7 @@ describe("OnboardingFormAutosaveCoordinator", () => {
     expect(saved.onboardingDraft?.answers.contactName).toBe("On step 2");
   });
 
-  it("Back and review navigation persist the destination step", () => {
+  it("Back and review navigation persist the destination step", async () => {
     const mem = memoryStorage();
     const clientId = "nav-back-review";
     mem.write(
@@ -102,19 +102,25 @@ describe("OnboardingFormAutosaveCoordinator", () => {
       createPersist(mem, clientId)
     );
 
-    coordinator.persistNavigation(3, { company: "Co", contactName: "N", email: "e@e.com" });
-    expect(coordinator.persistNavigation("review", { company: "Co", contactName: "N", email: "e@e.com" })).toBe(
-      true
-    );
+    await coordinator.persistNavigation(3, { company: "Co", contactName: "N", email: "e@e.com" });
+    expect(
+      await coordinator.persistNavigation("review", {
+        company: "Co",
+        contactName: "N",
+        email: "e@e.com",
+      })
+    ).toBe(true);
     expect(loadClient(mem, clientId).onboardingDraft?.currentStep).toBe("review");
 
     coordinator.scheduleAutosave("review", { company: "Co", contactName: "N", email: "e@e.com" });
-    expect(coordinator.persistNavigation(3, { company: "Co", contactName: "N", email: "e@e.com" })).toBe(true);
+    expect(
+      await coordinator.persistNavigation(3, { company: "Co", contactName: "N", email: "e@e.com" })
+    ).toBe(true);
     vi.advanceTimersByTime(AUTOSAVE_MS);
     expect(loadClient(mem, clientId).onboardingDraft?.currentStep).toBe(3);
   });
 
-  it("client switch cancels stale scheduled save", () => {
+  it("client switch cancels stale scheduled save", async () => {
     const mem = memoryStorage();
     const clientA = "client-a";
     const clientB = "client-b";
@@ -147,7 +153,7 @@ describe("OnboardingFormAutosaveCoordinator", () => {
     coordinator.scheduleAutosave(1, { company: "Wrong client draft" });
     coordinator.cancelPending();
     activeClientId = clientB;
-    coordinator.persistNavigation(2, { company: "Client B step 2" });
+    await coordinator.persistNavigation(2, { company: "Client B step 2" });
     vi.advanceTimersByTime(AUTOSAVE_MS);
 
     expect(loadClient(mem, clientA).onboardingDraft).toBeUndefined();
@@ -182,13 +188,13 @@ describe("OnboardingFormAutosaveCoordinator", () => {
     expect(loadClient(mem, clientId).onboardingDraft).toBeUndefined();
   });
 
-  it("failed persistence prevents navigation from succeeding", () => {
+  it("failed persistence prevents navigation from succeeding", async () => {
     const coordinator = new OnboardingFormAutosaveCoordinator(
       AUTOSAVE_MS,
       () => true,
       () => ({ ok: false, error: "Storage full" })
     );
 
-    expect(coordinator.persistNavigation(2, { company: "Co" })).toBe(false);
+    expect(await coordinator.persistNavigation(2, { company: "Co" })).toBe(false);
   });
 });

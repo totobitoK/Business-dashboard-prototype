@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { listAllProjectsForAdmin } from "@/lib/db/projects.server";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
+import { liveAdminRoutes } from "@/lib/routes";
 
 export default async function LiveAdminClientsPage() {
   const projects = await listAllProjectsForAdmin();
@@ -9,7 +11,7 @@ export default async function LiveAdminClientsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Client projects"
-        description="Live data from Supabase. This milestone is view-only — manage drawer actions are not enabled here."
+        description="Live projects from Supabase. Open a project to edit contact details, draft scope, and publish for customer review."
       />
 
       <div className="overflow-hidden rounded-lg border border-purple-100 bg-white shadow-soft">
@@ -21,12 +23,20 @@ export default async function LiveAdminClientsPage() {
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Setup</th>
               <th className="px-4 py-3">Monthly</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {projects.map((p) => (
               <tr key={p.id} className="border-b border-purple-50 last:border-0">
-                <td className="px-4 py-3 font-medium">{p.company_name}</td>
+                <td className="px-4 py-3 font-medium">
+                  <Link
+                    href={liveAdminRoutes.project(p.id)}
+                    className="text-purple hover:underline"
+                  >
+                    {p.company_name}
+                  </Link>
+                </td>
                 <td className="px-4 py-3 text-ink-muted">
                   {p.contact_name}
                   <span className="block text-xs">{p.email}</span>
@@ -36,11 +46,19 @@ export default async function LiveAdminClientsPage() {
                 </td>
                 <td className="px-4 py-3">${Number(p.setup_fee).toLocaleString()}</td>
                 <td className="px-4 py-3">${Number(p.monthly_fee).toLocaleString()}</td>
+                <td className="px-4 py-3 text-right">
+                  <Link
+                    href={liveAdminRoutes.project(p.id)}
+                    className="text-sm font-medium text-purple hover:underline"
+                  >
+                    Manage scope
+                  </Link>
+                </td>
               </tr>
             ))}
             {projects.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-ink-muted">
+                <td colSpan={6} className="px-4 py-8 text-center text-ink-muted">
                   No projects yet. Run the development seed script to create sample companies.
                 </td>
               </tr>

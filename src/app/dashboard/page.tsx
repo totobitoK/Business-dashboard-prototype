@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { listMemberCompanies, listProjectsForMember } from "@/lib/db/projects.server";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
+import { liveClientRoutes } from "@/lib/routes";
 
 export default async function LiveCustomerDashboardPage() {
   const [companies, projects] = await Promise.all([
@@ -14,7 +16,7 @@ export default async function LiveCustomerDashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title={companyName}
-        description="Live project summary for your organization. Editing project fees, status, or membership is not available to customer accounts."
+        description="Live project summary. Complete intake and review published scope from your onboarding page."
       />
 
       <div className="space-y-4">
@@ -48,6 +50,12 @@ export default async function LiveCustomerDashboardPage() {
                 </div>
               ) : null}
             </dl>
+            <Link
+              href={liveClientRoutes.onboarding(p.id)}
+              className="mt-4 inline-block text-sm font-semibold text-purple hover:underline"
+            >
+              Open onboarding →
+            </Link>
           </article>
         ))}
         {projects.length === 0 ? (
