@@ -17,6 +17,7 @@ export interface LiveClientProject {
   published_revision: number;
   scope_pending_material_publish: boolean;
   scope_material_published_generation?: number;
+  scope_material_review_required?: boolean;
   created_at: string;
   updated_at: string;
 }

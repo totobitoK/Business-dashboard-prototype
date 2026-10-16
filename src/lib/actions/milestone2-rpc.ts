@@ -35,6 +35,12 @@ function mapRpcError(message: string): string {
   if (message.includes("SCOPE_REVIEW_REQUIRED")) {
     return "Scope needs an admin review before it can be accepted. Contact RavenView for help.";
   }
+  if (message.includes("SCOPE_REVIEW_CONFIRMATION_REQUIRED")) {
+    return "Confirm scope review resolution before publishing. Customers cannot accept until an admin publishes corrected scope.";
+  }
+  if (message.includes("SCOPE_REVIEW_AMBIGUOUS")) {
+    return "Complete the scope draft with clear material terms before publishing a review resolution.";
+  }
   if (message.includes("INTAKE_VALIDATION") || message.includes("VALIDATION_ERROR")) {
     const detail = message.split(":").slice(1).join(":").trim();
     return detail || "Please complete all required intake fields.";
@@ -148,12 +154,16 @@ export async function adminSaveScopeDraftAction(
   return { ok: true };
 }
 
-export async function adminPublishScopeAction(projectId: string): Promise<ActionResult> {
+export async function adminPublishScopeAction(
+  projectId: string,
+  options?: { confirmScopeReview?: boolean }
+): Promise<ActionResult> {
   const supabase = await createClient();
   await requirePlatformAdmin(supabase);
 
   const { error } = await supabase.rpc("admin_publish_scope", {
     p_project_id: projectId,
+    p_confirm_scope_review: options?.confirmScopeReview ?? false,
   });
 
   if (error) {
@@ -162,6 +172,7 @@ export async function adminPublishScopeAction(projectId: string): Promise<Action
 
   revalidatePath(`/admin/clients/${projectId}`);
   revalidatePath(`/onboarding/${projectId}`);
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 

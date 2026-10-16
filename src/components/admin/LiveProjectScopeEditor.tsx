@@ -57,7 +57,9 @@ export function LiveProjectScopeEditor({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reviewConfirmChecked, setReviewConfirmChecked] = useState(false);
 
+  const reviewRequired = Boolean(project.scope_material_review_required);
   const sourcesText = formatList(draft.accepted_sources_in);
   const screensText = formatList(draft.accepted_screens);
 
@@ -91,17 +93,24 @@ export function LiveProjectScopeEditor({
     router.refresh();
   }
 
-  async function publish() {
+  async function publish(confirmScopeReview: boolean) {
     setBusy(true);
     setError(null);
     setMessage(null);
-    const result = await adminPublishScopeAction(project.id);
+    const result = await adminPublishScopeAction(project.id, {
+      confirmScopeReview,
+    });
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
-    setMessage("Scope published for customer review.");
+    setReviewConfirmChecked(false);
+    setMessage(
+      confirmScopeReview
+        ? "Corrected scope published and review hold cleared. Customer must accept the new revision."
+        : "Scope published for customer review."
+    );
     router.refresh();
   }
 
@@ -114,6 +123,7 @@ export function LiveProjectScopeEditor({
             Published revision: {project.published_revision || "none"} · Material draft gen:{" "}
             {adminScopeDraft?.material_generation ?? 0}
             {project.scope_pending_material_publish ? " · unpublished material changes" : ""}
+            {reviewRequired ? " · scope review required" : ""}
           </p>
         </div>
         {!editing ? (
@@ -154,6 +164,19 @@ export function LiveProjectScopeEditor({
           </div>
         )}
       </div>
+
+      {reviewRequired ? (
+        <div
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          role="status"
+        >
+          <p className="font-semibold">Scope review required</p>
+          <p className="mt-1 text-amber-900">
+            Customers cannot accept scope until you correct the draft and publish with an explicit
+            review confirmation. Saving the draft alone does not clear this hold.
+          </p>
+        </div>
+      ) : null}
 
       {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
       {error ? (
@@ -278,14 +301,40 @@ export function LiveProjectScopeEditor({
         </label>
       </div>
 
-      <button
-        type="button"
-        disabled={busy}
-        className="rounded-lg bg-purple px-4 py-2 text-sm font-semibold text-white hover:bg-purple-dark disabled:opacity-50"
-        onClick={() => void publish()}
-      >
-        Publish scope for customer review
-      </button>
+      {reviewRequired ? (
+        <div className="space-y-3 rounded-lg border border-purple-100 bg-purple-50/40 p-4">
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={reviewConfirmChecked}
+              disabled={busy}
+              onChange={(e) => setReviewConfirmChecked(e.target.checked)}
+            />
+            <span>
+              I reviewed the draft against the last published scope and confirm the corrected
+              material terms are ready to publish.
+            </span>
+          </label>
+          <button
+            type="button"
+            disabled={busy || !reviewConfirmChecked}
+            className="rounded-lg bg-purple px-4 py-2 text-sm font-semibold text-white hover:bg-purple-dark disabled:opacity-50"
+            onClick={() => void publish(true)}
+          >
+            Publish corrected scope &amp; clear review hold
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          className="rounded-lg bg-purple px-4 py-2 text-sm font-semibold text-white hover:bg-purple-dark disabled:opacity-50"
+          onClick={() => void publish(false)}
+        >
+          Publish scope for customer review
+        </button>
+      )}
       <p className="text-xs text-ink-muted">
         Publishing creates an immutable scope revision. Customers must accept again after material
         changes. Internal admin notes remain separate from customer change requests.
