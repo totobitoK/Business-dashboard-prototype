@@ -27,11 +27,18 @@ describe("connector presentation policy", () => {
     expect(launchList.some((c) => c.implementationStatus === "candidate")).toBe(false);
   });
 
-  it("gates Connect on operational status only", () => {
-    expect(CONNECTOR_DEFINITIONS.some(connectorCanConnect)).toBe(false);
+  it("gates Connect on operational status and runtime configuration", () => {
+    const calendar = CONNECTOR_DEFINITIONS.find((c) => c.id === "google-calendar")!;
+    expect(calendar.implementationStatus).toBe("operational");
+    expect(connectorCanConnect(calendar)).toBe(
+      process.env.GOOGLE_CALENDAR_INTEGRATION_ENABLED === "true" &&
+        Boolean(process.env.GOOGLE_CLIENT_ID) &&
+        Boolean(process.env.GOOGLE_CLIENT_SECRET) &&
+        Boolean(process.env.GOOGLE_TOKEN_ENCRYPTION_KEY)
+    );
     expect(
       connectorCanConnect({
-        ...CONNECTOR_DEFINITIONS[0]!,
+        ...CONNECTOR_DEFINITIONS.find((c) => c.id === "quickbooks")!,
         implementationStatus: "operational",
       })
     ).toBe(true);

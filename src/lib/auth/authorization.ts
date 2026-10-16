@@ -58,6 +58,34 @@ export async function requireCompanyMember(
   throw new Error("FORBIDDEN");
 }
 
+export async function requireCompanyOwner(
+  supabase: SupabaseClient,
+  companyId: string
+): Promise<AuthContext> {
+  const ctx = await requireAuthContext(supabase);
+  if (ctx.isPlatformAdmin) return ctx;
+
+  const { data, error } = await supabase
+    .from("company_memberships")
+    .select("role")
+    .eq("company_id", companyId)
+    .eq("user_id", ctx.user.id)
+    .maybeSingle();
+
+  if (error || !data || data.role !== "owner") {
+    throw new Error("FORBIDDEN");
+  }
+  return ctx;
+}
+
+export async function getPrimaryCompanyIdForMember(
+  supabase: SupabaseClient
+): Promise<string | null> {
+  const ctx = await getAuthContext(supabase);
+  if (!ctx || ctx.companyIds.length === 0) return null;
+  return ctx.companyIds[0] ?? null;
+}
+
 export async function requireProjectAccess(
   supabase: SupabaseClient,
   projectId: string

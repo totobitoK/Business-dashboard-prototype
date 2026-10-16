@@ -33,7 +33,10 @@ export default async function LiveDashboardLayout({
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <span className="text-sm font-semibold">Your RavenView project</span>
           <div className="flex items-center gap-3 text-xs text-ink-muted">
-            <span>Live onboarding, setup payments, and activation — no live connector data yet</span>
+            <Link href="/dashboard/settings" className="hover:text-purple hover:underline">
+              Settings
+            </Link>
+            <span>· Live onboarding, payments, Google Calendar</span>
             <form action="/auth/logout" method="post">
               <button type="submit" className="text-sm font-medium text-purple hover:underline">
                 Sign out

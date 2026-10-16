@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { LiveOnboardingGoogleCalendarSection } from "@/components/onboarding/LiveOnboardingGoogleCalendarSection";
 import { LiveOnboardingJourney } from "@/components/onboarding/LiveOnboardingJourney";
 import {
   intakeDraftVersion,
@@ -8,10 +9,13 @@ import { loadProjectBundle } from "@/lib/db/project-detail.server";
 
 export default async function LiveOnboardingProjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ google?: string }>;
 }) {
   const { projectId } = await params;
+  const sp = await searchParams;
 
   let bundle;
   try {
@@ -26,8 +30,18 @@ export default async function LiveOnboardingProjectPage({
 
   const client = mapLiveProjectBundleToClient(bundle);
   const draftVersion = intakeDraftVersion(bundle);
+  const companyId = bundle.project.company_id;
 
   return (
-    <LiveOnboardingJourney client={client} initialDraftVersion={draftVersion} />
+    <LiveOnboardingJourney
+      client={client}
+      initialDraftVersion={draftVersion}
+      googleCalendarSection={
+        <LiveOnboardingGoogleCalendarSection
+          companyId={companyId}
+          flashCode={sp.google ?? null}
+        />
+      }
+    />
   );
 }

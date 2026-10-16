@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { LiveAppointmentsSection } from "@/components/google-calendar/LiveAppointmentsSection";
+import type { GoogleCalendarStatus } from "@/components/google-calendar/LiveGoogleCalendarPanel";
 import { listMemberCompanies, listProjectsForMember } from "@/lib/db/projects.server";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -15,6 +17,40 @@ export default async function LiveCustomerDashboardPage() {
   ]);
 
   const companyName = companies[0]?.name ?? "Your company";
+  const companyId = companies[0]?.id;
+
+  let calendarStatus: GoogleCalendarStatus | null = null;
+  let appointments: {
+    id: string;
+    title: string;
+    google_calendar_id: string;
+    starts_at: string | null;
+    ends_at: string | null;
+    all_day: boolean;
+    timezone: string | null;
+    imported_at: string;
+  }[] = [];
+  const calendarNames: Record<string, string> = {};
+
+  if (companyId) {
+    const { data: statusRaw } = await supabase.rpc("member_get_google_calendar_status", {
+      p_company_id: companyId,
+    });
+    calendarStatus = (statusRaw ?? null) as GoogleCalendarStatus | null;
+
+    const [{ data: appts }, { data: cals }] = await Promise.all([
+      supabase.rpc("member_list_google_calendar_appointments", { p_company_id: companyId }),
+      supabase
+        .from("google_calendar_selected_calendars")
+        .select("google_calendar_id, summary")
+        .eq("company_id", companyId)
+        .eq("selected", true),
+    ]);
+    appointments = (appts ?? []) as typeof appointments;
+    for (const c of cals ?? []) {
+      calendarNames[c.google_calendar_id as string] = c.summary as string;
+    }
+  }
 
   const summaries = await Promise.all(
     projects.map(async (p) => {
@@ -34,7 +70,19 @@ export default async function LiveCustomerDashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title={companyName}
-        description="Your RavenView project hub. Finish onboarding until activation; live operational data is not connected yet."
+        description="Your RavenView project hub — onboarding, setup payments, activation, and live Google Calendar appointments."
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <Link href="/dashboard/settings" className="font-semibold text-purple hover:underline">
+          Connections & settings
+        </Link>
+      </div>
+
+      <LiveAppointmentsSection
+        status={calendarStatus}
+        appointments={appointments}
+        calendarNames={calendarNames}
       />
 
       <div className="space-y-4">
@@ -60,11 +108,12 @@ export default async function LiveCustomerDashboardPage() {
               </div>
 
               {isActive ? (
-                <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50/40 px-4 py-3 text-sm text-ink">
-                  <p className="font-semibold">Dashboard activated — awaiting live data</p>
+                <div className="mt-4 rounded-lg border border-purple-100 bg-purple-50/30 px-4 py-3 text-sm text-ink">
+                  <p className="font-semibold">Dashboard activated</p>
                   <p className="mt-1 text-ink-muted">
-                    Your project is active. RavenView has not connected production data sources
-                    yet; figures here are not live operational metrics.
+                    Setup payment milestones are complete. Connect Google Calendar in settings to
+                    see live appointments; other operational metrics will appear as RavenView
+                    enables them.
                   </p>
                 </div>
               ) : (

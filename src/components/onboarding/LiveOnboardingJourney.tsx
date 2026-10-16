@@ -20,9 +20,11 @@ import { toFullAnswers } from "@/lib/onboarding-form";
 export function LiveOnboardingJourney({
   client,
   initialDraftVersion,
+  googleCalendarSection,
 }: {
   client: Client;
   initialDraftVersion: number;
+  googleCalendarSection?: React.ReactNode;
 }) {
   const router = useRouter();
   const queueRef = useRef<LiveIntakePersistQueue | null>(null);
@@ -100,6 +102,7 @@ export function LiveOnboardingJourney({
     <ClientPageShell client={client}>
       <div className="space-y-8">
         <ClientOnboardingJourney client={client} intakeApi={intakeApi} scopeApi={scopeApi} />
+        {googleCalendarSection}
         <LiveBuildPreviewSection client={client} />
       </div>
     </ClientPageShell>

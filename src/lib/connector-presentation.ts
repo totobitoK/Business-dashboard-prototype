@@ -3,6 +3,7 @@ import {
   type ConnectorDefinition,
   type ConnectorImplementationStatus,
 } from "./connector-catalog";
+import { isGoogleCalendarIntegrationConfigured } from "./google-calendar/config";
 
 /** Customer-facing site phase — separate from internal engineering status. */
 export type ConnectorPublicPhase = "private_build" | "launch";
@@ -12,9 +13,13 @@ export function getConnectorPublicPhase(): ConnectorPublicPhase {
   return raw === "launch" ? "launch" : "private_build";
 }
 
-/** Connect is allowed only when engineering status is operational (and configured in backend). */
+/** Connect when engineering status is operational and runtime env is configured (per provider). */
 export function connectorCanConnect(entry: ConnectorDefinition): boolean {
-  return entry.implementationStatus === "operational";
+  if (entry.implementationStatus !== "operational") return false;
+  if (entry.id === "google-calendar") {
+    return isGoogleCalendarIntegrationConfigured();
+  }
+  return true;
 }
 
 /**

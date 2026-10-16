@@ -36,7 +36,7 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     id: "google-calendar",
     label: "Google Calendar",
     shortDescription: "Schedules and appointments for operations views.",
-    implementationStatus: "in_development",
+    implementationStatus: "operational",
     implementationPriority: 1,
     publicTeaser: "hidden",
     includeInOnboarding: true,
