@@ -68,8 +68,11 @@ export interface Payment {
   type: PaymentType;
   note?: string;
   recordSource?: PaymentRecordSource;
+  paymentMethod?: string;
   /** Check number, transfer ref, etc. (offline recordings) */
   methodReference?: string;
+  voidedAt?: string;
+  replacesPaymentId?: string;
 }
 
 export interface Note {

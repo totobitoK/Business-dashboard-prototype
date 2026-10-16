@@ -20,8 +20,27 @@ export interface LiveClientProject {
   scope_material_review_required?: boolean;
   preview_feedback_unresolved?: boolean;
   current_ready_preview_id?: string | null;
+  payment_only_prep_confirmed?: boolean;
+  activated_at?: string | null;
+  activated_by?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface LiveProjectPayment {
+  id: string;
+  project_id: string;
+  payment_date: string;
+  amount: number;
+  type: string;
+  note: string | null;
+  record_source: string;
+  payment_method: string | null;
+  method_reference: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+  replaces_payment_id: string | null;
+  created_at: string;
 }
 
 export interface LiveProjectBuildProgress {
@@ -136,4 +155,12 @@ export interface LiveProjectBundle {
   readyPreviewFeedback?: LivePreviewRevisionFeedback | null;
   readyPreviewApproval?: LivePreviewRevisionApproval | null;
   previewHistory?: LivePreviewRevision[];
+  payments?: LiveProjectPayment[];
+  setupPaymentSummary?: {
+    setup_fee: number;
+    received: number;
+    remaining: number;
+    overpayment: number;
+    fully_paid: boolean;
+  };
 }

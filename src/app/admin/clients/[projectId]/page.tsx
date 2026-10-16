@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LiveProjectBuildPreviewEditor } from "@/components/admin/LiveProjectBuildPreviewEditor";
+import { LiveProjectPaymentsActivation } from "@/components/admin/LiveProjectPaymentsActivation";
 import { LiveProjectScopeEditor } from "@/components/admin/LiveProjectScopeEditor";
 import { PageHeader } from "@/components/PageHeader";
 import { adminRoutes } from "@/lib/routes";
@@ -41,6 +42,11 @@ export default async function LiveAdminProjectPage({
         readyPreviewFeedback={bundle.readyPreviewFeedback}
         readyPreviewApproval={bundle.readyPreviewApproval}
         previewHistory={bundle.previewHistory}
+      />
+      <LiveProjectPaymentsActivation
+        project={p}
+        payments={bundle.payments ?? []}
+        setupSummary={bundle.setupPaymentSummary}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import {
   CLIENT_PROJECT_MEMBER_COLUMNS_WITH_PREVIEW,
 } from "@/lib/db/project-columns";
 import { loadBuildPreviewData } from "@/lib/db/load-build-preview.server";
+import { loadProjectPayments } from "@/lib/db/load-project-payments.server";
 import type { LiveProjectBundle } from "@/lib/db/live-types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -71,17 +72,25 @@ export async function loadProjectBundle(projectId: string): Promise<LiveProjectB
 
   const publishedRevision = (project.published_revision as number) ?? 0;
   const related = await loadRelatedScopeData(supabase, projectId, publishedRevision);
-  const buildPreview = await loadBuildPreviewData(
-    supabase,
-    projectId,
-    project.current_ready_preview_id as string | null | undefined,
-    false
-  );
+  const [buildPreview, payments, summaryRes] = await Promise.all([
+    loadBuildPreviewData(
+      supabase,
+      projectId,
+      project.current_ready_preview_id as string | null | undefined,
+      false
+    ),
+    loadProjectPayments(supabase, projectId),
+    supabase.rpc("member_get_setup_payment_summary", { p_project_id: projectId }),
+  ]);
+
+  if (summaryRes.error) throw new Error(summaryRes.error.message);
 
   return {
     project: project as LiveProjectBundle["project"],
     ...related,
     ...buildPreview,
+    payments,
+    setupPaymentSummary: summaryRes.data as LiveProjectBundle["setupPaymentSummary"],
   };
 }
 
@@ -102,7 +111,7 @@ export async function loadProjectBundleForAdmin(
   }
 
   const publishedRevision = (project.published_revision as number) ?? 0;
-  const [related, adminDraftRes, buildPreview] = await Promise.all([
+  const [related, adminDraftRes, buildPreview, payments, summaryRes] = await Promise.all([
     loadRelatedScopeData(supabase, projectId, publishedRevision),
     supabase
       .from("admin_project_scope_drafts")
@@ -115,14 +124,19 @@ export async function loadProjectBundleForAdmin(
       project.current_ready_preview_id as string | null | undefined,
       true
     ),
+    loadProjectPayments(supabase, projectId),
+    supabase.rpc("member_get_setup_payment_summary", { p_project_id: projectId }),
   ]);
 
   if (adminDraftRes.error) throw new Error(adminDraftRes.error.message);
+  if (summaryRes.error) throw new Error(summaryRes.error.message);
 
   return {
     project: project as LiveProjectBundle["project"],
     ...related,
     adminScopeDraft: adminDraftRes.data as LiveProjectBundle["adminScopeDraft"],
     ...buildPreview,
+    payments,
+    setupPaymentSummary: summaryRes.data as LiveProjectBundle["setupPaymentSummary"],
   };
 }

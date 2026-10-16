@@ -12,6 +12,10 @@ import type {
   PublishedScopeSnapshot,
 } from "@/lib/types";
 import { liveClientRoutes } from "@/lib/routes";
+import {
+  mapLivePaymentsToClientPayments,
+  sumValidSetupPayments,
+} from "@/lib/db/load-project-payments.server";
 
 function asOnboardingFormStatus(status: string): OnboardingFormStatus {
   if (status === "submitted") return "submitted";
@@ -68,6 +72,14 @@ export function mapLiveProjectBundleToClient(bundle: LiveProjectBundle): Client 
   const readyPreview = bundle.readyPreview;
   const previewApproval = bundle.readyPreviewApproval;
   const previewFeedback = bundle.readyPreviewFeedback;
+  const paymentRows = bundle.payments ?? [];
+  const setupPaidAmount =
+    bundle.setupPaymentSummary?.received ??
+    sumValidSetupPayments(paymentRows);
+  const setupFee =
+    bundle.setupPaymentSummary?.setup_fee ??
+    (published ? Number(published.setup_fee) : Number(p.setup_fee));
+  const payments = mapLivePaymentsToClientPayments(paymentRows);
 
   const adminMilestones: ClientMilestone[] = [];
   if (build?.discovery_completed_at) adminMilestones.push("discovery");
@@ -107,13 +119,14 @@ export function mapLiveProjectBundleToClient(bundle: LiveProjectBundle): Client 
     website: p.website ?? undefined,
     dashboardScope: p.dashboard_scope ?? undefined,
     status: p.status,
-    setupFee: Number(p.setup_fee),
+    setupFee,
     monthlyFee: Number(p.monthly_fee),
     onboardingPath: p.onboarding_path,
+    paymentOnlyPrepConfirmed: p.payment_only_prep_confirmed === true,
     completedSteps: [...completedSteps],
-    setupPaidAmount: 0,
+    setupPaidAmount,
     subscriptionActive: false,
-    payments: [],
+    payments,
     notes: [],
     files: [],
     createdAt: p.created_at,
@@ -155,6 +168,7 @@ export function mapLiveProjectBundleToClient(bundle: LiveProjectBundle): Client 
       readyPreview?.demo_workspace_id && readyPreview.status === "ready"
         ? `${liveClientRoutes.onboarding(p.id)}/preview`
         : undefined,
+    launchedAt: p.activated_at ?? undefined,
   };
 }
 
