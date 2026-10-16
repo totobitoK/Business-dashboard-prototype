@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { assertDbOk } from "./db-write";
+import { rpcBumpSyncGeneration } from "./sync-rpc";
 
 export type ConnectionSyncState = {
   id: string;
@@ -26,24 +26,7 @@ export async function bumpConnectionSyncGeneration(
   admin: SupabaseClient,
   connectionId: string
 ): Promise<number> {
-  const { data, error } = await admin
-    .from("google_calendar_connections")
-    .select("sync_generation")
-    .eq("id", connectionId)
-    .single();
-  assertDbOk(error, "LOAD_GENERATION");
-  const next = Number(data!.sync_generation ?? 0) + 1;
-  const { error: updErr } = await admin
-    .from("google_calendar_connections")
-    .update({
-      sync_generation: next,
-      sync_cursor: {},
-      syncing_started_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", connectionId);
-  assertDbOk(updErr, "BUMP_GENERATION");
-  return next;
+  return rpcBumpSyncGeneration(admin, connectionId);
 }
 
 export function generationStillValid(

@@ -136,13 +136,14 @@ export async function listEventsPage(params: {
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("showDeleted", "true");
 
-  if (params.pageToken) {
-    url.searchParams.set("pageToken", params.pageToken);
-  } else if (params.query.type === "incremental") {
+  if (params.query.type === "incremental") {
     url.searchParams.set("syncToken", params.query.syncToken);
   } else {
     url.searchParams.set("timeMin", params.query.timeMin);
     url.searchParams.set("timeMax", params.query.timeMax);
+  }
+  if (params.pageToken) {
+    url.searchParams.set("pageToken", params.pageToken);
   }
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${params.accessToken}` } });

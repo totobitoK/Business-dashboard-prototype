@@ -182,4 +182,82 @@ describe("Milestone 4A Google Calendar tenancy", () => {
     });
     expect((second.data as unknown[] | null)?.length ?? 0).toBe(0);
   });
+
+  it("rejects stale sync writes after disconnect bumps generation", async () => {
+    const disposable = await createDisposableM4aCompany(service, ownerUserId);
+    disposableCompanyId = disposable.companyId;
+
+    const { data: conn, error } = await service
+      .from("google_calendar_connections")
+      .insert({
+        company_id: disposableCompanyId,
+        google_sub: "sub-race",
+        google_email: "race@test.local",
+        status: "connected",
+        sync_generation: 0,
+      })
+      .select("id, sync_generation")
+      .single();
+    expect(error).toBeNull();
+
+    const connectionId = conn!.id as string;
+    const generation = Number(conn!.sync_generation);
+
+    await service.from("google_calendar_selected_calendars").insert({
+      connection_id: connectionId,
+      company_id: disposableCompanyId,
+      google_calendar_id: "primary",
+      summary: "Primary",
+      selected: true,
+    });
+
+    const appliedBefore = await service.rpc("google_calendar_sync_apply_event", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+      p_expected_generation: generation,
+      p_google_calendar_id: "primary",
+      p_google_event_id: "evt-live",
+      p_title: "Live",
+      p_starts_at: new Date().toISOString(),
+      p_ends_at: null,
+      p_all_day: false,
+      p_all_day_start: null,
+      p_all_day_end: null,
+      p_timezone: null,
+      p_status: "confirmed",
+      p_google_updated_at: new Date().toISOString(),
+      p_is_cancelled: false,
+    });
+    expect(appliedBefore.data).toBe(true);
+
+    await service.rpc("google_calendar_disconnect_company", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+    });
+
+    const staleWrite = await service.rpc("google_calendar_sync_apply_event", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+      p_expected_generation: generation,
+      p_google_calendar_id: "primary",
+      p_google_event_id: "evt-stale",
+      p_title: "Stale",
+      p_starts_at: new Date().toISOString(),
+      p_ends_at: null,
+      p_all_day: false,
+      p_all_day_start: null,
+      p_all_day_end: null,
+      p_timezone: null,
+      p_status: "confirmed",
+      p_google_updated_at: new Date().toISOString(),
+      p_is_cancelled: false,
+    });
+    expect(staleWrite.data).toBe(false);
+
+    const { data: events } = await service
+      .from("google_calendar_events")
+      .select("google_event_id")
+      .eq("company_id", disposableCompanyId);
+    expect(events ?? []).toHaveLength(0);
+  });
 });

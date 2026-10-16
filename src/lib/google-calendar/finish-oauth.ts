@@ -1,10 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { exchangeCodeForTokens, fetchGoogleUserEmail } from "./google-api";
 import { getGoogleRedirectUri } from "./config";
-import { loadSecrets, upsertSecrets } from "./connection-store";
+import { encryptToken } from "./token-crypto";
+import { loadSecrets } from "./connection-store";
 import { purgeGoogleCalendarImportData } from "./disconnect";
 import { assertDbOk } from "./db-write";
 import { upsertCalendarListPreservingSelection } from "./calendar-list";
+import { rpcPersistTokens } from "./sync-rpc";
 
 export async function finishGoogleCalendarOAuth(params: {
   admin: SupabaseClient;
@@ -71,7 +73,6 @@ export async function finishGoogleCalendarOAuth(params: {
       updated_at: new Date().toISOString(),
     };
     if (accountChanging) {
-      updatePayload.sync_generation = Number(existing.sync_generation ?? 0) + 1;
       updatePayload.sync_cursor = {};
     }
     const { error: updErr } = await params.admin
@@ -96,13 +97,23 @@ export async function finishGoogleCalendarOAuth(params: {
     connectionId = inserted!.id as string;
   }
 
-  await upsertSecrets(params.admin, {
+  const { data: genRow, error: genErr } = await params.admin
+    .from("google_calendar_connections")
+    .select("sync_generation")
+    .eq("id", connectionId)
+    .single();
+  assertDbOk(genErr, "LOAD_GENERATION");
+  const persisted = await rpcPersistTokens(params.admin, {
     connectionId,
     companyId: params.companyId,
-    refreshToken: refreshToken!,
-    accessToken: tokens.access_token,
-    accessTokenExpiresAt: expiresAt,
+    expectedGeneration: Number(genRow!.sync_generation),
+    refreshTokenEnc: encryptToken(refreshToken!),
+    accessTokenEnc: encryptToken(tokens.access_token),
+    accessTokenExpiresAt: expiresAt.toISOString(),
   });
+  if (!persisted) {
+    throw new Error("OAUTH_CONNECTION_STALE");
+  }
 
   await upsertCalendarListPreservingSelection(params.admin, {
     connectionId,

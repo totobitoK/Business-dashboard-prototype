@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { refreshAccessToken } from "./google-api";
-import { loadSecrets, upsertSecrets } from "./connection-store";
+import { loadSecrets } from "./connection-store";
+import { encryptToken } from "./token-crypto";
 import { TOKEN_REFRESH_BASE_BACKOFF_MS, TOKEN_REFRESH_MAX_ATTEMPTS } from "./config";
 import { isPermanentAuthError, isTransientGoogleError } from "./google-errors";
 import { withBoundedBackoff } from "./retry";
 import { assertDbOk } from "./db-write";
 import { generationStillValid } from "./connection-generation";
+import { rpcPersistTokens } from "./sync-rpc";
 
 export async function getValidAccessToken(
   admin: SupabaseClient,
@@ -44,6 +46,7 @@ export async function getValidAccessToken(
 
   const clientId = process.env.GOOGLE_CLIENT_ID!;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
+  const generation = Number(connRow.sync_generation);
 
   const refreshed = await withBoundedBackoff(
     async () => {
@@ -65,13 +68,17 @@ export async function getValidAccessToken(
   const expiresAt = new Date(Date.now() + refreshed.expires_in * 1000);
   const refreshToken = refreshed.refresh_token ?? secrets.refreshToken;
 
-  await upsertSecrets(admin, {
+  const persisted = await rpcPersistTokens(admin, {
     connectionId,
     companyId,
-    refreshToken,
-    accessToken: refreshed.access_token,
-    accessTokenExpiresAt: expiresAt,
+    expectedGeneration: expectedGeneration ?? generation,
+    refreshTokenEnc: encryptToken(refreshToken),
+    accessTokenEnc: encryptToken(refreshed.access_token),
+    accessTokenExpiresAt: expiresAt.toISOString(),
   });
+  if (!persisted) {
+    throw new Error("SYNC_ABORTED");
+  }
 
   return refreshed.access_token;
 }
