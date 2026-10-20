@@ -2,8 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { listEventsPage, type EventsListQuery } from "./google-api";
 import { parseGoogleEvent } from "./parse-event";
 import { frozenImportWindow, shouldRollImportWindow } from "./sync-window";
-import { assertDbOk } from "./db-write";
-import { rpcApplySyncEvent, rpcReconcileCalendar } from "./sync-rpc";
+import { abortUnlessReconcileApplied } from "./db-write";
+import { rpcApplySyncEvent, rpcInvalidateCalendarSyncToken, rpcReconcileCalendar } from "./sync-rpc";
 import type { SyncProgress } from "./sync-progress";
 
 export type CalendarRow = {
@@ -31,6 +31,7 @@ export async function syncOneCalendar(
     companyId: string;
     connectionId: string;
     generation: number;
+    workerId: string;
     cal: CalendarRow;
     calendarIndex: number;
     progress: SyncProgress | null;
@@ -113,6 +114,7 @@ export async function syncOneCalendar(
           connectionId: params.connectionId,
           companyId: params.companyId,
           expectedGeneration: params.generation,
+          workerId: params.workerId,
           googleCalendarId,
           parsed,
         });
@@ -137,15 +139,16 @@ export async function syncOneCalendar(
         const frozen = frozenImportWindow();
         timeMin = frozen.timeMin;
         timeMax = frozen.timeMax;
-        const { error: invErr } = await admin
-          .from("google_calendar_selected_calendars")
-          .update({
-            sync_token: null,
-            sync_token_invalidated_at: new Date().toISOString(),
-          })
-          .eq("id", params.cal.id)
-          .eq("connection_id", params.connectionId);
-        assertDbOk(invErr, "INVALIDATE_SYNC_TOKEN");
+        const invalidated = await rpcInvalidateCalendarSyncToken(admin, {
+          connectionId: params.connectionId,
+          companyId: params.companyId,
+          expectedGeneration: params.generation,
+          workerId: params.workerId,
+          calendarRowId: params.cal.id,
+        });
+        if (!invalidated) {
+          throw new Error("SYNC_ABORTED");
+        }
         continue;
       }
       throw e;
@@ -153,13 +156,15 @@ export async function syncOneCalendar(
   }
 
   if (mode === "full") {
-    await rpcReconcileCalendar(admin, {
+    const deleted = await rpcReconcileCalendar(admin, {
       connectionId: params.connectionId,
       companyId: params.companyId,
       expectedGeneration: params.generation,
+      workerId: params.workerId,
       googleCalendarId,
       seenEventIds: [...seen],
     });
+    abortUnlessReconcileApplied(deleted, "RECONCILE");
   }
 
   return {

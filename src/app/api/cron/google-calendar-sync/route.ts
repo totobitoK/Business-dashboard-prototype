@@ -44,6 +44,7 @@ export async function GET(request: Request) {
     try {
       const sync = await syncCompanyGoogleCalendar(admin, companyId, {
         deadlineMs: Math.min(SYNC_RUN_TIME_BUDGET_MS, 45_000),
+        workerId,
       });
       if (sync.ok && sync.partial) {
         results.push({ companyId, result: sync.reason ?? "partial" });

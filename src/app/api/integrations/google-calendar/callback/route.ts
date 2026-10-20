@@ -69,7 +69,7 @@ export async function GET(request: Request) {
   const workerId = `oauth-${Date.now()}`;
   if (await acquireSyncLease(admin, consumed.companyId, workerId)) {
     try {
-      await syncCompanyGoogleCalendar(admin, consumed.companyId);
+      await syncCompanyGoogleCalendar(admin, consumed.companyId, { workerId });
     } finally {
       await releaseSyncLock(admin, consumed.companyId, workerId);
     }

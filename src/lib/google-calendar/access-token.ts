@@ -7,13 +7,14 @@ import { isPermanentAuthError, isTransientGoogleError } from "./google-errors";
 import { withBoundedBackoff } from "./retry";
 import { assertDbOk } from "./db-write";
 import { generationStillValid } from "./connection-generation";
-import { rpcPersistTokens } from "./sync-rpc";
+import { rpcMarkReconnectRequired, rpcPersistTokens } from "./sync-rpc";
 
 export async function getValidAccessToken(
   admin: SupabaseClient,
   connectionId: string,
   companyId: string,
-  expectedGeneration?: number
+  expectedGeneration?: number,
+  workerId?: string | null
 ): Promise<string> {
   const { data: connRow, error: connErr } = await admin
     .from("google_calendar_connections")
@@ -75,6 +76,7 @@ export async function getValidAccessToken(
     refreshTokenEnc: encryptToken(refreshToken),
     accessTokenEnc: encryptToken(refreshed.access_token),
     accessTokenExpiresAt: expiresAt.toISOString(),
+    workerId: workerId ?? null,
   });
   if (!persisted) {
     throw new Error("SYNC_ABORTED");
@@ -86,21 +88,16 @@ export async function getValidAccessToken(
 export async function markReconnectRequired(
   admin: SupabaseClient,
   connectionId: string,
+  companyId: string,
   code: string,
-  expectedGeneration?: number
+  expectedGeneration: number,
+  workerId: string
 ): Promise<void> {
-  let q = admin
-    .from("google_calendar_connections")
-    .update({
-      status: "reconnect_required",
-      last_sync_error_code: code,
-      syncing_started_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", connectionId);
-  if (expectedGeneration !== undefined) {
-    q = q.eq("sync_generation", expectedGeneration);
-  }
-  const { error } = await q;
-  assertDbOk(error, "MARK_RECONNECT");
+  await rpcMarkReconnectRequired(admin, {
+    connectionId,
+    companyId,
+    expectedGeneration,
+    workerId,
+    errorCode: code,
+  });
 }

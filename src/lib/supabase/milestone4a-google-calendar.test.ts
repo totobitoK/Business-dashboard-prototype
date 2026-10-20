@@ -21,9 +21,6 @@ function prereq(): { ok: true } | { ok: false; reason: string } {
   if (!process.env.SUPABASE_SECRET_KEY) {
     return { ok: false, reason: "SUPABASE_SECRET_KEY" };
   }
-  if (!process.env.GOOGLE_TOKEN_ENCRYPTION_KEY) {
-    return { ok: false, reason: "GOOGLE_TOKEN_ENCRYPTION_KEY" };
-  }
   const seed = loadDevSeedCredentials();
   if (!seed?.users[USER_A]) {
     return { ok: false, reason: ".dev-seed-credentials.json (run npm run seed:dev)" };
@@ -36,6 +33,57 @@ async function signIn(url: string, key: string, email: string, password: string)
   const { error } = await client.auth.signInWithPassword({ email, password });
   if (error) throw error;
   return client;
+}
+
+async function insertConnectedFixture(
+  service: SupabaseClient,
+  companyId: string,
+  opts?: { syncGeneration?: number }
+) {
+  const { data: conn, error } = await service
+    .from("google_calendar_connections")
+    .insert({
+      company_id: companyId,
+      google_sub: "sub-fixture",
+      google_email: "fixture@test.local",
+      status: "connected",
+      sync_generation: opts?.syncGeneration ?? 0,
+    })
+    .select("id, sync_generation")
+    .single();
+  expect(error).toBeNull();
+
+  const connectionId = conn!.id as string;
+  const generation = Number(conn!.sync_generation);
+
+  const { data: cal, error: calErr } = await service
+    .from("google_calendar_selected_calendars")
+    .insert({
+      connection_id: connectionId,
+      company_id: companyId,
+      google_calendar_id: "primary",
+      summary: "Primary",
+      selected: true,
+    })
+    .select("id")
+    .single();
+  expect(calErr).toBeNull();
+
+  return {
+    connectionId,
+    generation,
+    calendarRowId: cal!.id as string,
+  };
+}
+
+async function acquireLease(service: SupabaseClient, companyId: string, workerId: string) {
+  const { data, error } = await service.rpc("google_calendar_acquire_sync_lease", {
+    p_company_id: companyId,
+    p_worker_id: workerId,
+    p_ttl_seconds: 300,
+  });
+  expect(error).toBeNull();
+  expect(data).toBe(true);
 }
 
 describe("Milestone 4A Google Calendar tenancy", () => {
@@ -56,6 +104,9 @@ describe("Milestone 4A Google Calendar tenancy", () => {
   }
 
   beforeAll(async () => {
+    if (!process.env.GOOGLE_TOKEN_ENCRYPTION_KEY) {
+      process.env.GOOGLE_TOKEN_ENCRYPTION_KEY = crypto.randomBytes(32).toString("base64");
+    }
     service = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SECRET_KEY!,
@@ -183,33 +234,13 @@ describe("Milestone 4A Google Calendar tenancy", () => {
     expect((second.data as unknown[] | null)?.length ?? 0).toBe(0);
   });
 
-  it("rejects stale sync writes after disconnect bumps generation", async () => {
+  it("rejects stale event writes after disconnect bumps generation", async () => {
     const disposable = await createDisposableM4aCompany(service, ownerUserId);
     disposableCompanyId = disposable.companyId;
 
-    const { data: conn, error } = await service
-      .from("google_calendar_connections")
-      .insert({
-        company_id: disposableCompanyId,
-        google_sub: "sub-race",
-        google_email: "race@test.local",
-        status: "connected",
-        sync_generation: 0,
-      })
-      .select("id, sync_generation")
-      .single();
-    expect(error).toBeNull();
-
-    const connectionId = conn!.id as string;
-    const generation = Number(conn!.sync_generation);
-
-    await service.from("google_calendar_selected_calendars").insert({
-      connection_id: connectionId,
-      company_id: disposableCompanyId,
-      google_calendar_id: "primary",
-      summary: "Primary",
-      selected: true,
-    });
+    const { connectionId, generation } = await insertConnectedFixture(service, disposableCompanyId);
+    const workerId = "worker-disconnect";
+    await acquireLease(service, disposableCompanyId, workerId);
 
     const appliedBefore = await service.rpc("google_calendar_sync_apply_event", {
       p_connection_id: connectionId,
@@ -227,6 +258,7 @@ describe("Milestone 4A Google Calendar tenancy", () => {
       p_status: "confirmed",
       p_google_updated_at: new Date().toISOString(),
       p_is_cancelled: false,
+      p_worker_id: workerId,
     });
     expect(appliedBefore.data).toBe(true);
 
@@ -251,6 +283,7 @@ describe("Milestone 4A Google Calendar tenancy", () => {
       p_status: "confirmed",
       p_google_updated_at: new Date().toISOString(),
       p_is_cancelled: false,
+      p_worker_id: workerId,
     });
     expect(staleWrite.data).toBe(false);
 
@@ -259,5 +292,164 @@ describe("Milestone 4A Google Calendar tenancy", () => {
       .select("google_event_id")
       .eq("company_id", disposableCompanyId);
     expect(events ?? []).toHaveLength(0);
+  });
+
+  it("rejects checkpoint and complete writes after generation bump (account replacement purge)", async () => {
+    const disposable = await createDisposableM4aCompany(service, ownerUserId);
+    disposableCompanyId = disposable.companyId;
+
+    const { connectionId, generation, calendarRowId } = await insertConnectedFixture(
+      service,
+      disposableCompanyId
+    );
+    const workerId = "worker-purge";
+    await acquireLease(service, disposableCompanyId, workerId);
+
+    const newGen = await service.rpc("google_calendar_purge_import_data", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+    });
+    expect(Number(newGen.data)).toBeGreaterThan(generation);
+
+    const checkpoint = await service.rpc("google_calendar_sync_checkpoint_calendar", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+      p_expected_generation: generation,
+      p_worker_id: workerId,
+      p_calendar_row_id: calendarRowId,
+      p_sync_token: "stale-token",
+      p_import_window_anchor_at: null,
+      p_last_synced_at: new Date().toISOString(),
+    });
+    expect(checkpoint.data).toBe(false);
+
+    const complete = await service.rpc("google_calendar_sync_mark_complete", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+      p_expected_generation: generation,
+      p_worker_id: workerId,
+    });
+    expect(complete.data).toBe(false);
+  });
+
+  it("rejects worker writes after lease loss", async () => {
+    const disposable = await createDisposableM4aCompany(service, ownerUserId);
+    disposableCompanyId = disposable.companyId;
+
+    const { connectionId, generation, calendarRowId } = await insertConnectedFixture(
+      service,
+      disposableCompanyId
+    );
+    const workerId = "worker-lost-lease";
+    await acquireLease(service, disposableCompanyId, workerId);
+    await service.rpc("google_calendar_release_sync_lease", {
+      p_company_id: disposableCompanyId,
+      p_worker_id: workerId,
+    });
+
+    const progress = await service.rpc("google_calendar_sync_persist_progress", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+      p_expected_generation: generation,
+      p_worker_id: workerId,
+      p_sync_cursor: { generation, calendarIndex: 0 },
+    });
+    expect(progress.data).toBe(false);
+
+    const checkpoint = await service.rpc("google_calendar_sync_checkpoint_calendar", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+      p_expected_generation: generation,
+      p_worker_id: workerId,
+      p_calendar_row_id: calendarRowId,
+      p_sync_token: "tok",
+      p_import_window_anchor_at: null,
+      p_last_synced_at: new Date().toISOString(),
+    });
+    expect(checkpoint.data).toBe(false);
+  });
+
+  it("rejects event writes when calendar is deselected", async () => {
+    const disposable = await createDisposableM4aCompany(service, ownerUserId);
+    disposableCompanyId = disposable.companyId;
+
+    const { connectionId, generation, calendarRowId } = await insertConnectedFixture(
+      service,
+      disposableCompanyId
+    );
+    const workerId = "worker-deselect";
+    await acquireLease(service, disposableCompanyId, workerId);
+
+    await service
+      .from("google_calendar_selected_calendars")
+      .update({ selected: false })
+      .eq("id", calendarRowId);
+
+    const applied = await service.rpc("google_calendar_sync_apply_event", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+      p_expected_generation: generation,
+      p_google_calendar_id: "primary",
+      p_google_event_id: "evt-deselected",
+      p_title: "X",
+      p_starts_at: new Date().toISOString(),
+      p_ends_at: null,
+      p_all_day: false,
+      p_all_day_start: null,
+      p_all_day_end: null,
+      p_timezone: null,
+      p_status: "confirmed",
+      p_google_updated_at: new Date().toISOString(),
+      p_is_cancelled: false,
+      p_worker_id: workerId,
+    });
+    expect(applied.data).toBe(false);
+  });
+
+  it("returns reconcile sentinel -1 when generation is stale", async () => {
+    const disposable = await createDisposableM4aCompany(service, ownerUserId);
+    disposableCompanyId = disposable.companyId;
+
+    const { connectionId, generation } = await insertConnectedFixture(service, disposableCompanyId);
+    const workerId = "worker-reconcile";
+    await acquireLease(service, disposableCompanyId, workerId);
+
+    await service.rpc("google_calendar_sync_generation_bump", {
+      p_connection_id: connectionId,
+    });
+
+    const reconciled = await service.rpc("google_calendar_sync_reconcile_calendar", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+      p_expected_generation: generation,
+      p_google_calendar_id: "primary",
+      p_seen_event_ids: ["evt-1"],
+      p_worker_id: workerId,
+    });
+    expect(reconciled.data).toBe(-1);
+  });
+
+  it("rejects stale token persist after generation bump", async () => {
+    const disposable = await createDisposableM4aCompany(service, ownerUserId);
+    disposableCompanyId = disposable.companyId;
+
+    const { connectionId, generation } = await insertConnectedFixture(service, disposableCompanyId);
+    const workerId = "worker-token";
+    await acquireLease(service, disposableCompanyId, workerId);
+
+    await service.rpc("google_calendar_sync_generation_bump", {
+      p_connection_id: connectionId,
+    });
+
+    const persisted = await service.rpc("google_calendar_sync_persist_tokens", {
+      p_connection_id: connectionId,
+      p_company_id: disposableCompanyId,
+      p_expected_generation: generation,
+      p_refresh_token_enc: encryptToken("r"),
+      p_access_token_enc: encryptToken("a"),
+      p_access_token_expires_at: new Date(Date.now() + 3600_000).toISOString(),
+      p_worker_id: workerId,
+    });
+    expect(persisted.data).toBe(false);
   });
 });

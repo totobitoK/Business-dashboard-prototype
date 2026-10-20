@@ -96,7 +96,7 @@ export async function saveGoogleCalendarSelectionAction(
   const workerId = `manual-${Date.now()}`;
   if (await acquireSyncLease(admin, companyId, workerId)) {
     try {
-      await syncCompanyGoogleCalendar(admin, companyId);
+      await syncCompanyGoogleCalendar(admin, companyId, { workerId });
     } finally {
       await releaseSyncLease(admin, companyId, workerId);
     }

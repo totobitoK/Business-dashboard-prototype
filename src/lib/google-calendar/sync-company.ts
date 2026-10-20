@@ -1,10 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SYNC_RUN_TIME_BUDGET_MS } from "./config";
 import { getValidAccessToken, markReconnectRequired } from "./access-token";
-import { assertDbOk } from "./db-write";
+import { assertDbOk, abortUnlessSyncGuardApplied } from "./db-write";
 import { acquireSyncLease, releaseSyncLease } from "./sync-lease";
 import { parseProgress, type SyncProgress } from "./sync-progress";
 import { syncOneCalendar, type CalendarRow } from "./sync-one-calendar";
+import {
+  rpcCheckpointCalendar,
+  rpcMarkIdleNoCalendars,
+  rpcMarkSyncComplete,
+  rpcMarkSyncError,
+  rpcMarkSyncing,
+  rpcPersistProgress,
+} from "./sync-rpc";
 
 export type { SyncProgress };
 
@@ -29,23 +37,6 @@ async function loadConnectionForSync(admin: SupabaseClient, companyId: string) {
   return data;
 }
 
-async function persistProgress(
-  admin: SupabaseClient,
-  connectionId: string,
-  generation: number,
-  progress: SyncProgress
-): Promise<void> {
-  const { error } = await admin
-    .from("google_calendar_connections")
-    .update({
-      sync_cursor: progress,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", connectionId)
-    .eq("sync_generation", generation);
-  assertDbOk(error, "PERSIST_PROGRESS");
-}
-
 function computeRetryDelayMs(lastCode: string | null | undefined): number {
   const base = 15 * 60 * 1000;
   if (!lastCode) return base;
@@ -56,8 +47,9 @@ function computeRetryDelayMs(lastCode: string | null | undefined): number {
 export async function syncCompanyGoogleCalendar(
   admin: SupabaseClient,
   companyId: string,
-  options?: { deadlineMs?: number }
+  options: { deadlineMs?: number; workerId: string }
 ): Promise<SyncCompanyResult> {
+  const workerId = options.workerId;
   const conn = await loadConnectionForSync(admin, companyId);
   if (!conn || conn.disconnected_at || conn.status === "disconnected") {
     return { ok: false, reason: "NOT_CONNECTED" };
@@ -65,22 +57,23 @@ export async function syncCompanyGoogleCalendar(
 
   const connectionId = conn.id as string;
   const generation = Number(conn.sync_generation ?? 0);
-  const budgetMs = options?.deadlineMs ?? SYNC_RUN_TIME_BUDGET_MS;
+  const budgetMs = options.deadlineMs ?? SYNC_RUN_TIME_BUDGET_MS;
   const startedAt = Date.now();
+  const syncingStartedAt = (conn.syncing_started_at as string | null) ?? new Date().toISOString();
 
-  const { error: markSyncErr } = await admin
-    .from("google_calendar_connections")
-    .update({
-      status: "syncing",
-      syncing_started_at: conn.syncing_started_at ?? new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", connectionId)
-    .eq("sync_generation", generation);
-  assertDbOk(markSyncErr, "MARK_SYNCING");
+  abortUnlessSyncGuardApplied(
+    await rpcMarkSyncing(admin, {
+      connectionId,
+      companyId,
+      expectedGeneration: generation,
+      workerId,
+      syncingStartedAt,
+    }),
+    "MARK_SYNCING"
+  );
 
   try {
-    const accessToken = await getValidAccessToken(admin, connectionId, companyId, generation);
+    const accessToken = await getValidAccessToken(admin, connectionId, companyId, generation, workerId);
 
     const { data: calendars, error: calErr } = await admin
       .from("google_calendar_selected_calendars")
@@ -91,26 +84,35 @@ export async function syncCompanyGoogleCalendar(
     assertDbOk(calErr, "LIST_CALENDARS");
 
     if (!calendars?.length) {
-      await admin
-        .from("google_calendar_connections")
-        .update({
-          status: "connected",
-          syncing_started_at: null,
-          sync_cursor: {},
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", connectionId)
-        .eq("sync_generation", generation);
+      abortUnlessSyncGuardApplied(
+        await rpcMarkIdleNoCalendars(admin, {
+          connectionId,
+          companyId,
+          expectedGeneration: generation,
+          workerId,
+        }),
+        "IDLE_NO_CALENDARS"
+      );
       return { ok: true };
     }
 
     let progress = parseProgress(conn.sync_cursor, generation);
     const startIndex = progress?.calendarIndex ?? 0;
+    const lastSyncedAt = new Date().toISOString();
 
     for (let i = startIndex; i < calendars.length; i++) {
       if (deadlineExceeded(startedAt, budgetMs)) {
         if (progress) {
-          await persistProgress(admin, connectionId, generation, progress);
+          abortUnlessSyncGuardApplied(
+            await rpcPersistProgress(admin, {
+              connectionId,
+              companyId,
+              expectedGeneration: generation,
+              workerId,
+              progress,
+            }),
+            "PERSIST_PROGRESS"
+          );
         }
         return { ok: true, partial: true, reason: "TIME_BUDGET" };
       }
@@ -124,6 +126,7 @@ export async function syncCompanyGoogleCalendar(
         companyId,
         connectionId,
         generation,
+        workerId,
         cal,
         calendarIndex: i,
         progress: calProgress,
@@ -132,76 +135,67 @@ export async function syncCompanyGoogleCalendar(
       });
 
       if (!result.done) {
-        await persistProgress(admin, connectionId, generation, result.partial);
+        abortUnlessSyncGuardApplied(
+          await rpcPersistProgress(admin, {
+            connectionId,
+            companyId,
+            expectedGeneration: generation,
+            workerId,
+            progress: result.partial,
+          }),
+          "PERSIST_PROGRESS"
+        );
         return { ok: true, partial: true, reason: "TIME_BUDGET" };
       }
 
-      if (result.finalSyncToken) {
-        const { error: tokErr } = await admin
-          .from("google_calendar_selected_calendars")
-          .update({
-            sync_token: result.finalSyncToken,
-            last_synced_at: new Date().toISOString(),
-            import_window_anchor_at: result.anchorAt ?? cal.import_window_anchor_at,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", cal.id)
-          .eq("connection_id", connectionId);
-        assertDbOk(tokErr, "CHECKPOINT_CALENDAR");
-      } else if (result.anchorAt) {
-        const { error: anchorErr } = await admin
-          .from("google_calendar_selected_calendars")
-          .update({
-            import_window_anchor_at: result.anchorAt,
-            last_synced_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", cal.id)
-          .eq("connection_id", connectionId);
-        assertDbOk(anchorErr, "CHECKPOINT_ANCHOR");
+      if (result.finalSyncToken || result.anchorAt) {
+        abortUnlessSyncGuardApplied(
+          await rpcCheckpointCalendar(admin, {
+            connectionId,
+            companyId,
+            expectedGeneration: generation,
+            workerId,
+            calendarRowId: cal.id,
+            syncToken: result.finalSyncToken ?? null,
+            importWindowAnchorAt: result.anchorAt ?? null,
+            lastSyncedAt,
+          }),
+          "CHECKPOINT_CALENDAR"
+        );
       }
 
       progress = null;
     }
 
-    const { error: doneErr } = await admin
-      .from("google_calendar_connections")
-      .update({
-        status: "connected",
-        last_sync_at: new Date().toISOString(),
-        last_sync_error_code: null,
-        next_sync_attempt_at: null,
-        syncing_started_at: null,
-        sync_cursor: {},
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", connectionId)
-      .eq("sync_generation", generation);
-    assertDbOk(doneErr, "SYNC_COMPLETE");
+    abortUnlessSyncGuardApplied(
+      await rpcMarkSyncComplete(admin, {
+        connectionId,
+        companyId,
+        expectedGeneration: generation,
+        workerId,
+      }),
+      "SYNC_COMPLETE"
+    );
 
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "RECONNECT_REQUIRED" || msg.includes("TOKEN_REFRESH_PERMANENT")) {
-      await markReconnectRequired(admin, connectionId, msg, generation);
+      await markReconnectRequired(admin, connectionId, companyId, msg, generation, workerId);
       return { ok: false, reason: "RECONNECT_REQUIRED" };
     }
-    if (msg === "SYNC_ABORTED") {
+    if (msg.startsWith("SYNC_ABORTED")) {
       return { ok: false, reason: "SYNC_ABORTED" };
     }
     const retryAt = new Date(Date.now() + computeRetryDelayMs(msg)).toISOString();
-    const { error: errUpd } = await admin
-      .from("google_calendar_connections")
-      .update({
-        status: "error",
-        last_sync_error_code: msg.slice(0, 120),
-        next_sync_attempt_at: retryAt,
-        syncing_started_at: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", connectionId)
-      .eq("sync_generation", generation);
-    assertDbOk(errUpd, "SYNC_ERROR");
+    await rpcMarkSyncError(admin, {
+      connectionId,
+      companyId,
+      expectedGeneration: generation,
+      workerId,
+      errorCode: msg.slice(0, 120),
+      nextSyncAttemptAt: retryAt,
+    });
     return { ok: false, reason: msg };
   }
 }
