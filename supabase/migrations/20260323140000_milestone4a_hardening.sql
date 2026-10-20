@@ -36,7 +36,7 @@ BEGIN
        OR public.google_calendar_sync_locks.locked_until <= now()
   RETURNING locked_by INTO v_holder;
 
-  RETURN v_holder = p_worker_id;
+  RETURN COALESCE(v_holder = p_worker_id, false);
 END;
 $$;
 

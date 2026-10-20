@@ -8,6 +8,8 @@ Apply migrations in filename order from this directory:
 2. `20260323140000_milestone4a_hardening.sql`
 3. `20260324120000_milestone4a_atomic_sync.sql`
 4. `20260325120000_milestone4a_checkpoint_guards.sql`
+5. `20260326120000_service_role_table_grants.sql`
+6. `20260326130000_sync_lease_acquire_false.sql`
 
 Fresh environments should use `supabase db push` / linked CLI or run the full SQL files above. Do **not** reset production or dev databases to reconcile history.
 
