@@ -63,8 +63,8 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   {
     id: "square",
     label: "Square",
-    shortDescription: "In-person and online payments from Square.",
-    implementationStatus: "candidate",
+    shortDescription: "Completed payments and refunds from one Square seller.",
+    implementationStatus: "in_development",
     implementationPriority: 4,
     publicTeaser: "hidden",
     includeInOnboarding: true,

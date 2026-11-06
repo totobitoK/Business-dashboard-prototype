@@ -58,7 +58,7 @@ Tests use **publishable key + signInWithPassword** only (no service role).
 
 ## 6. Launch checklist
 
-Sandbox and production setup for QuickBooks Online, and the items still deferred, are in [`docs/launch-checklist.md`](../docs/launch-checklist.md). Do not commit credentials.
+Sandbox and production setup for QuickBooks Online and Square, and the items still deferred, are in [`docs/launch-checklist.md`](../docs/launch-checklist.md). Do not commit credentials.
 
 ## 7. Routes
 

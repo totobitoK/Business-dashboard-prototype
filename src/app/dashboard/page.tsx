@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LiveAppointmentsSection } from "@/components/google-calendar/LiveAppointmentsSection";
 import type { GoogleCalendarStatus } from "@/components/google-calendar/LiveGoogleCalendarPanel";
 import { LiveReceivablesSection } from "@/components/quickbooks/LiveReceivablesSection";
+import { LiveSquareCollectionsSection } from "@/components/square/LiveSquareCollectionsSection";
 import {
   buildReceivablesViewModel,
   type QuickBooksStatusPayload,
@@ -13,6 +14,10 @@ import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { liveClientRoutes } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/server";
 import { parseSetupPaymentObligation } from "@/lib/setup-payment-summary";
+import {
+  buildSquareCollectionsViewModel,
+  type SquareStatusPayload,
+} from "@/lib/square/collections-presentation";
 
 export default async function LiveCustomerDashboardPage() {
   const supabase = await createClient();
@@ -39,6 +44,9 @@ export default async function LiveCustomerDashboardPage() {
   let quickBooksStatus: QuickBooksStatusPayload | null = null;
   let quickBooksInvoices: unknown[] = [];
   let quickBooksLoadError = false;
+  let squareStatus: SquareStatusPayload | null = null;
+  let squareTransactions: unknown[] = [];
+  let squareLoadError = false;
 
   if (companyId) {
     const { data: statusRaw } = await supabase.rpc("member_get_google_calendar_status", {
@@ -69,6 +77,17 @@ export default async function LiveCustomerDashboardPage() {
       quickBooksStatus = (quickBooksStatusResult.data ?? null) as QuickBooksStatusPayload | null;
       quickBooksInvoices = (quickBooksInvoiceResult.data ?? []) as unknown[];
     }
+
+    const [squareStatusResult, squareTransactionResult] = await Promise.all([
+      supabase.rpc("member_get_square_status", { p_company_id: companyId }),
+      supabase.rpc("member_list_square_transactions", { p_company_id: companyId }),
+    ]);
+    if (squareStatusResult.error || squareTransactionResult.error) {
+      squareLoadError = true;
+    } else {
+      squareStatus = (squareStatusResult.data ?? null) as SquareStatusPayload | null;
+      squareTransactions = (squareTransactionResult.data ?? []) as unknown[];
+    }
   }
 
   const summaries = await Promise.all(
@@ -89,7 +108,7 @@ export default async function LiveCustomerDashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title={companyName}
-        description="Your RavenView project hub — onboarding, setup payments, activation, QuickBooks receivables, and live Google Calendar appointments."
+        description="Your RavenView project hub — onboarding, setup payments, activation, QuickBooks receivables, Square collections, and live Google Calendar appointments."
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -103,6 +122,14 @@ export default async function LiveCustomerDashboardPage() {
           status: quickBooksStatus,
           invoices: quickBooksInvoices,
           loadError: quickBooksLoadError,
+        })}
+      />
+
+      <LiveSquareCollectionsSection
+        model={buildSquareCollectionsViewModel({
+          status: squareStatus,
+          transactions: squareTransactions,
+          loadError: squareLoadError,
         })}
       />
 

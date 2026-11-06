@@ -28,6 +28,7 @@ describe("connector catalog (internal)", () => {
       (c) =>
         c.id !== "google-calendar" &&
         c.id !== "quickbooks" &&
+        c.id !== "square" &&
         c.id !== "other" &&
         c.id !== "excel-csv"
     );

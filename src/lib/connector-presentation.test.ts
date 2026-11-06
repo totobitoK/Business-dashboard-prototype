@@ -59,15 +59,30 @@ describe("connector presentation policy", () => {
     );
     expect(launchList.some((c) => c.implementationStatus === "candidate")).toBe(false);
     expect(launchList.some((c) => c.id === "quickbooks")).toBe(false);
+    expect(launchList.some((c) => c.id === "square")).toBe(false);
   });
 
   it("gates Connect on operational status and runtime configuration", () => {
+    rememberQboEnv();
+    delete process.env.QUICKBOOKS_SANDBOX_QA;
+    delete process.env.QUICKBOOKS_INTEGRATION_ENABLED;
+    delete process.env.QUICKBOOKS_CONNECTOR_VERIFIED;
+    const squareKeys = ["SQUARE_SANDBOX_QA", "SQUARE_INTEGRATION_ENABLED", "SQUARE_CONNECTOR_VERIFIED"] as const;
+    const squareEnv = squareKeys.map((key) => [key, process.env[key]] as const);
+    for (const key of squareKeys) delete process.env[key];
     const calendar = CONNECTOR_DEFINITIONS.find((c) => c.id === "google-calendar")!;
     expect(calendar.implementationStatus).toBe("in_development");
     expect(connectorCanConnect(calendar)).toBe(false);
     const quickbooks = CONNECTOR_DEFINITIONS.find((c) => c.id === "quickbooks")!;
     expect(quickbooks.implementationStatus).toBe("in_development");
     expect(connectorCanConnect(quickbooks)).toBe(false);
+    const square = CONNECTOR_DEFINITIONS.find((c) => c.id === "square")!;
+    expect(square.implementationStatus).toBe("in_development");
+    expect(connectorCanConnect(square)).toBe(false);
+    for (const [key, value] of squareEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
     expect(
       connectorCanConnect({
         ...quickbooks,
