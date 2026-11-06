@@ -40,14 +40,14 @@ export const STALE_SYNCING_RECOVERY_MS = 10 * 60 * 1000;
 export const TOKEN_REFRESH_MAX_ATTEMPTS = 3;
 export const TOKEN_REFRESH_BASE_BACKOFF_MS = 400;
 
-/** Vercel cron: see vercel.json (default every 15 minutes). */
-export const SYNC_CRON_INTERVAL_MINUTES = 15;
+/** Vercel Hobby allows one cron run per day. See vercel.json. A Pro plan can use a tighter schedule. */
+export const SYNC_CRON_INTERVAL_MINUTES = 24 * 60;
 export const SYNC_CRON_MAX_COMPANIES_PER_RUN = 5;
 
 /**
  * Scheduled refresh capacity (approximate):
  * At most SYNC_CRON_MAX_COMPANIES_PER_RUN companies complete a sync pass per cron tick.
- * With a 15-minute cron, each company is refreshed about every (N / 5) × 15 minutes
+ * With the daily cron, each company is refreshed about every (N / 5) days
  * when N companies have selected calendars and healthy connections.
  */
 export function estimatedSyncRefreshMinutes(connectedCompaniesWithSelection: number): number {
