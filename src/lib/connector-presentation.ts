@@ -7,6 +7,7 @@ import {
   isGoogleCalendarIntegrationConfigured,
   isGoogleCalendarInternalConnectEnabled,
 } from "./google-calendar/config";
+import { isQuickBooksConnectAllowed } from "./quickbooks/config";
 
 /** Customer-facing site phase — separate from internal engineering status. */
 export type ConnectorPublicPhase = "private_build" | "launch";
@@ -18,6 +19,10 @@ export function getConnectorPublicPhase(): ConnectorPublicPhase {
 
 /** Connect when engineering status is operational and runtime env is configured (per provider). */
 export function connectorCanConnect(entry: ConnectorDefinition): boolean {
+  if (entry.id === "quickbooks") {
+    if (entry.implementationStatus === "candidate") return false;
+    return isQuickBooksConnectAllowed();
+  }
   if (entry.implementationStatus !== "operational") return false;
   if (entry.id === "google-calendar") {
     if (!isGoogleCalendarIntegrationConfigured()) return false;

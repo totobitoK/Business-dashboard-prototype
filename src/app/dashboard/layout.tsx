@@ -36,7 +36,7 @@ export default async function LiveDashboardLayout({
             <Link href="/dashboard/settings" className="hover:text-purple hover:underline">
               Settings
             </Link>
-            <span>· Live onboarding, payments, Google Calendar</span>
+            <span>· Live onboarding, payments, QuickBooks, Google Calendar</span>
             <form action="/auth/logout" method="post">
               <button type="submit" className="text-sm font-medium text-purple hover:underline">
                 Sign out

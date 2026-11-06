@@ -21,8 +21,15 @@ describe("connector catalog (internal)", () => {
     const calendar = CONNECTOR_DEFINITIONS.find((c) => c.id === "google-calendar");
     expect(calendar?.implementationStatus).toBe("in_development");
     expect(calendar?.implementationPriority).toBe(1);
+    const quickbooks = CONNECTOR_DEFINITIONS.find((c) => c.id === "quickbooks");
+    expect(quickbooks?.implementationStatus).toBe("in_development");
+    expect(quickbooks?.implementationPriority).toBe(2);
     const others = CONNECTOR_DEFINITIONS.filter(
-      (c) => c.id !== "google-calendar" && c.id !== "other" && c.id !== "excel-csv"
+      (c) =>
+        c.id !== "google-calendar" &&
+        c.id !== "quickbooks" &&
+        c.id !== "other" &&
+        c.id !== "excel-csv"
     );
     expect(others.every((c) => c.implementationStatus === "candidate")).toBe(true);
   });
@@ -31,6 +38,7 @@ describe("connector catalog (internal)", () => {
     const early = connectorsPendingEarlyExternalApproval().map((c) => c.id);
     expect(early).toContain("google-ads");
     expect(early).toContain("meta-ads");
+    expect(early).toContain("quickbooks");
   });
 
   it("keeps onboarding choices on internal catalog without public marketing requirement", () => {

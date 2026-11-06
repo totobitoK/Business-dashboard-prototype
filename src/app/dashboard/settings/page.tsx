@@ -2,15 +2,19 @@ import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { LiveGoogleCalendarPanel } from "@/components/google-calendar/LiveGoogleCalendarPanel";
 import type { GoogleCalendarStatus } from "@/components/google-calendar/LiveGoogleCalendarPanel";
+import { LiveQuickBooksPanel } from "@/components/quickbooks/LiveQuickBooksPanel";
 import { getGoogleCalendarMembershipRole } from "@/lib/actions/google-calendar";
+import { getQuickBooksMembershipRole } from "@/lib/actions/quickbooks";
 import { listMemberCompanies } from "@/lib/db/projects.server";
 import { isGoogleCalendarIntegrationConfigured } from "@/lib/google-calendar/config";
+import { isQuickBooksConnectAllowed } from "@/lib/quickbooks/config";
+import type { QuickBooksStatusPayload } from "@/lib/quickbooks/receivables-presentation";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function LiveDashboardSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ google?: string }>;
+  searchParams: Promise<{ google?: string; quickbooks?: string }>;
 }) {
   const sp = await searchParams;
   const companies = await listMemberCompanies();
@@ -26,8 +30,12 @@ export default async function LiveDashboardSettingsPage({
     );
   }
 
-  const role = await getGoogleCalendarMembershipRole(companyId);
+  const [role, quickBooksRole] = await Promise.all([
+    getGoogleCalendarMembershipRole(companyId),
+    getQuickBooksMembershipRole(companyId),
+  ]);
   const isOwner = role === "owner";
+  const quickBooksOwner = quickBooksRole === "owner";
 
   const { data: statusRaw } = await supabase.rpc("member_get_google_calendar_status", {
     p_company_id: companyId,
@@ -46,6 +54,12 @@ export default async function LiveDashboardSettingsPage({
     .eq("company_id", companyId)
     .order("summary");
 
+  const { data: quickBooksRaw, error: quickBooksError } = await supabase.rpc(
+    "member_get_quickbooks_status",
+    { p_company_id: companyId }
+  );
+  const quickBooksStatus = (quickBooksError ? null : quickBooksRaw) as QuickBooksStatusPayload | null;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -57,6 +71,23 @@ export default async function LiveDashboardSettingsPage({
           ← Back to dashboard
         </Link>
       </p>
+      <LiveQuickBooksPanel
+        companyId={companyId}
+        isOwner={quickBooksOwner}
+        connectAllowed={isQuickBooksConnectAllowed()}
+        status={
+          quickBooksStatus ?? {
+            connected: false,
+            status: "disconnected",
+          }
+        }
+        flashCode={sp.quickbooks ?? null}
+      />
+      {quickBooksError ? (
+        <p className="text-sm text-ink-muted">
+          QuickBooks status could not be loaded. Apply the latest database migration, then refresh.
+        </p>
+      ) : null}
       <LiveGoogleCalendarPanel
         companyId={companyId}
         isOwner={isOwner}

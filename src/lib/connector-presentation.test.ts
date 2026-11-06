@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { CONNECTOR_DEFINITIONS } from "./connector-catalog";
 import {
   connectorCanConnect,
@@ -6,6 +6,39 @@ import {
   getPublicMarketingConnectors,
   getPublicStatusBadge,
 } from "./connector-presentation";
+
+const QBO_ENV_KEYS = [
+  "QUICKBOOKS_ENVIRONMENT",
+  "QUICKBOOKS_INTEGRATION_ENABLED",
+  "QUICKBOOKS_CONNECTOR_VERIFIED",
+  "QUICKBOOKS_SANDBOX_QA",
+  "QUICKBOOKS_SANDBOX_CLIENT_ID",
+  "QUICKBOOKS_SANDBOX_CLIENT_SECRET",
+  "QUICKBOOKS_SANDBOX_TOKEN_ENCRYPTION_KEY",
+  "QUICKBOOKS_PRODUCTION_CLIENT_ID",
+  "QUICKBOOKS_PRODUCTION_CLIENT_SECRET",
+  "QUICKBOOKS_PRODUCTION_TOKEN_ENCRYPTION_KEY",
+] as const;
+
+const previousQboEnv = new Map<string, string | undefined>();
+let qboEnvCaptured = false;
+
+function rememberQboEnv() {
+  if (qboEnvCaptured) return;
+  for (const key of QBO_ENV_KEYS) previousQboEnv.set(key, process.env[key]);
+  qboEnvCaptured = true;
+}
+
+function restoreQboEnv() {
+  if (!qboEnvCaptured) return;
+  for (const key of QBO_ENV_KEYS) {
+    const value = previousQboEnv.get(key);
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  previousQboEnv.clear();
+  qboEnvCaptured = false;
+}
 
 describe("connector presentation policy", () => {
   it("hides public marketing connectors during private build", () => {
@@ -25,17 +58,58 @@ describe("connector presentation policy", () => {
       true
     );
     expect(launchList.some((c) => c.implementationStatus === "candidate")).toBe(false);
+    expect(launchList.some((c) => c.id === "quickbooks")).toBe(false);
   });
 
   it("gates Connect on operational status and runtime configuration", () => {
     const calendar = CONNECTOR_DEFINITIONS.find((c) => c.id === "google-calendar")!;
     expect(calendar.implementationStatus).toBe("in_development");
     expect(connectorCanConnect(calendar)).toBe(false);
+    const quickbooks = CONNECTOR_DEFINITIONS.find((c) => c.id === "quickbooks")!;
+    expect(quickbooks.implementationStatus).toBe("in_development");
+    expect(connectorCanConnect(quickbooks)).toBe(false);
     expect(
       connectorCanConnect({
-        ...CONNECTOR_DEFINITIONS.find((c) => c.id === "quickbooks")!,
+        ...quickbooks,
         implementationStatus: "operational",
       })
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("allows QuickBooks connect only when that environment is configured and verified", () => {
+    rememberQboEnv();
+    process.env.QUICKBOOKS_ENVIRONMENT = "sandbox";
+    process.env.QUICKBOOKS_INTEGRATION_ENABLED = "true";
+    process.env.QUICKBOOKS_CONNECTOR_VERIFIED = "true";
+    process.env.QUICKBOOKS_SANDBOX_CLIENT_ID = "sandbox-client";
+    process.env.QUICKBOOKS_SANDBOX_CLIENT_SECRET = "sandbox-secret";
+    process.env.QUICKBOOKS_SANDBOX_TOKEN_ENCRYPTION_KEY = "sandbox-key-at-least-32-characters";
+    process.env.QUICKBOOKS_PRODUCTION_CLIENT_ID = "production-client";
+    const quickbooks = CONNECTOR_DEFINITIONS.find((c) => c.id === "quickbooks")!;
+    expect(connectorCanConnect(quickbooks)).toBe(true);
+    process.env.QUICKBOOKS_ENVIRONMENT = "production";
+    expect(connectorCanConnect(quickbooks)).toBe(false);
+  });
+
+  it("allows sandbox QA without marking QuickBooks verified or connectable in production", () => {
+    rememberQboEnv();
+    delete process.env.QUICKBOOKS_INTEGRATION_ENABLED;
+    delete process.env.QUICKBOOKS_CONNECTOR_VERIFIED;
+    process.env.QUICKBOOKS_ENVIRONMENT = "sandbox";
+    process.env.QUICKBOOKS_SANDBOX_QA = "true";
+    process.env.QUICKBOOKS_SANDBOX_CLIENT_ID = "sandbox-client";
+    process.env.QUICKBOOKS_SANDBOX_CLIENT_SECRET = "sandbox-secret";
+    process.env.QUICKBOOKS_SANDBOX_TOKEN_ENCRYPTION_KEY = "sandbox-key-at-least-32-characters";
+    const quickbooks = CONNECTOR_DEFINITIONS.find((c) => c.id === "quickbooks")!;
+    expect(connectorCanConnect(quickbooks)).toBe(true);
+    process.env.QUICKBOOKS_ENVIRONMENT = "production";
+    process.env.QUICKBOOKS_PRODUCTION_CLIENT_ID = "production-client";
+    process.env.QUICKBOOKS_PRODUCTION_CLIENT_SECRET = "production-secret";
+    process.env.QUICKBOOKS_PRODUCTION_TOKEN_ENCRYPTION_KEY = "production-key-at-least-32-characters!";
+    expect(connectorCanConnect(quickbooks)).toBe(false);
+  });
+
+  afterEach(() => {
+    restoreQboEnv();
   });
 });

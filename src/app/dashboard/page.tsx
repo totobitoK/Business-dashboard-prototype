@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { LiveAppointmentsSection } from "@/components/google-calendar/LiveAppointmentsSection";
 import type { GoogleCalendarStatus } from "@/components/google-calendar/LiveGoogleCalendarPanel";
+import { LiveReceivablesSection } from "@/components/quickbooks/LiveReceivablesSection";
+import {
+  buildReceivablesViewModel,
+  type QuickBooksStatusPayload,
+} from "@/lib/quickbooks/receivables-presentation";
 import { listMemberCompanies, listProjectsForMember } from "@/lib/db/projects.server";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -31,6 +36,9 @@ export default async function LiveCustomerDashboardPage() {
     imported_at: string;
   }[] = [];
   const calendarNames: Record<string, string> = {};
+  let quickBooksStatus: QuickBooksStatusPayload | null = null;
+  let quickBooksInvoices: unknown[] = [];
+  let quickBooksLoadError = false;
 
   if (companyId) {
     const { data: statusRaw } = await supabase.rpc("member_get_google_calendar_status", {
@@ -49,6 +57,17 @@ export default async function LiveCustomerDashboardPage() {
     appointments = (appts ?? []) as typeof appointments;
     for (const c of cals ?? []) {
       calendarNames[c.google_calendar_id as string] = c.summary as string;
+    }
+
+    const [quickBooksStatusResult, quickBooksInvoiceResult] = await Promise.all([
+      supabase.rpc("member_get_quickbooks_status", { p_company_id: companyId }),
+      supabase.rpc("member_list_quickbooks_invoices", { p_company_id: companyId }),
+    ]);
+    if (quickBooksStatusResult.error || quickBooksInvoiceResult.error) {
+      quickBooksLoadError = true;
+    } else {
+      quickBooksStatus = (quickBooksStatusResult.data ?? null) as QuickBooksStatusPayload | null;
+      quickBooksInvoices = (quickBooksInvoiceResult.data ?? []) as unknown[];
     }
   }
 
@@ -70,7 +89,7 @@ export default async function LiveCustomerDashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title={companyName}
-        description="Your RavenView project hub — onboarding, setup payments, activation, and live Google Calendar appointments."
+        description="Your RavenView project hub — onboarding, setup payments, activation, QuickBooks receivables, and live Google Calendar appointments."
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -78,6 +97,14 @@ export default async function LiveCustomerDashboardPage() {
           Connections & settings
         </Link>
       </div>
+
+      <LiveReceivablesSection
+        model={buildReceivablesViewModel({
+          status: quickBooksStatus,
+          invoices: quickBooksInvoices,
+          loadError: quickBooksLoadError,
+        })}
+      />
 
       <LiveAppointmentsSection
         status={calendarStatus}
@@ -111,9 +138,9 @@ export default async function LiveCustomerDashboardPage() {
                 <div className="mt-4 rounded-lg border border-purple-100 bg-purple-50/30 px-4 py-3 text-sm text-ink">
                   <p className="font-semibold">Dashboard activated</p>
                   <p className="mt-1 text-ink-muted">
-                    Setup payment milestones are complete. Connect Google Calendar in settings to
-                    see live appointments; other operational metrics will appear as RavenView
-                    enables them.
+                    Setup payment milestones are complete. Open invoice balances appear when
+                    QuickBooks Online is connected, and appointments appear when Google Calendar
+                    is connected.
                   </p>
                 </div>
               ) : (

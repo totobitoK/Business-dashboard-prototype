@@ -56,7 +56,11 @@ Tests use **publishable key + signInWithPassword** only (no service role).
 - **Demo** exports → `clients/demo/` via `/api/demo/scope-card` (development only).
 - **Live** exports → `clients/` via `/api/scope-card` (platform admin, development only).
 
-## 6. Routes
+## 6. Launch checklist
+
+Sandbox and production setup for QuickBooks Online, and the items still deferred, are in [`docs/launch-checklist.md`](../docs/launch-checklist.md). Do not commit credentials.
+
+## 7. Routes
 
 | URL | Mode |
 |-----|------|

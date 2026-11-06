@@ -44,11 +44,12 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   {
     id: "quickbooks",
     label: "QuickBooks Online",
-    shortDescription: "Accounting, invoices, and financial summaries.",
-    implementationStatus: "candidate",
+    shortDescription: "Open and overdue invoice balances from one QuickBooks Online company.",
+    implementationStatus: "in_development",
     implementationPriority: 2,
     publicTeaser: "hidden",
     includeInOnboarding: true,
+    earlyExternalApproval: true,
   },
   {
     id: "google-sheets",
