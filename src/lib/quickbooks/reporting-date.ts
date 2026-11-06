@@ -1,3 +1,5 @@
+import { EASTERN_TIME_ZONE } from "@/lib/company-time-zone";
+
 export function isValidIanaTimeZone(timeZone: string): boolean {
   try {
     Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
@@ -9,7 +11,7 @@ export function isValidIanaTimeZone(timeZone: string): boolean {
 
 /** Calendar date in the company time zone, YYYY-MM-DD. */
 export function reportingDateInTimeZone(timeZone: string, now: Date): string {
-  const zone = isValidIanaTimeZone(timeZone) ? timeZone : "UTC";
+  const zone = isValidIanaTimeZone(timeZone) ? timeZone : EASTERN_TIME_ZONE;
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: zone,
     year: "numeric",
@@ -18,12 +20,23 @@ export function reportingDateInTimeZone(timeZone: string, now: Date): string {
   }).format(now);
 }
 
-export function configuredReportingTimeZone(): { timeZone: string; source: "configured" | "utc_default" } {
+/** Deployment override. Empty means each company keeps its own time zone. */
+export function reportingTimeZoneOverride(): string | null {
   const raw = process.env.QUICKBOOKS_REPORTING_TIMEZONE?.trim() ?? "";
-  if (raw && isValidIanaTimeZone(raw)) {
-    return { timeZone: raw, source: "configured" };
-  }
-  return { timeZone: "UTC", source: "utc_default" };
+  return raw && isValidIanaTimeZone(raw) ? raw : null;
+}
+
+/**
+ * The company time zone wins. A deployment override replaces it.
+ * QuickBooks CompanyInfo is not a source: a sync must not move the reporting date.
+ */
+export function selectReportingTimeZone(
+  companyTimeZone: string | null | undefined,
+  override: string | null = reportingTimeZoneOverride()
+): string {
+  if (override && isValidIanaTimeZone(override)) return override;
+  if (companyTimeZone && isValidIanaTimeZone(companyTimeZone)) return companyTimeZone;
+  return EASTERN_TIME_ZONE;
 }
 
 /**

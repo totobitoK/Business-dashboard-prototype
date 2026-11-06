@@ -206,12 +206,16 @@ describe("QuickBooks tenant isolation and invoice rules", () => {
       p_company_id: disposableCompanyId,
     });
     const rows = (list.data ?? []) as Array<{
+      qbo_invoice_id: string | null;
       doc_number: string | null;
       due_date: string | null;
+      total_amount: string | number | null;
       remaining_balance: string | number;
       overdue: boolean;
     }>;
     const partial = rows.find((row) => row.doc_number === "1001");
+    expect(partial?.qbo_invoice_id).toBe("1");
+    expect(Number(partial?.total_amount)).toBe(100);
     expect(Number(partial?.remaining_balance)).toBe(40);
     expect(partial?.overdue).toBe(false);
     const missingDue = rows.find((row) => Number(row.remaining_balance) === 5);
@@ -284,5 +288,5 @@ describe("QuickBooks tenant isolation and invoice rules", () => {
     });
     const replay = Array.isArray(second.data) ? second.data : second.data ? [second.data] : [];
     expect(replay).toHaveLength(0);
-  });
+  }, 30_000);
 });

@@ -9,7 +9,7 @@ import {
   collectOpenInvoices,
 } from "./invoice-import";
 import { QuickBooksReadError, qboReadJson, readCompanyProfile } from "./qbo-read";
-import { configuredReportingTimeZone, reportingDateInTimeZone } from "./reporting-date";
+import { reportingDateInTimeZone, selectReportingTimeZone } from "./reporting-date";
 import {
   acquireSyncLease,
   finalizeOpenInvoices,
@@ -133,16 +133,15 @@ export async function syncCompanyQuickBooks(
     };
 
     const profile = readCompanyProfile(await read(`companyinfo/${connection.realmId}`));
-    const configured = configuredReportingTimeZone();
-    let timeZone = connection.reportingTimezone;
-    let source = connection.reportingTimezoneSource;
-    if (profile.timeZone) {
-      timeZone = profile.timeZone;
-      source = "quickbooks";
-    } else if (source !== "quickbooks" && configured.source === "configured") {
-      timeZone = configured.timeZone;
-      source = "configured";
-    }
+    const { data: companyRow } = await admin
+      .from("companies")
+      .select("timezone")
+      .eq("id", companyId)
+      .maybeSingle();
+    const timeZone = selectReportingTimeZone(
+      typeof companyRow?.timezone === "string" ? companyRow.timezone : null
+    );
+    const source = "configured" as const;
     const reportingDate = reportingDateInTimeZone(timeZone, new Date());
     const invoices = await collectOpenInvoices({
       reportingDate,

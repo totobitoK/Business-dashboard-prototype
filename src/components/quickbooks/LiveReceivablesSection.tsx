@@ -1,4 +1,6 @@
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { ReceivablesInvoiceList } from "@/components/quickbooks/ReceivablesInvoiceList";
+import { companyTimeZoneLabel } from "@/lib/company-time-zone";
 import type { ReceivablesViewModel } from "@/lib/quickbooks/receivables-presentation";
 
 function formatIsoDate(iso: string): string {
@@ -64,9 +66,7 @@ export function LiveReceivablesSection({ model }: { model: ReceivablesViewModel 
           <p className="mt-3 text-xs text-ink-muted">{model.overdueRule}</p>
           <p className="mt-1 text-xs text-ink-muted">
             {model.reportingDate
-              ? `Reporting date ${formatIsoDate(model.reportingDate)}${
-                  model.reportingTimezone ? ` (${model.reportingTimezone})` : ""
-                }.`
+              ? `Reporting date ${formatIsoDate(model.reportingDate)} (${companyTimeZoneLabel(model.reportingTimezone)}).`
               : "Reporting date is missing."}{" "}
             {model.lastSuccessfulSyncAt
               ? `Last successful sync ${new Date(model.lastSuccessfulSyncAt).toLocaleString()}.`
@@ -81,33 +81,7 @@ export function LiveReceivablesSection({ model }: { model: ReceivablesViewModel 
           {model.invoices.length === 0 ? (
             <p className="mt-2 text-sm text-ink-muted">No open invoices in the last successful sync.</p>
           ) : (
-            <ul className="mt-2 divide-y divide-purple-50">
-              {model.invoices.map((invoice) => (
-                <li
-                  key={invoice.id}
-                  className="flex flex-col gap-1 py-3 sm:flex-row sm:items-start sm:justify-between"
-                >
-                  <div>
-                    <p className="font-medium text-ink">
-                      Invoice {invoice.docNumber ?? invoice.id}
-                      {invoice.overdue && model.reportingDate ? (
-                        <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900">
-                          Overdue
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className="text-sm text-ink-muted">{invoice.customerName ?? "Customer not named"}</p>
-                    <p className="text-sm text-ink">
-                      {invoice.dueDate ? `Due ${formatIsoDate(invoice.dueDate)}` : "No due date"}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-sm">
-                    <CurrencyAmount amount={invoice.remainingBalance} detailed />
-                    <span className="ml-1 text-xs text-ink-muted">still owed</span>
-                  </p>
-                </li>
-              ))}
-            </ul>
+            <ReceivablesInvoiceList invoices={model.invoices} reportingDate={model.reportingDate} />
           )}
           {model.invoiceCount > shown ? (
             <p className="mt-2 text-xs text-ink-muted">

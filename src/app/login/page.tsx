@@ -31,13 +31,13 @@ function LoginForm() {
       });
       if (signInError) {
         setError(signInError.message);
+        setLoading(false);
         return;
       }
       router.push(next);
       router.refresh();
     } catch {
       setError("Could not sign in.");
-    } finally {
       setLoading(false);
     }
   }

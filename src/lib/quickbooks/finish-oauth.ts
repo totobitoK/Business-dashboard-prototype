@@ -7,7 +7,7 @@ import {
 } from "./config";
 import { assertDbOk } from "./db-write";
 import { exchangeAuthorizationCode } from "./intuit-oauth";
-import { configuredReportingTimeZone } from "./reporting-date";
+import { selectReportingTimeZone } from "./reporting-date";
 import { persistTokens } from "./sync-rpc";
 import { encryptToken } from "./token-crypto";
 
@@ -45,7 +45,14 @@ export async function finishQuickBooksOAuth(params: {
     clientSecret: credentials.clientSecret,
   });
 
-  const reporting = configuredReportingTimeZone();
+  const { data: companyRow } = await params.admin
+    .from("companies")
+    .select("timezone")
+    .eq("id", params.companyId)
+    .maybeSingle();
+  const reportingTimeZone = selectReportingTimeZone(
+    typeof companyRow?.timezone === "string" ? companyRow.timezone : null
+  );
   let connectionId: string;
   let generation: number;
 
@@ -59,8 +66,8 @@ export async function finishQuickBooksOAuth(params: {
         status: "connected",
         connected_at: new Date().toISOString(),
         disconnected_at: null,
-        reporting_timezone: reporting.timeZone,
-        reporting_timezone_source: reporting.source,
+        reporting_timezone: reportingTimeZone,
+        reporting_timezone_source: "configured",
       })
       .select("id, sync_generation")
       .single();
@@ -90,8 +97,8 @@ export async function finishQuickBooksOAuth(params: {
       updated_at: new Date().toISOString(),
     };
     if (realmChanging || environmentChanging) {
-      updatePayload.reporting_timezone = reporting.timeZone;
-      updatePayload.reporting_timezone_source = reporting.source;
+      updatePayload.reporting_timezone = reportingTimeZone;
+      updatePayload.reporting_timezone_source = "configured";
     }
     const { error: updateError } = await params.admin
       .from("quickbooks_connections")

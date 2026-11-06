@@ -4,6 +4,7 @@ import {
   SYNC_STUCK_MS,
   type IntuitEnvironment,
 } from "./config";
+import { quickBooksInvoiceUrl } from "./invoice-link";
 import { isInvoiceOverdue } from "./reporting-date";
 
 export const RECEIVABLES_COPY = {
@@ -36,12 +37,15 @@ export type QuickBooksStatusPayload = {
 
 export type ReceivablesInvoiceRow = {
   id: string;
+  qboInvoiceId: string | null;
   docNumber: string | null;
   customerName: string | null;
   txnDate: string | null;
   dueDate: string | null;
+  totalAmount: number | null;
   remainingBalance: number;
   overdue: boolean;
+  quickBooksUrl: string | null;
 };
 
 export type ReceivablesViewModel = {
@@ -87,7 +91,8 @@ export function environmentLabel(environment: string | null | undefined): string
 
 export function parseInvoiceRows(
   rows: unknown,
-  reportingDate: string | null
+  reportingDate: string | null,
+  link?: { environment: string | null; realmId: string | null }
 ): ReceivablesInvoiceRow[] {
   if (!Array.isArray(rows)) return [];
   return rows.flatMap((row) => {
@@ -96,15 +101,23 @@ export function parseInvoiceRows(
     const remaining = money(record.remaining_balance as number | string | null);
     if (!record.id || remaining === null || remaining <= 0) return [];
     const dueDate = asDate(typeof record.due_date === "string" ? record.due_date : null);
+    const qboInvoiceId = typeof record.qbo_invoice_id === "string" ? record.qbo_invoice_id : null;
     return [
       {
         id: String(record.id),
+        qboInvoiceId,
         docNumber: typeof record.doc_number === "string" ? record.doc_number : null,
         customerName: typeof record.customer_name === "string" ? record.customer_name : null,
         txnDate: asDate(typeof record.txn_date === "string" ? record.txn_date : null),
         dueDate,
+        totalAmount: money(record.total_amount as number | string | null),
         remainingBalance: remaining,
         overdue: isInvoiceOverdue(dueDate, reportingDate),
+        quickBooksUrl: quickBooksInvoiceUrl({
+          environment: link?.environment,
+          realmId: link?.realmId,
+          qboInvoiceId,
+        }),
       },
     ];
   });
@@ -200,7 +213,10 @@ export function buildReceivablesViewModel(input: {
   base.showBalances = true;
   base.openBalance = money(status.open_balance);
   base.overdueBalance = reportingDate ? money(status.overdue_balance) : null;
-  base.invoices = parseInvoiceRows(input.invoices, reportingDate);
+  base.invoices = parseInvoiceRows(input.invoices, reportingDate, {
+    environment: status.intuit_environment ?? null,
+    realmId: status.realm_id ?? null,
+  });
   if (base.stale) {
     base.messages.push("The last successful sync is more than a day old, so these balances may be out of date.");
   }

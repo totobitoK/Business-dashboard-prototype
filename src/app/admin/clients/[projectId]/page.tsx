@@ -2,10 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LiveProjectBuildPreviewEditor } from "@/components/admin/LiveProjectBuildPreviewEditor";
 import { LiveProjectPaymentsActivation } from "@/components/admin/LiveProjectPaymentsActivation";
+import { SignedAgreementSection } from "@/components/admin/SignedAgreementSection";
 import { LiveProjectScopeEditor } from "@/components/admin/LiveProjectScopeEditor";
 import { PageHeader } from "@/components/PageHeader";
 import { adminRoutes } from "@/lib/routes";
 import { loadProjectBundleForAdmin } from "@/lib/db/project-detail.server";
+import { listSignedAgreements } from "@/lib/signed-agreements/access";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function LiveAdminProjectPage({
   params,
@@ -24,6 +27,7 @@ export default async function LiveAdminProjectPage({
   }
 
   const p = bundle.project;
+  const agreements = await listSignedAgreements(await createClient(), projectId);
 
   return (
     <div className="space-y-6">
@@ -48,6 +52,7 @@ export default async function LiveAdminProjectPage({
         payments={bundle.payments ?? []}
         setupSummary={bundle.adminSetupPaymentSummary}
       />
+      <SignedAgreementSection projectId={p.id} agreements={agreements} />
     </div>
   );
 }

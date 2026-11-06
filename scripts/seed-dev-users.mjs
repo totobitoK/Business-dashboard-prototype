@@ -157,6 +157,8 @@ async function seedViaAdminApi(specs) {
     console.log("User ready:", u.email);
   }
 
+  // Companies without an address stay on Eastern. Pass the address through
+  // timeZoneForNewCompany in src/lib/company-time-zone.ts when one is known.
   const companies = [
     { slug: "acme-hvac", name: "Acme Comfort HVAC" },
     { slug: "beta-retail", name: "Beta Home Retail" },

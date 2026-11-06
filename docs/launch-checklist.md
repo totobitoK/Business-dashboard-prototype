@@ -117,7 +117,7 @@ Do not put the sandbox application id, secret, or encryption key on a production
 
 ## Recorded on 2026-11-06 — Square sandbox reconciliation
 
-Audited the connected sandbox seller for Acme Comfort HVAC. Merchant `MLKEVTWSVWP70`, business name `test account`, status ACTIVE, currency USD. The only Square location is `LZ8ASRV2DQV15`, name `test account`, status ACTIVE, currency USD, and it is the selected location. Company reporting timezone `America/New_York`. Reporting date `2026-11-06`. Square-Version `2026-09-16`. Square was queried for both the app's 366-day import window and `2020-01-01` through the audit time.
+Audited the connected sandbox seller for Acme Comfort HVAC before the payment and refund recorded in the live non-empty section. Merchant `MLKEVTWSVWP70`, business name `test account`, status ACTIVE, currency USD. The only Square location is `LZ8ASRV2DQV15`, name `test account`, status ACTIVE, currency USD, and it is the selected location. Company reporting timezone `America/New_York`. Reporting date `2026-11-06`. Square-Version `2026-09-16`. Square was queried for both the app's 366-day import window and `2020-01-01` through the audit time.
 
 `SQUARE_CONNECTOR_VERIFIED` and `SQUARE_INTEGRATION_ENABLED` stay unset. A successful sync of an empty seller is not verification that payments and refunds reconcile.
 
@@ -137,7 +137,7 @@ Audited the connected sandbox seller for Acme Comfort HVAC. Merchant `MLKEVTWSVW
 
 ### Fixture-only passes
 
-This sandbox seller has no payments, no refunds, and no second location. The connector does not create payments or refunds, so these cases were not available as sandbox activity.
+These cases were not the sandbox transactions below. The connector does not create payments or refunds.
 
 - Import fixtures: pagination follows the cursor; a repeated payment id keeps one row; a `PENDING` payment and a `PENDING` refund are dropped; a completed payment at an unselected location is dropped; a completed partial refund of $2.50 against a $10.00 payment is kept; `2026-11-07T04:30:00Z` is `2026-11-06` in `America/New_York` and `2026-11-07T05:30:00Z` is `2026-11-07`.
 - Presentation fixtures: the $10.00 USD payment and the $2.50 same-day refund net to $7.50; CAD $5.00 stays in its own total; a $1.00 refund dated the previous day stays in the list and is not subtracted from the reporting-date total.
@@ -147,16 +147,57 @@ This sandbox seller has no payments, no refunds, and no second location. The con
 
 Imports previously upserted transactions before the successful-sync timestamp moved. A failure after the first page could change the visible totals. The import now commits the rows and the timestamp in one database transaction (`20261106173000_square_atomic_commit`). The live failed commit and the database fixture both left the previous result unchanged.
 
-### Not demonstrated on this seller
+### Live non-empty sync — 2026-11-06 17:29 UTC
 
-- Field-by-field comparison of a real payment or refund id, amount, status, timestamp, location, and currency. Square returned none.
-- A partial refund, a refund on a different day from its payment, a non-completed payment or refund, and activity at an unselected location. A multi-page Square response was also not returned; the live lists were one empty page each, and cursor following is covered by the import fixture.
+Separate from the empty-seller pass above and from the fixture that uses a $10.00 payment and a $2.50 refund. RavenView stayed read-only. `SQUARE_CONNECTOR_VERIFIED` and `SQUARE_INTEGRATION_ENABLED` stay unset.
 
-### Live non-empty sync — not run
+Square ListPayments, ListRefunds, GetPayment, and GetRefund for location `LZ8ASRV2DQV15` each returned one page and ended the cursor. The only completed payment and the only refund are:
 
-Checked again on 2026-11-06 for a $10.00 completed payment and a $2.50 completed partial refund at location `LZ8ASRV2DQV15`. This is separate from the fixture that expects $10.00 collected, $2.50 refunded, and $7.50 net.
+| Field | Square payment | Imported payment | Square refund | Imported refund |
+|---|---|---|---|---|
+| ID | `Aphst7ABFAITBno5UX1kFNe0VSKZY` | same | `Aphst7ABFAITBno5UX1kFNe0VSKZY_HYYq2ibmtMvWh6ko8fYsHf2anj6o0wuH4xW1kG7W5u` | same |
+| Linked payment ID | | | `Aphst7ABFAITBno5UX1kFNe0VSKZY` | not stored; the Square value equals the imported payment ID |
+| Status | `COMPLETED` | kept by the completed-only import | `COMPLETED` | kept by the completed-only import |
+| Amount | `10` USD (`amount_money`, `total_money`, and `approved_money`) | `10` USD | `2` USD; payment `refunded_money` is also `2` USD | `2` USD |
+| Location | `LZ8ASRV2DQV15` | same | `LZ8ASRV2DQV15` | same |
+| Created | `2026-11-06T17:11:34.258Z` | same instant | `2026-11-06T17:24:22.580Z` | same instant |
+| Eastern reporting date | `2026-11-06` | `2026-11-06` | `2026-11-06` | `2026-11-06` |
 
-Not run. The token RavenView stored for merchant `MLKEVTWSVWP70` has only `MERCHANT_PROFILE_READ` and `PAYMENTS_READ`. CreatePayment and RefundPayment were not sent with that token. This environment has no separate sandbox access token. Square's Sandbox Square Dashboard can show a payment and cannot issue a refund, so the two transactions were not created. The fixture totals are not a live pass.
+Both transactions are on reporting date `2026-11-06`, timezone `America/New_York`. Square's amounts are minor units, so 10 USD is $0.10 and 2 USD is $0.02. The signed-in dashboard shows Payments received **$0.10**, Refunds **$0.02**, and Net collected **$0.08**, with both rows under Recent activity on Nov 6, 2026 at location `test account`. A $10.00 / $2.00 / $8.00 reading would require Square amounts 1000 and 200. These source records are 10 and 2, and RavenView matches them. No importer change.
+
+The second sync at `2026-11-06T17:29:27.127977Z` left the same two rows and the same amounts. `last_successful_sync_at` moved from `2026-11-06T17:29:22.321465Z` only after that second successful import. The dashboard HTML contained no application id, application secret, or access token.
+
+### Live recheck — 2026-11-06 17:35 UTC
+
+Square now has a second completed pair at the same location. Both pairs are on Eastern date `2026-11-06`. Two syncs imported each record once.
+
+| Square record | Linked payment | Status | Amount | Location | Created | Eastern date | Imported |
+|---|---|---|---|---|---|---|---|
+| Payment `0X5VavvDCuxig1aXOniioTVIK3FZY` | | `COMPLETED` | `1000` USD ($10.00) | `LZ8ASRV2DQV15` | `2026-11-06T17:33:19.536Z` | `2026-11-06` | `1000` USD, same instant and date |
+| Refund `0X5VavvDCuxig1aXOniioTVIK3FZY_qD5WkrhI8JbyVmergzSjt9fTNQa1WJQ831Q326dXHsH` | that payment | `COMPLETED` | `250` USD ($2.50) | `LZ8ASRV2DQV15` | `2026-11-06T17:34:20.760Z` | `2026-11-06` | `250` USD, same instant and date |
+| Earlier payment and refund | the $0.10 payment | `COMPLETED` | `10` and `2` USD | `LZ8ASRV2DQV15` | unchanged | `2026-11-06` | unchanged |
+
+Same-day USD total from Square is payments `1010`, refunds `252`, net `758`. The signed-in dashboard shows Payments received **$10.10**, Refunds **$2.52**, and Net collected **$7.58**. Recent activity lists $10.00, -$2.50, $0.10, and -$0.02, each on Nov 6, 2026. The new refund is $2.50, not $2.00. Last successful sync on the page is 11/6/2026, 12:35:39 PM. The page HTML contained no application id, application secret, or access token.
+
+### Confirmed amounts — read-only, 2026-11-06 17:37 UTC
+
+Read again with no new Square transactions and no RavenView sync. ListPayments and ListRefunds for `LZ8ASRV2DQV15` each returned one page and ended. These four records are the only ones on the seller, and they are the two pairs created today. `SQUARE_CONNECTOR_VERIFIED` and `SQUARE_INTEGRATION_ENABLED` stay unset.
+
+| Payment ID | Linked refund ID | Square `amount_money` | RavenView dollars |
+|---|---|---|---|
+| `Aphst7ABFAITBno5UX1kFNe0VSKZY` | `Aphst7ABFAITBno5UX1kFNe0VSKZY_HYYq2ibmtMvWh6ko8fYsHf2anj6o0wuH4xW1kG7W5u` | payment `10` USD; refund `2` USD | $0.10 and $0.02 |
+| `0X5VavvDCuxig1aXOniioTVIK3FZY` | `0X5VavvDCuxig1aXOniioTVIK3FZY_qD5WkrhI8JbyVmergzSjt9fTNQa1WJQ831Q326dXHsH` | payment `1000` USD; refund `250` USD | $10.00 and $2.50 |
+
+Square's amount is the smallest currency unit. For USD, `1000` is $10.00 and `250` is $2.50, not $1,000.00 and $250.00. The first pair adds `10` and `2` minor units, which are $0.10 and $0.02. All four are completed USD activity on `2026-11-06` Eastern at the selected location, so the dashboard total is $10.10 collected, $2.52 refunded, and $7.58 net.
+
+### Fixture-only
+
+Not demonstrated with this seller's Square records:
+
+- A refund on a different Eastern day from its payment.
+- A non-completed payment or refund.
+- Activity at an unselected location.
+- A Square response with more than one page. These lists were one page each; cursor following remains a fixture.
 
 ## Still later
 

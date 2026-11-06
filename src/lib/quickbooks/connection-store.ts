@@ -25,7 +25,7 @@ function mapConnection(row: Record<string, unknown>): QuickBooksConnectionRow {
     realmId: (row.realm_id as string | null) ?? null,
     companyName: (row.company_name as string | null) ?? null,
     status: String(row.status),
-    reportingTimezone: String(row.reporting_timezone ?? "UTC"),
+    reportingTimezone: String(row.reporting_timezone ?? "America/New_York"),
     reportingTimezoneSource: (row.reporting_timezone_source as QuickBooksConnectionRow["reportingTimezoneSource"]) ?? "utc_default",
     reportingDate: (row.reporting_date as string | null) ?? null,
     syncGeneration: Number(row.sync_generation ?? 0),

@@ -16,6 +16,7 @@
     "test:milestone4a": "RUN_SUPABASE_MILESTONE4A_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/supabase/milestone4a-google-calendar.test.ts src/lib/google-calendar/*.test.ts src/lib/google-calendar/sync-one-calendar.resume.test.ts",
     "test:quickbooks": "RUN_SUPABASE_QUICKBOOKS_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/quickbooks/*.test.ts src/lib/supabase/quickbooks-tenant-isolation.test.ts",
     "test:square": "RUN_SUPABASE_SQUARE_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/square/*.test.ts src/lib/supabase/square-tenant-isolation.test.ts",
+    "test:agreements": "RUN_SUPABASE_AGREEMENT_TESTS=1 vitest run --maxWorkers=1 --fileParallelism=false src/lib/signed-agreements/pdf.test.ts src/lib/supabase/signed-agreements.test.ts",
     "seed:dev": "node scripts/seed-dev-users.mjs"
   },
   "dependencies": {
