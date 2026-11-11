@@ -41,7 +41,7 @@ export async function refreshGoogleCalendarListAction(
   });
 
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/connections");
   return { ok: true };
 }
 
@@ -103,7 +103,7 @@ export async function saveGoogleCalendarSelectionAction(
   }
 
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/connections");
   return { ok: true };
 }
 
@@ -119,7 +119,7 @@ export async function disconnectGoogleCalendarAction(
 
   await disconnectGoogleCalendar(admin, companyId, conn.id);
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/connections");
   return { ok: true };
 }
 

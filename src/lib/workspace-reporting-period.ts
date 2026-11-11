@@ -104,15 +104,6 @@ export function resolveReportingRange(
   if (compareIsoDates(start, end) > 0) {
     return { ok: false, error: "Start date must be on or before end date." };
   }
-  if (compareIsoDates(end, asOf) > 0) {
-    return {
-      ok: false,
-      error: `End date cannot be after the demo reporting date (${asOf}).`,
-    };
-  }
-  if (compareIsoDates(start, asOf) > 0) {
-    return { ok: false, error: "Start date cannot be after the demo reporting date." };
-  }
   return okRange(start, end, preset, "Custom range");
 }
 

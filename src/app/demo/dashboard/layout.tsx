@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { CustomerPortalBanner } from "@/components/customer/CustomerPortalBanner";
-import { CustomerPortalNav } from "@/components/customer/CustomerPortalNav";
+import { CustomerPortalShell } from "@/components/customer/CustomerPortalShell";
 import { CustomerPortalQuerySync } from "@/lib/customer-portal-context";
 import { CustomerPortalWorkspaceGate } from "@/components/customer/CustomerPortalWorkspaceGate";
 import { ClientStoreProvider } from "@/lib/client-store";
@@ -21,12 +20,10 @@ export default function DashboardLayout({
     <ClientStoreProvider>
       <CustomerPortalProvider>
         <CustomerPortalQuerySync />
-        <div className="min-h-screen bg-white text-ink">
-          <CustomerPortalBanner />
-          <CustomerPortalNav />
-          <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        <div className="flex min-h-screen flex-col bg-white text-ink">
+          <CustomerPortalShell fillScreen>
             <CustomerPortalWorkspaceGate>{children}</CustomerPortalWorkspaceGate>
-          </main>
+          </CustomerPortalShell>
         </div>
       </CustomerPortalProvider>
     </ClientStoreProvider>

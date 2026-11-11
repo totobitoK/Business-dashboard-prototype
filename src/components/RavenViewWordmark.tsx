@@ -15,13 +15,16 @@ export function RavenViewWordmark({
   linked = false,
   collapsed = false,
   href = "/",
+  monochrome = false,
 }: {
   size?: WordmarkSize;
   linked?: boolean;
   collapsed?: boolean;
   href?: string;
+  monochrome?: boolean;
 }) {
   const { primary, accent } = branding.wordmark;
+  const accentClass = monochrome ? "text-ink" : "text-purple";
 
   const wordmark = collapsed ? (
     <span
@@ -29,7 +32,7 @@ export function RavenViewWordmark({
       aria-label={branding.name}
     >
       <span className="text-ink">{primary.charAt(0)}</span>
-      <span className="text-purple">{accent.charAt(0)}</span>
+      <span className={accentClass}>{accent.charAt(0)}</span>
     </span>
   ) : (
     <span
@@ -37,7 +40,7 @@ export function RavenViewWordmark({
       aria-label={branding.name}
     >
       <span className="text-ink">{primary}</span>
-      <span className="text-purple">{accent}</span>
+      <span className={accentClass}>{accent}</span>
     </span>
   );
 
@@ -45,7 +48,9 @@ export function RavenViewWordmark({
     return (
       <Link
         href={href}
-        className="inline-block rounded-sm transition-opacity hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple"
+        className={`inline-block rounded-sm transition-opacity hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+          monochrome ? "focus-visible:outline-ink" : "focus-visible:outline-purple"
+        }`}
       >
         {wordmark}
       </Link>

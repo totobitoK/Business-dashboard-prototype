@@ -1,15 +1,18 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { CustomerPortalShell } from "@/components/customer/CustomerPortalShell";
+import { CustomerPortalWorkspaceGate } from "@/components/customer/CustomerPortalWorkspaceGate";
 import { getAuthContext } from "@/lib/auth/authorization";
 import { getMarketingPageTitle } from "@/lib/branding";
+import { ClientStoreProvider } from "@/lib/client-store";
+import { CustomerPortalProvider, CustomerPortalQuerySync } from "@/lib/customer-portal-context";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: `Customer portal | ${getMarketingPageTitle().split("|")[0]?.trim()}`,
-  description: "Live customer workspace — read-only milestone",
+  description: "Your RavenView dashboard",
 };
 
 export default async function LiveDashboardLayout({
@@ -27,31 +30,25 @@ export default async function LiveDashboardLayout({
     redirect("/login?error=no_company");
   }
 
+  const companyId = ctx.companyIds[0];
+  const { data: company } = await supabase
+    .from("companies")
+    .select("name")
+    .eq("id", companyId)
+    .maybeSingle();
+  const businessName =
+    typeof company?.name === "string" && company.name.trim()
+      ? company.name
+      : "Your company";
+
   return (
-    <div className="min-h-screen bg-white text-ink">
-      <header className="border-b border-purple-100 bg-white">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <span className="text-sm font-semibold">Your RavenView project</span>
-          <div className="flex items-center gap-3 text-xs text-ink-muted">
-            <Link href="/dashboard/settings" className="hover:text-purple hover:underline">
-              Settings
-            </Link>
-            <span>· Live onboarding, payments, QuickBooks, Google Calendar</span>
-            <form action="/auth/logout" method="post">
-              <button type="submit" className="text-sm font-medium text-purple hover:underline">
-                Sign out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">{children}</main>
-      <footer className="mx-auto max-w-4xl px-4 pb-10 text-xs text-ink-muted sm:px-6">
-        Prefer the interactive prototype?{" "}
-        <Link href="/demo/dashboard" className="font-medium text-purple hover:underline">
-          Open the local demo portal
-        </Link>
-      </footer>
-    </div>
+    <ClientStoreProvider loadingLabel="Loading your dashboard…">
+      <CustomerPortalProvider businessName={businessName}>
+        <CustomerPortalQuerySync />
+        <CustomerPortalShell fillScreen>
+          <CustomerPortalWorkspaceGate>{children}</CustomerPortalWorkspaceGate>
+        </CustomerPortalShell>
+      </CustomerPortalProvider>
+    </ClientStoreProvider>
   );
 }

@@ -39,9 +39,12 @@ describe("workspace reporting period", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("rejects custom end beyond demo as-of", () => {
-    const r = resolveReportingRange("custom", "2026-03-01", "2026-03-20");
-    expect(r.ok).toBe(false);
+  it("accepts a custom range that runs past the demo as-of date", () => {
+    const r = resolveReportingRange("custom", "2026-03-01", "2026-04-02");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.range.start).toBe("2026-03-01");
+    expect(r.range.end).toBe("2026-04-02");
   });
 
   it("MTD comparison uses prior month elapsed days", () => {

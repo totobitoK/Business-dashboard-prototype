@@ -1,16 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { WorkspaceScheduleDashboard } from "@/components/customer/WorkspaceScheduleDashboard";
-import { resolveDashboardSection } from "@/lib/dashboard-section-routes";
+import { usePathname } from "next/navigation";
+import { CustomerPortalDashboard } from "@/components/customer/CustomerPortalDashboard";
+import { dashboardRoutesForPathname } from "@/lib/dashboard-section-routes";
 import { ProgressBar } from "@/components/ProgressBar";
 import {
   CustomerCompletePaymentButton,
   CustomerPaymentCompactSummary,
 } from "@/components/customer/CustomerSetupPaymentPanel";
 import { PortalPreviewReviewControls } from "@/components/customer/PortalPreviewReview";
-import { WorkspaceSampleDashboard } from "@/components/customer/WorkspaceSampleDashboard";
 import { getPortalJourneyBookends } from "@/lib/client-milestones";
 import {
   CUSTOMER_PORTAL_STAGE_LABELS,
@@ -30,7 +29,8 @@ import type { Client } from "@/lib/types";
 import type { CustomerPortalStage } from "@/lib/customer-portal-stage";
 
 export function CustomerDashboardHome() {
-  const { client, workspace } = useCustomerPortal();
+  const { client, workspace, theme } = useCustomerPortal();
+  const routes = dashboardRoutesForPathname(usePathname());
 
   if (!client || !workspace) {
     return (
@@ -54,7 +54,7 @@ export function CustomerDashboardHome() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-sm font-semibold uppercase tracking-wide text-purple">
+        <p className={`text-sm font-semibold uppercase tracking-wide ${theme.metricValueA}`}>
           {workspace.label}
         </p>
         <h1 className="mt-1 text-2xl font-semibold text-ink">
@@ -67,7 +67,7 @@ export function CustomerDashboardHome() {
 
       {(blockers.length > 0 ||
         (!next.useInPagePrimary && next.primaryLabel && primaryHref)) && (
-        <div className="space-y-3 rounded-xl border border-purple-100 bg-purple-50/20 px-4 py-3 sm:px-5">
+        <div className={`space-y-3 rounded-xl px-4 py-3 sm:px-5 ${theme.sectionPanel}`}>
           {blockers.length > 0 && (
             <ul className="space-y-1 text-sm text-ink">
               {blockers.map((b) => (
@@ -87,14 +87,14 @@ export function CustomerDashboardHome() {
                   href={primaryHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block rounded-lg bg-purple px-4 py-2 text-sm font-semibold text-white hover:bg-purple-dark"
+                  className={`inline-block rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90 ${theme.navActive}`}
                 >
                   {next.primaryLabel}
                 </a>
               ) : (
                 <Link
                   href={primaryHref}
-                  className="inline-block rounded-lg bg-purple px-4 py-2 text-sm font-semibold text-white hover:bg-purple-dark"
+                  className={`inline-block rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90 ${theme.navActive}`}
                 >
                   {next.primaryLabel}
                 </Link>
@@ -104,37 +104,37 @@ export function CustomerDashboardHome() {
         </div>
       )}
 
-      <PortalDashboardSection client={client} stage={stage} next={next} />
+      <PortalDashboardSection client={client} stage={stage} next={next} theme={theme} />
 
       <section
         aria-labelledby="portal-snapshot-heading"
         className="grid gap-4 md:grid-cols-2"
       >
-        <div className="rounded-xl border border-purple-100 bg-white p-4 shadow-soft">
+        <div className={`rounded-xl p-4 shadow-soft ${theme.card}`}>
           <h2
             id="portal-snapshot-heading"
             className="text-sm font-semibold text-ink"
           >
             Progress
           </h2>
-          <PortalProgressSummary client={client} />
+          <PortalProgressSummary client={client} theme={theme} />
         </div>
-        <div className="rounded-xl border border-purple-100 bg-white p-4 shadow-soft">
+        <div className={`rounded-xl p-4 shadow-soft ${theme.card}`}>
           <h2 className="text-sm font-semibold text-ink">Payment status</h2>
           <div className="mt-3">
-            <CustomerPaymentCompactSummary client={client} />
-            <CustomerCompletePaymentButton client={client} />
+            <CustomerPaymentCompactSummary client={client} theme={theme} />
+            <CustomerCompletePaymentButton client={client} theme={theme} />
           </div>
         </div>
       </section>
 
       <p className="text-xs text-ink-muted">
         Connections and layout preferences are under{" "}
-        <Link href="/demo/dashboard/connections" className="font-semibold text-purple">
+        <Link href={routes.connections} className={`font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}>
           Connections
         </Link>{" "}
         and{" "}
-        <Link href="/demo/dashboard/settings" className="font-semibold text-purple">
+        <Link href={routes.settings} className={`font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}>
           Settings
         </Link>
         .
@@ -143,7 +143,13 @@ export function CustomerDashboardHome() {
   );
 }
 
-function PortalProgressSummary({ client }: { client: Client }) {
+function PortalProgressSummary({
+  client,
+  theme,
+}: {
+  client: Client;
+  theme: ReturnType<typeof useCustomerPortal>["theme"];
+}) {
   const { percent, completed, total } = getCustomerPortalProgress(client);
   const isLive = client.status === "active";
   const { lastCompletedLabel, nextLabel } = getPortalJourneyBookends(client);
@@ -175,7 +181,13 @@ function PortalProgressSummary({ client }: { client: Client }) {
           </p>
         </div>
       </div>
-      <ProgressBar value={barValue} label={countLabel} />
+      <ProgressBar
+        value={barValue}
+        label={countLabel}
+        valueClassName={theme.metricValueA}
+        trackClassName={theme.sidebar}
+        fillClassName={theme.header}
+      />
     </div>
   );
 }
@@ -184,16 +196,15 @@ function PortalDashboardSection({
   client,
   stage,
   next,
+  theme,
 }: {
   client: Client;
   stage: CustomerPortalStage;
   next: ReturnType<typeof getPortalNextAction>;
+  theme: ReturnType<typeof useCustomerPortal>["theme"];
 }) {
   const showPreview = showCustomerDashboardPreview(client);
   const isReviewStage = stage === "preview-ready";
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const previewSection = resolveDashboardSection(pathname, searchParams);
 
   return (
     <section aria-labelledby="portal-dashboard-heading" className="space-y-3">
@@ -208,7 +219,7 @@ function PortalDashboardSection({
       </div>
 
       {stage === "building" && !showPreview && (
-        <p className="rounded-xl border border-purple-100 bg-white p-4 text-sm text-ink shadow-soft">
+        <p className={`rounded-xl p-4 text-sm text-ink shadow-soft ${theme.card}`}>
           {client.buildStatusNote ??
             "We are building your dashboard from the agreed scope. Preview will show here when ready."}
         </p>
@@ -219,24 +230,20 @@ function PortalDashboardSection({
         stage !== "live" &&
         stage !== "approved-balance-due" &&
         stage !== "approved-awaiting-launch" && (
-        <p className="rounded-xl border border-dashed border-purple-100 bg-purple-50/30 p-6 text-center text-sm text-ink-muted">
+        <p className={`rounded-xl border border-dashed p-6 text-center text-sm text-ink-muted ${theme.kpiEmptyState}`}>
           Dashboard preview appears here during build and review.
         </p>
       )}
 
-      {showPreview &&
-        (previewSection === "schedule" ? (
-          <WorkspaceScheduleDashboard />
-        ) : (
-          <WorkspaceSampleDashboard
-            mode={previewSection === "revenue" ? "revenue" : "overview"}
-            changesRequestedNote={
-              client.previewChangeRequest
-                ? `Change request on file (${getPreviewRevisionLabel(client)}).`
-                : undefined
-            }
-          />
-        ))}
+      {showPreview && (
+        <CustomerPortalDashboard
+          changesRequestedNote={
+            client.previewChangeRequest
+              ? `Change request on file (${getPreviewRevisionLabel(client)}).`
+              : undefined
+          }
+        />
+      )}
 
       {isReviewStage && <PortalPreviewReviewControls client={client} />}
 

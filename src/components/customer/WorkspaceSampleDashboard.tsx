@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   useDeferredValue,
   useEffect,
@@ -45,10 +46,15 @@ import {
   sumOutstandingInvoices,
   sumPaymentsInRange,
 } from "@/lib/workspace-analytics";
-import { DashboardWorkspaceNav } from "@/components/customer/DashboardWorkspaceNav";
-import { dashboardSectionHref } from "@/lib/dashboard-section-routes";
+import { DashboardRangeCalendar } from "@/components/customer/DashboardDatePicker";
+import { DashboardTopBar } from "@/components/customer/DashboardWorkspaceNav";
+import {
+  dashboardRoutesForPathname,
+  dashboardSectionHref,
+} from "@/lib/dashboard-section-routes";
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
 import { DashboardSection } from "@/components/customer/DashboardSection";
+import { KpiStatCard } from "@/components/customer/KpiStatCard";
 import {
   DashboardChipGroup,
   DashboardControlBar,
@@ -56,10 +62,8 @@ import {
   DashboardSecondaryButton,
   DashboardSelect,
 } from "@/components/customer/dashboard-controls";
-import { ReportingPeriodCustomRange } from "@/components/customer/ReportingPeriodCustomRange";
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import { getOperationsListDensity } from "@/lib/operations-list-density";
-import { demoDashboardRoutes as dashboardRoutes } from "@/lib/routes";
 import {
   OVERVIEW_KPI_LABELS,
   REVENUE_KPI_LABELS,
@@ -91,10 +95,10 @@ const INVOICE_SORT_OPTIONS = [
   { value: "balance" as const, label: "Balance" },
 ];
 
-const widgetListRowClass = "transition-all hover:bg-white/90";
+const widgetListRowClass = "transition-colors";
 
 /** Job activity + Next 7 days lists — subtle hover only (no left accent). */
-const operationsListRowBase = "transition-colors bg-white/70";
+const operationsListRowBase = "transition-colors";
 
 const operationsSummaryStripClass = "mt-2 flex flex-wrap gap-1";
 
@@ -160,14 +164,6 @@ function useMinFilterPending(pending: boolean, minMs = FILTER_PANEL_MIN_PENDING_
   return visible;
 }
 
-const REPORTING_PERIOD_OPTIONS: { value: ReportingPeriodPreset; label: string }[] = [
-  { value: "last7", label: "7 days" },
-  { value: "last30", label: "30 days" },
-  { value: "mtd", label: "Month to date" },
-  { value: "prev_month", label: "Previous month" },
-  { value: "custom", label: "Custom" },
-];
-
 function formatShortDate(iso: string): string {
   return formatCalendarDateDisplay(iso);
 }
@@ -210,11 +206,14 @@ export function WorkspaceSampleDashboard({
     workspaceSessionKey,
     navigationBase,
     liveSamplePreview,
+    businessName,
   } = useCustomerPortal();
-  const sectionLinkBase = navigationBase ?? dashboardRoutes.home;
+  const pathname = usePathname();
+  const portalRoutes = dashboardRoutesForPathname(pathname);
+  const sectionLinkBase = navigationBase ?? portalRoutes.home;
   const data = getWorkspaceBusinessData(workspaceId);
 
-  const [preset, setPreset] = useState<ReportingPeriodPreset>("mtd");
+  const [preset, setPreset] = useState<ReportingPeriodPreset>("custom");
   const [customStart, setCustomStart] = useState("2026-03-01");
   const [customEnd, setCustomEnd] = useState(DEMO_AS_OF_DATE);
   const [rangeError, setRangeError] = useState<string | null>(null);
@@ -491,6 +490,7 @@ export function WorkspaceSampleDashboard({
         overviewKpiIds={visibleOverviewKpis}
         revenueKpiIds={visibleRevenueKpis}
         liveSamplePreview={liveSamplePreview}
+        settingsHref={portalRoutes.settings}
       />
     ),
     collections_chart: <CollectionsTrendChart trend={computed.trend} theme={theme} />,
@@ -590,12 +590,10 @@ export function WorkspaceSampleDashboard({
                   {visibleInvoices.map((inv, idx) => (
                     <tr
                       key={inv.id}
-                      className={`h-10 cursor-pointer ${widgetListRowClass} ${
+                      className={`cursor-pointer ${widgetListRowClass} ${
                         selectedInvoiceId === inv.id
-                          ? `${theme.tableRowSelected} ${theme.tableRowSelectedInset}`
-                          : idx % 2 === 1
-                            ? "bg-white/60"
-                            : "bg-white"
+                          ? `h-12 text-base ${theme.tableRowSelected} ${theme.tableRowSelectedInset} ${theme.metricValueA}`
+                          : `h-10 text-sm ${idx % 2 === 1 ? theme.widgetListRowAlt : theme.widgetListRow} ${theme.operationsListHover}`
                       }`}
                       onClick={() => {
                         setSelectedInvoiceId(inv.id);
@@ -603,13 +601,13 @@ export function WorkspaceSampleDashboard({
                         setSelectedAppointmentId(null);
                       }}
                     >
-                      <td className={`truncate px-3 py-2.5 font-mono text-xs font-semibold ${theme.metricValueA}`}>
+                      <td className={`truncate px-3 py-2.5 font-mono font-semibold ${selectedInvoiceId === inv.id ? "text-sm" : "text-xs"} ${theme.metricValueA}`}>
                         {inv.invoiceNumber}
                       </td>
                       <td className="truncate px-3 py-2.5 font-medium text-ink">{inv.customer}</td>
                       <td className="px-3 py-2.5 text-ink-muted">{formatShortDate(inv.dueDate)}</td>
                       <td className={`px-3 py-2.5 font-semibold ${theme.metricValueA}`}>
-                        <CurrencyAmount amount={inv.balanceDue} />
+                        <CurrencyAmount amount={inv.balanceDue} colorClass={theme.metricValueA} />
                       </td>
                       <td className="px-3 py-2.5">
                         <StatusPill status={inv.status} />
@@ -620,7 +618,7 @@ export function WorkspaceSampleDashboard({
                     <tr key={`invoice-pad-${i}`} className="h-10 pointer-events-none" aria-hidden>
                       <td
                         colSpan={5}
-                        className={`${i % 2 === 1 ? "bg-white/60" : "bg-white"} border-transparent`}
+                        className={`${i % 2 === 1 ? theme.widgetListRowAlt : theme.widgetListRow} border-transparent`}
                       />
                     </tr>
                   ))}
@@ -655,83 +653,37 @@ export function WorkspaceSampleDashboard({
   return (
     <div
       key={`${workspaceId}-${workspaceSessionKey}`}
-      className={`rounded-2xl shadow-card ${theme.card}`}
+      className="flex min-h-full w-full flex-1 flex-col border-0 bg-white shadow-none"
     >
-      <div
-        className={`relative z-10 flex flex-col gap-2 overflow-visible rounded-t-2xl px-4 py-3 sm:px-5 ${theme.header} ${theme.headerText}`}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold">
-            {mode === "revenue"
-              ? "Revenue & collections"
-              : isHvac
-                ? "Operations dashboard"
-                : "Retail operations"}
-          </p>
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
-            Sample data
-          </span>
-        </div>
-        <DashboardWorkspaceNav embedded />
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">
-            Reporting period
-          </p>
-          <div className="relative z-20 mt-1.5 rounded-xl border border-white/25 bg-white/10 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-              <div
-                role="group"
-                aria-label="Reporting period"
-                className="flex min-w-0 flex-1 flex-wrap gap-0.5 p-0.5"
-              >
-                {REPORTING_PERIOD_OPTIONS.map(({ value, label }) => {
-                  const active = preset === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setPreset(value)}
-                      className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all sm:px-3 sm:py-2 sm:text-sm ${
-                        active
-                          ? theme.embeddedPeriodActive
-                          : "text-white/95 hover:bg-white/15"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-              {computed.range && (
-                <p className="shrink-0 px-1 text-xs font-medium leading-none text-white/90 sm:pr-2 sm:text-sm">
-                  {formatRangeForDisplay(computed.range)}
-                </p>
-              )}
-            </div>
-            {preset === "custom" && (
-              <>
-                <div className="mx-1 border-t border-white/20" aria-hidden />
-                <ReportingPeriodCustomRange
-                  embedded
-                  customStart={customStart}
-                  customEnd={customEnd}
-                  maxDate={DEMO_AS_OF_DATE}
-                  onStartChange={setCustomStart}
-                  onEndChange={setCustomEnd}
-                />
-              </>
-            )}
-          </div>
-        </div>
+      <div className={`relative overflow-visible ${theme.header} ${theme.headerText}`}>
+        <DashboardTopBar
+          title={mode === "revenue" ? "Revenue & collections" : businessName}
+          trailing={
+            <>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
+                Sample data
+              </span>
+              <DashboardRangeCalendar
+                start={customStart}
+                end={customEnd}
+                theme={theme}
+                onChange={(start, end) => {
+                  setPreset("custom");
+                  setCustomStart(start);
+                  setCustomEnd(end);
+                }}
+              />
+            </>
+          }
+        />
         {rangeError && (
-          <p className="rounded bg-white/20 px-2 py-1 text-xs" role="alert">
+          <p className="absolute bottom-1 left-4 rounded bg-white/20 px-2 py-1 text-xs sm:left-5" role="alert">
             {rangeError}
           </p>
         )}
       </div>
 
-      <div className="overflow-hidden rounded-b-2xl">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {changesRequestedNote && (
           <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-ink">
             {changesRequestedNote}
@@ -755,7 +707,8 @@ export function WorkspaceSampleDashboard({
                     {rangeLabel} · Total{" "}
                     <CurrencyAmount
                       amount={computed.trendTotal}
-                      className={`inline font-semibold ${theme.metricValueA}`}
+                      colorClass={theme.metricValueA}
+                      className="inline font-semibold"
                     />
                   </>
                 ),
@@ -792,7 +745,8 @@ export function WorkspaceSampleDashboard({
                     {computed.invoices.length} shown · filtered balance{" "}
                     <CurrencyAmount
                       amount={computed.filteredBalance}
-                      className={`inline font-semibold ${theme.metricValueA}`}
+                      colorClass={theme.metricValueA}
+                      className="inline font-semibold"
                     />
                   </>
                 ),
@@ -823,13 +777,13 @@ export function WorkspaceSampleDashboard({
                 <div>
                   <dt className="text-ink-muted">Amount</dt>
                   <dd>
-                    <CurrencyAmount amount={selectedInvoice.amount} />
+                    <CurrencyAmount amount={selectedInvoice.amount} colorClass={theme.metricValueA} />
                   </dd>
                 </div>
                 <div>
                   <dt className="text-ink-muted">Remaining balance</dt>
                   <dd>
-                    <CurrencyAmount amount={selectedInvoice.balanceDue} />
+                    <CurrencyAmount amount={selectedInvoice.balanceDue} colorClass={theme.metricValueA} />
                   </dd>
                 </div>
               </dl>
@@ -840,7 +794,8 @@ export function WorkspaceSampleDashboard({
                 <ul className="mt-1 text-xs">
                   {invoicePayments.map((p) => (
                     <li key={p.id}>
-                      {formatShortDate(p.date)} · <CurrencyAmount amount={p.amount} className="inline" />
+                      {formatShortDate(p.date)} ·{" "}
+                      <CurrencyAmount amount={p.amount} colorClass={theme.metricValueA} className="inline" />
                     </li>
                   ))}
                 </ul>
@@ -853,7 +808,7 @@ export function WorkspaceSampleDashboard({
               <p className="font-semibold text-ink">
                 {selectedJob.serviceType}
                 {" · "}
-                <CurrencyAmount amount={selectedJob.amount} className="inline" />
+                <CurrencyAmount amount={selectedJob.amount} colorClass={theme.metricValueA} className="inline" />
               </p>
               <p className="text-sm text-ink">
                 {selectedJob.customer} · {selectedJob.status} · {selectedJob.assignee}
@@ -900,6 +855,7 @@ function MetricsKpiGrid({
   overviewKpiIds,
   revenueKpiIds,
   liveSamplePreview,
+  settingsHref,
 }: {
   mode: "overview" | "revenue";
   compact: boolean;
@@ -908,6 +864,7 @@ function MetricsKpiGrid({
   overviewKpiIds: OverviewKpiId[];
   revenueKpiIds: RevenueKpiId[];
   liveSamplePreview?: boolean;
+  settingsHref: string;
 }) {
   const ids = mode === "revenue" ? revenueKpiIds : overviewKpiIds;
 
@@ -923,7 +880,7 @@ function MetricsKpiGrid({
           <>
             {" "}
             <Link
-              href={dashboardRoutes.settings}
+              href={settingsHref}
               className={`font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
             >
               Choose KPIs in Appearance & layout
@@ -948,18 +905,20 @@ function MetricsKpiGrid({
     <div key="metrics" className={`grid gap-2 sm:grid-cols-2 ${lgCols}`}>
       {mode === "revenue"
         ? revenueKpiIds.map((id, index) => (
-            <KpiCard
+            <KpiStatCard
               key={id}
               compact={compact}
               label={REVENUE_KPI_LABELS[id]}
+              accentClass={theme.metricValueA}
               {...revenueKpiCardProps(id, computed, theme, index)}
             />
           ))
         : overviewKpiIds.map((id, index) => (
-            <KpiCard
+            <KpiStatCard
               key={id}
               compact={compact}
               label={OVERVIEW_KPI_LABELS[id]}
+              accentClass={theme.metricValueA}
               {...overviewKpiCardProps(id, computed, theme, index)}
             />
           ))}
@@ -977,21 +936,31 @@ function revenueKpiCardProps(
   switch (id) {
     case "weekly_revenue":
       return {
+        higherIsBetter: true,
         sub: computed.weeklyRangeLabel,
         compare: computed.weeklyRevenueCompare.text,
         compareTone: computed.weeklyRevenueCompare.tone,
         value: (
-          <CurrencyAmount amount={computed.weeklyRevenue} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={computed.weeklyRevenue}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
     case "monthly_revenue":
       return {
+        higherIsBetter: true,
         sub: computed.monthlyRangeLabel,
         compare: computed.monthlyRevenueCompare.text,
         compareTone: computed.monthlyRevenueCompare.tone,
         value: (
-          <CurrencyAmount amount={computed.monthlyRevenue} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={computed.monthlyRevenue}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
@@ -999,15 +968,24 @@ function revenueKpiCardProps(
       return {
         sub: computed.monthPipelineLabel,
         value: (
-          <CurrencyAmount amount={computed.monthPipeline} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={computed.monthPipeline}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
     case "overdue_ar":
       return {
+        higherIsBetter: false,
         sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
         value: (
-          <CurrencyAmount amount={computed.overdue} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={computed.overdue}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
@@ -1024,12 +1002,14 @@ function overviewKpiCardProps(
   switch (id) {
     case "payments_collected":
       return {
+        higherIsBetter: true,
         sub: formatRangeForDisplay(computed.range),
         compare: computed.paymentsCompare.text,
         compareTone: computed.paymentsCompare.tone,
         value: (
           <CurrencyAmount
             amount={computed.paymentsCollected}
+            colorClass={theme.metricValueA}
             className="text-xl font-bold sm:text-2xl"
           />
         ),
@@ -1037,6 +1017,7 @@ function overviewKpiCardProps(
       };
     case "jobs_completed":
       return {
+        higherIsBetter: true,
         sub: formatRangeForDisplay(computed.range),
         compare: computed.jobsCompare.text,
         compareTone: computed.jobsCompare.tone,
@@ -1049,17 +1030,27 @@ function overviewKpiCardProps(
       };
     case "outstanding_balance":
       return {
+        higherIsBetter: false,
         sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
         value: (
-          <CurrencyAmount amount={computed.outstanding} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={computed.outstanding}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
     case "overdue_balance":
       return {
+        higherIsBetter: false,
         sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
         value: (
-          <CurrencyAmount amount={computed.overdue} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={computed.overdue}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
@@ -1099,7 +1090,7 @@ function NeedsAttentionPanel({
         <button
           type="button"
           onClick={onViewOverdueInvoices}
-          className={`rounded-lg border border-amber-200/90 bg-gradient-to-br from-amber-50/90 to-white p-3 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md ${overdueCount > 0 ? "ring-1 ring-amber-200/60" : ""}`}
+          className={`rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md ${overdueCount > 0 ? "ring-1 ring-amber-200/60" : ""}`}
         >
           <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">
             Past due
@@ -1109,7 +1100,7 @@ function NeedsAttentionPanel({
             <span className="text-sm font-semibold text-ink-muted">invoices</span>
           </p>
           <p className={`mt-0.5 text-sm font-semibold ${theme.metricValueA}`}>
-            <CurrencyAmount amount={overdueTotal} />
+            <CurrencyAmount amount={overdueTotal} colorClass={theme.metricValueA} />
           </p>
           <p className={`mt-1 text-[10px] font-semibold ${theme.linkAccent}`}>
             View in invoice list →
@@ -1138,7 +1129,7 @@ function NeedsAttentionPanel({
         <div
           className={`rounded-lg border p-3 shadow-sm ${
             critical.count > 0
-              ? "border-amber-200/90 bg-gradient-to-br from-amber-50/70 to-white ring-1 ring-amber-200/50"
+              ? "border-amber-200/90 bg-amber-50/70 ring-1 ring-amber-200/50"
               : theme.attentionMetricTileIdle
           }`}
         >
@@ -1147,7 +1138,7 @@ function NeedsAttentionPanel({
           </p>
           <p className="mt-1 text-lg font-bold tabular-nums text-ink">{critical.count}</p>
           <p className={`mt-0.5 text-sm font-semibold ${theme.metricValueA}`}>
-            <CurrencyAmount amount={critical.total} />
+            <CurrencyAmount amount={critical.total} colorClass={theme.metricValueA} />
           </p>
         </div>
       </div>
@@ -1171,12 +1162,12 @@ function NeedsAttentionPanel({
             </tr>
           </thead>
           <tbody>
-            <tr className={`divide-x bg-white/80 text-ink ${theme.widgetListColDivide}`}>
+            <tr className={`divide-x text-ink ${theme.widgetListRow} ${theme.widgetListColDivide}`}>
               {AGING_BUCKET_KEYS.map(([label, key]) => (
                 <td key={key} className="px-2 py-2.5 tabular-nums">
                   <span className="block font-semibold text-ink">{aging[key].count}</span>
                   <span className={`mt-0.5 block text-[11px] font-medium ${theme.metricValueA}`}>
-                    <CurrencyAmount amount={aging[key].total} className="inline" />
+                    <CurrencyAmount amount={aging[key].total} colorClass={theme.metricValueA} className="inline" />
                   </span>
                 </td>
               ))}
@@ -1184,39 +1175,6 @@ function NeedsAttentionPanel({
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-function KpiCard({
-  label,
-  sub,
-  compare,
-  compareTone,
-  value,
-  className,
-  compact,
-}: {
-  label: string;
-  sub: string;
-  compare?: string;
-  compareTone?: "neutral" | "up" | "down";
-  value: ReactNode;
-  className: string;
-  compact?: boolean;
-}) {
-  const compareClass =
-    compareTone === "up"
-      ? "text-emerald-700"
-      : compareTone === "down"
-        ? "text-amber-800"
-        : "text-ink-muted";
-  return (
-    <div className={`rounded-lg ${compact ? "p-2.5" : "p-3"} ${className}`}>
-      <p className="text-xs font-semibold text-ink">{label}</p>
-      <p className="text-[10px] text-ink-muted">{sub}</p>
-      <div className="mt-1">{value}</div>
-      {compare && <p className={`mt-1 text-[10px] ${compareClass}`}>{compare}</p>}
     </div>
   );
 }
@@ -1393,17 +1351,21 @@ function OperationsJobsPanel({
                 <button
                   type="button"
                   onClick={() => onSelectJob(job.id)}
-                  className={`flex w-full flex-col gap-0.5 px-3 text-left text-ink sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
+                  className={`flex w-full flex-col gap-0.5 px-3 text-left sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
                     selectedJobId === job.id
-                      ? theme.operationsListSelected
-                      : `${operationsListRowBase} ${theme.operationsListHover}`
+                      ? `text-sm font-medium ${theme.operationsListSelected} ${theme.metricValueA}`
+                      : `text-ink ${density.text} ${operationsListRowBase} ${theme.widgetListRow} ${theme.operationsListHover}`
                   }`}
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold">
                       {job.serviceType}
                       {" · "}
-                      <CurrencyAmount amount={job.amount} className="inline font-medium" />
+                      <CurrencyAmount
+                        amount={job.amount}
+                        colorClass={theme.metricValueA}
+                        className="inline font-medium"
+                      />
                     </p>
                     <p className={`truncate ${density.meta}`}>
                       {job.customer} · {job.category}
@@ -1507,11 +1469,13 @@ function OperationsSchedulePanel({
                   onClick={() => onSelectAppointment(appt.id)}
                   className={`flex w-full flex-col gap-0.5 px-3 text-left sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
                     selectedAppointmentId === appt.id
-                      ? theme.operationsListSelected
-                      : `${operationsListRowBase} ${theme.operationsListHover}`
+                      ? `text-sm font-medium ${theme.operationsListSelected} ${theme.metricValueA}`
+                      : `${density.text} ${operationsListRowBase} ${theme.widgetListRow} ${theme.operationsListHover}`
                   }`}
                 >
-                  <p className="min-w-0 flex-1 truncate font-semibold text-ink">{appt.title}</p>
+                  <p className={`min-w-0 flex-1 truncate font-semibold ${selectedAppointmentId === appt.id ? "" : "text-ink"}`}>
+                    {appt.title}
+                  </p>
                   <div className={`shrink-0 ${density.meta}`}>
                     <span className={`font-semibold ${theme.listAccent}`}>{date}</span>
                     <span className="text-ink-muted"> · {time}</span>

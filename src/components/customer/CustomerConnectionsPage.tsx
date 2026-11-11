@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ConnectorCatalogList } from "@/components/connectors/ConnectorCatalogList";
+import { DashboardPageFrame } from "@/components/customer/DashboardWorkspaceNav";
 import { CONNECTION_STATUS_LABELS } from "@/lib/client-milestones";
+import { dashboardRoutesForPathname } from "@/lib/dashboard-section-routes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
-import { demoDashboardRoutes as dashboardRoutes } from "@/lib/routes";
 
 function formatSync(iso?: string): string {
   if (!iso) return "Not synced yet (demo)";
@@ -19,6 +21,7 @@ function formatSync(iso?: string): string {
 
 export function CustomerConnectionsPage() {
   const { client, workspace, workspaceId } = useCustomerPortal();
+  const routes = dashboardRoutesForPathname(usePathname());
 
   if (!client || !workspace) {
     return <p className="text-sm text-ink-muted">Workspace not linked to a client record.</p>;
@@ -27,7 +30,8 @@ export function CustomerConnectionsPage() {
   const connections = client.guidedConnections ?? [];
 
   return (
-    <div className="space-y-6">
+    <DashboardPageFrame>
+      <div className="space-y-6">
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-purple">
           {workspace.label}
@@ -125,11 +129,12 @@ export function CustomerConnectionsPage() {
       </p>
 
       <Link
-        href={dashboardRoutes.home}
+        href={routes.home}
         className="inline-block text-sm font-semibold text-purple hover:text-purple-dark"
       >
         ← Back to home
       </Link>
-    </div>
+      </div>
+    </DashboardPageFrame>
   );
 }

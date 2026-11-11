@@ -7,18 +7,21 @@ export function CurrencyAmount({
   detailed = false,
   prefix = "",
   className = "",
+  colorClass = "text-purple",
 }: {
   amount: number;
   detailed?: boolean;
   prefix?: string;
   className?: string;
+  /** Replaces the default purple so a dashboard theme can color the figure. */
+  colorClass?: string;
 }) {
   const text = detailed
     ? formatCurrencyDetailed(amount)
     : formatCurrency(amount);
 
   return (
-    <span className={`${currencyAmountClass}${className ? ` ${className}` : ""}`}>
+    <span className={`font-medium ${colorClass}${className ? ` ${className}` : ""}`}>
       {prefix}
       {text}
     </span>

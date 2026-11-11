@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useClientStore } from "@/lib/client-store";
+import { useCustomerPortal } from "@/lib/customer-portal-context";
 import { getPreviewRevisionLabel } from "@/lib/customer-portal-stage";
 import { hasUnresolvedPreviewFeedback } from "@/lib/preview-review";
 import type { Client } from "@/lib/types";
 
 export function PortalPreviewReviewControls({ client }: { client: Client }) {
   const { submitCustomerPreviewFeedback, approveCustomerPreview } = useClientStore();
+  const { theme } = useCustomerPortal();
   const [feedback, setFeedback] = useState("");
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(false);
@@ -15,7 +17,7 @@ export function PortalPreviewReviewControls({ client }: { client: Client }) {
   const [approveSaved, setApproveSaved] = useState(false);
 
   return (
-    <div className="space-y-4 rounded-xl border border-purple-100 bg-white p-4 shadow-soft sm:p-5">
+    <div className={`space-y-4 rounded-xl p-4 shadow-soft sm:p-5 ${theme.card}`}>
       <p className="text-sm font-semibold text-ink">
         Preview review · {getPreviewRevisionLabel(client)}
       </p>
@@ -48,7 +50,7 @@ export function PortalPreviewReviewControls({ client }: { client: Client }) {
             rows={4}
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            className="mt-2 w-full rounded-lg border border-purple-100 px-3 py-2 text-sm text-ink"
+            className={`mt-2 w-full rounded-lg border bg-white px-3 py-2 text-sm text-ink ${theme.swatchRing}`}
             placeholder="Describe what you'd like adjusted…"
           />
           {feedbackError && (
@@ -64,7 +66,7 @@ export function PortalPreviewReviewControls({ client }: { client: Client }) {
           )}
           <button
             type="submit"
-            className="mt-3 rounded-lg border border-purple px-4 py-2 text-sm font-semibold text-ink hover:bg-purple-50"
+            className={`mt-3 rounded-lg border bg-white px-4 py-2 text-sm font-semibold text-ink ${theme.filterSecondaryButton}`}
           >
             Submit feedback
           </button>
@@ -98,7 +100,7 @@ export function PortalPreviewReviewControls({ client }: { client: Client }) {
               }
               setApproveSaved(true);
             }}
-            className="mt-4 rounded-lg bg-purple px-4 py-2 text-sm font-semibold text-white hover:bg-purple-dark"
+            className={`mt-4 rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90 ${theme.navActive}`}
           >
             Approve preview
           </button>

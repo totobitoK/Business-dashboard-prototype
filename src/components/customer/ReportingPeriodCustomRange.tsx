@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardDatePicker } from "@/components/customer/DashboardDatePicker";
+import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 
 /** Custom from/to fields — nest inside the reporting period panel (`embedded`). */
 export function ReportingPeriodCustomRange({
@@ -9,6 +10,7 @@ export function ReportingPeriodCustomRange({
   maxDate,
   onStartChange,
   onEndChange,
+  theme,
   embedded = false,
 }: {
   customStart: string;
@@ -16,6 +18,7 @@ export function ReportingPeriodCustomRange({
   maxDate: string;
   onStartChange: (value: string) => void;
   onEndChange: (value: string) => void;
+  theme: LayoutCustomizeTheme;
   embedded?: boolean;
 }) {
   const fields = (
@@ -24,6 +27,7 @@ export function ReportingPeriodCustomRange({
         label="From"
         value={customStart}
         max={maxDate}
+        theme={theme}
         onChange={onStartChange}
       />
       <div
@@ -32,7 +36,13 @@ export function ReportingPeriodCustomRange({
       >
         to
       </div>
-      <DashboardDatePicker label="To" value={customEnd} max={maxDate} onChange={onEndChange} />
+      <DashboardDatePicker
+        label="To"
+        value={customEnd}
+        max={maxDate}
+        theme={theme}
+        onChange={onEndChange}
+      />
     </div>
   );
 

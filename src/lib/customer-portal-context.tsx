@@ -60,7 +60,14 @@ function resolveWorkspaceIdFromQuery(): string | null {
 }
 
 /** Demo dashboard portal — persisted workspace selection and demo CRM client binding. */
-export function CustomerPortalProvider({ children }: { children: ReactNode }) {
+export function CustomerPortalProvider({
+  children,
+  businessName: businessNameOverride,
+}: {
+  children: ReactNode;
+  /** Signed-in company name. Demo portals use the selected workspace client instead. */
+  businessName?: string;
+}) {
   const { clients } = useClientStore();
   const [workspaceId, setWorkspaceIdState] = useState(getDefaultWorkspaceId);
   const [workspaceInvalid, setWorkspaceInvalid] = useState(false);
@@ -120,6 +127,12 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
   const theme =
     LAYOUT_CUSTOMIZE_THEMES.find((t) => t.id === settings.themeId) ??
     LAYOUT_CUSTOMIZE_THEMES[0];
+
+  const businessName =
+    businessNameOverride?.trim() ||
+    client?.company ||
+    workspace?.label ||
+    "Your company";
 
   const setWorkspaceId = useCallback((id: string) => {
     if (!isValidWorkspaceId(id)) return;
@@ -288,6 +301,7 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
       moveRevenueKpi,
       toggleRevenueKpiHidden,
       theme,
+      businessName,
       liveSamplePreview: false,
     }),
     [
@@ -307,6 +321,7 @@ export function CustomerPortalProvider({ children }: { children: ReactNode }) {
       moveRevenueKpi,
       toggleRevenueKpiHidden,
       theme,
+      businessName,
     ]
   );
 

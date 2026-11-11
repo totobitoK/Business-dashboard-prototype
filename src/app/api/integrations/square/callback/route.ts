@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 function settingsRedirect(origin: string, square: string) {
-  const url = new URL("/dashboard/settings", origin);
+  const url = new URL("/dashboard/connections", origin);
   url.searchParams.set("square", square);
   return NextResponse.redirect(url.toString());
 }

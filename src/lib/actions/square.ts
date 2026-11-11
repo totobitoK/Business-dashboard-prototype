@@ -15,7 +15,7 @@ const LOCATION_ID = /^[A-Za-z0-9]{1,64}$/;
 
 function revalidate() {
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/connections");
 }
 
 export async function syncSquareAction(companyId: string, locationIds: string[]): Promise<SquareActionResult> {

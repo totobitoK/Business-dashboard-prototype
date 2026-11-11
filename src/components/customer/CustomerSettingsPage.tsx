@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LAYOUT_CUSTOMIZE_THEMES } from "@/lib/layout-customize-themes";
+import { dashboardRoutesForPathname } from "@/lib/dashboard-section-routes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import type { WorkspaceThemeId } from "@/lib/customer-portal-context";
-import { demoDashboardRoutes as dashboardRoutes } from "@/lib/routes";
 import { DashboardAppearancePreview } from "@/components/customer/DashboardAppearancePreview";
+import { DashboardPageFrame } from "@/components/customer/DashboardWorkspaceNav";
 import { DashboardKpiChipPicker } from "@/components/customer/DashboardKpiChipPicker";
 import { DashboardChipGroup } from "@/components/customer/dashboard-controls";
 import {
@@ -31,6 +33,7 @@ export function CustomerSettingsPage() {
     toggleRevenueKpiHidden,
     theme,
   } = useCustomerPortal();
+  const routes = dashboardRoutesForPathname(usePathname());
   const [confirmReset, setConfirmReset] = useState(false);
   const [kpiTab, setKpiTab] = useState<"overview" | "revenue">("overview");
 
@@ -46,7 +49,8 @@ export function CustomerSettingsPage() {
   );
 
   return (
-    <div className="space-y-8">
+    <DashboardPageFrame>
+      <div className="space-y-8">
       <div>
         <p className={`text-sm font-semibold uppercase tracking-wide ${theme.metricValueA}`}>
           {workspace.label}
@@ -106,7 +110,7 @@ export function CustomerSettingsPage() {
               type="checkbox"
               checked={settings.showCompactMetrics}
               onChange={(e) => updateSettings({ showCompactMetrics: e.target.checked })}
-              className="mt-1 h-4 w-4 rounded border-purple-200 text-purple"
+              className={`mt-1 h-4 w-4 rounded border-black/20 ${theme.formAccent}`}
             />
             <span>
               <span className="block text-sm font-semibold text-ink">Compact layout</span>
@@ -252,11 +256,12 @@ export function CustomerSettingsPage() {
       </div>
 
       <Link
-        href={dashboardRoutes.home}
+        href={routes.home}
         className={`inline-block text-sm font-semibold hover:opacity-80 ${theme.metricValueA}`}
       >
         ← Back to home
       </Link>
-    </div>
+      </div>
+    </DashboardPageFrame>
   );
 }

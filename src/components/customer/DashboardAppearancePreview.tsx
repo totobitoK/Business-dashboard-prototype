@@ -1,10 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
-import { DashboardSection } from "@/components/customer/DashboardSection";
-import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { DASHBOARD_SECTIONS } from "@/lib/dashboard-section-routes";
+import { useCustomerPortal } from "@/lib/customer-portal-context";
+import { DashboardSection } from "@/components/customer/DashboardSection";
+import { KpiStatCard } from "@/components/customer/KpiStatCard";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import { DEMO_AS_OF_DATE } from "@/lib/workspace-demo-date";
 import {
@@ -20,12 +21,6 @@ import {
   resolveReportingRange,
 } from "@/lib/workspace-reporting-period";
 import type { TrendBucket } from "@/lib/workspace-analytics";
-
-const REPORTING_CHIPS = [
-  { id: "last7", label: "7 days" },
-  { id: "last30", label: "30 days" },
-  { id: "mtd", label: "Month to date" },
-] as const;
 
 const PREVIEW_JOBS = [
   {
@@ -73,39 +68,6 @@ function buildPreviewTrend(): TrendBucket[] {
 const PREVIEW_TREND = buildPreviewTrend();
 const PREVIEW_TREND_TOTAL = PREVIEW_TREND.reduce((sum, b) => sum + b.amount, 0);
 
-function PreviewKpiCard({
-  label,
-  sub,
-  compare,
-  compareTone,
-  value,
-  className,
-  compact,
-}: {
-  label: string;
-  sub: string;
-  compare?: string;
-  compareTone?: "neutral" | "up" | "down";
-  value: ReactNode;
-  className: string;
-  compact?: boolean;
-}) {
-  const compareClass =
-    compareTone === "up"
-      ? "text-emerald-700"
-      : compareTone === "down"
-        ? "text-amber-800"
-        : "text-ink-muted";
-  return (
-    <div className={`rounded-lg ${compact ? "p-2.5" : "p-3"} ${className}`}>
-      <p className="text-xs font-semibold text-ink">{label}</p>
-      <p className="text-[10px] text-ink-muted">{sub}</p>
-      <div className="mt-1">{value}</div>
-      {compare ? <p className={`mt-1 text-[10px] ${compareClass}`}>{compare}</p> : null}
-    </div>
-  );
-}
-
 function overviewPreviewProps(
   id: OverviewKpiId,
   rangeLabel: string,
@@ -117,16 +79,22 @@ function overviewPreviewProps(
   switch (id) {
     case "payments_collected":
       return {
+        higherIsBetter: true,
         sub: rangeLabel,
         compare: "+8.2% vs prior period",
         compareTone: "up" as const,
         value: (
-          <CurrencyAmount amount={18400} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={18400}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
     case "jobs_completed":
       return {
+        higherIsBetter: true,
         sub: rangeLabel,
         compare: "+3 vs prior period",
         compareTone: "up" as const,
@@ -137,17 +105,27 @@ function overviewPreviewProps(
       };
     case "outstanding_balance":
       return {
+        higherIsBetter: false,
         sub: `As of ${asOf}`,
         value: (
-          <CurrencyAmount amount={12800} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={12800}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
     case "overdue_balance":
       return {
+        higherIsBetter: false,
         sub: `As of ${asOf}`,
         value: (
-          <CurrencyAmount amount={3100} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={3100}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
@@ -165,21 +143,31 @@ function revenuePreviewProps(
   switch (id) {
     case "weekly_revenue":
       return {
+        higherIsBetter: true,
         sub: rangeLabel,
         compare: "+5.1% vs prior 7 days",
         compareTone: "up" as const,
         value: (
-          <CurrencyAmount amount={11200} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={11200}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
     case "monthly_revenue":
       return {
+        higherIsBetter: true,
         sub: "Month to date",
         compare: "+4.0% vs same days last month",
         compareTone: "up" as const,
         value: (
-          <CurrencyAmount amount={48200} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={48200}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
@@ -187,15 +175,24 @@ function revenuePreviewProps(
       return {
         sub: "Scheduled + in progress",
         value: (
-          <CurrencyAmount amount={62000} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={62000}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
     case "overdue_ar":
       return {
+        higherIsBetter: false,
         sub: `As of ${asOf}`,
         value: (
-          <CurrencyAmount amount={3100} className="text-xl font-bold sm:text-2xl" />
+          <CurrencyAmount
+            amount={3100}
+            colorClass={theme.metricValueA}
+            className="text-xl font-bold sm:text-2xl"
+          />
         ),
         className,
       };
@@ -245,18 +242,20 @@ function PreviewMetricsGrid({
     <div className={`grid gap-2 sm:grid-cols-2 ${lgCols}`}>
       {kpiTab === "revenue"
         ? visibleRevenueKpis.map((id, index) => (
-            <PreviewKpiCard
+            <KpiStatCard
               key={id}
               compact={compact}
               label={REVENUE_KPI_LABELS[id]}
+              accentClass={theme.metricValueA}
               {...revenuePreviewProps(id, rangeLabel, theme, index)}
             />
           ))
         : visibleOverviewKpis.map((id, index) => (
-            <PreviewKpiCard
+            <KpiStatCard
               key={id}
               compact={compact}
               label={OVERVIEW_KPI_LABELS[id]}
+              accentClass={theme.metricValueA}
               {...overviewPreviewProps(id, rangeLabel, theme, index)}
             />
           ))}
@@ -274,7 +273,7 @@ function PreviewJobList({ theme, compact }: { theme: LayoutCustomizeTheme; compa
           <li key={job.title}>
             <div
               className={`flex w-full flex-col gap-0.5 px-3 text-left text-ink sm:flex-row sm:items-center sm:justify-between ${rowPy} ${
-                i === 0 ? theme.operationsListSelected : "bg-white/70"
+                i === 0 ? theme.operationsListSelected : theme.widgetListRow
               }`}
             >
               <div className="min-w-0 flex-1">
@@ -302,7 +301,7 @@ function PreviewScheduleList({ theme, compact }: { theme: LayoutCustomizeTheme; 
         {PREVIEW_APPOINTMENTS.map((appt) => (
           <li key={appt.title}>
             <div
-              className={`flex w-full flex-col gap-0.5 px-3 text-left sm:flex-row sm:items-center sm:justify-between ${rowPy} bg-white/70`}
+              className={`flex w-full flex-col gap-0.5 px-3 text-left sm:flex-row sm:items-center sm:justify-between ${rowPy} ${theme.widgetListRow}`}
             >
               <p className="truncate font-semibold text-ink">{appt.title}</p>
               <span className={`shrink-0 font-semibold ${theme.listAccent} ${meta}`}>
@@ -339,12 +338,12 @@ function PreviewInvoiceTable({
         </thead>
         <tbody className={`divide-y ${theme.widgetListDivideLight}`}>
           {PREVIEW_INVOICES.map((inv, idx) => (
-            <tr key={inv.id} className={idx % 2 === 1 ? "bg-white/60" : "bg-white"}>
+            <tr key={inv.id} className={idx % 2 === 1 ? theme.widgetListRowAlt : theme.widgetListRow}>
               <td className={`font-mono font-semibold ${theme.metricValueA} ${cell}`}>{inv.id}</td>
               <td className={`truncate font-medium text-ink ${cell}`}>{inv.customer}</td>
               <td className={`text-ink-muted ${cell}`}>{inv.due}</td>
               <td className={`font-semibold ${theme.metricValueA} ${cell}`}>
-                <CurrencyAmount amount={inv.balance} />
+                <CurrencyAmount amount={inv.balance} colorClass={theme.metricValueA} />
               </td>
             </tr>
           ))}
@@ -367,76 +366,44 @@ export function DashboardAppearancePreview({
   visibleRevenueKpis: RevenueKpiId[];
   compact?: boolean;
 }) {
+  const { businessName } = useCustomerPortal();
   const resolved = resolveReportingRange("last7");
   const rangeLabel = resolved.ok ? formatRangeForDisplay(resolved.range) : "Last 7 days";
-  const sectionId = kpiTab === "revenue" ? "revenue" : "overview";
-  const headerTitle =
-    kpiTab === "revenue" ? "Revenue & collections" : "Operations dashboard";
+  const headerTitle = kpiTab === "revenue" ? "Revenue & collections" : businessName;
   const metricsTitle = kpiTab === "revenue" ? "Revenue Overview" : "General Overview";
 
   return (
     <div className={`rounded-2xl shadow-card ${theme.card}`} aria-label="Sample dashboard preview">
       <div
-        className={`relative z-10 flex flex-col gap-2 overflow-visible rounded-t-2xl px-4 py-3 sm:px-5 ${theme.header} ${theme.headerText}`}
+        className={`relative z-10 flex flex-wrap items-center gap-x-3 gap-y-2 overflow-visible rounded-t-2xl px-4 py-3 sm:px-5 ${theme.header} ${theme.headerText}`}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold">{headerTitle}</p>
-          <span
-            className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}
-          >
-            Sample data
-          </span>
-        </div>
-
-        <nav
-          aria-label="Dashboard sections"
-          className="mt-2 flex flex-wrap gap-1 rounded-lg border border-white/20 bg-white/10 p-1"
-        >
+        <p className="min-w-0 truncate text-lg font-semibold leading-none sm:text-xl">{headerTitle}</p>
+        <div className="flex flex-wrap items-center gap-1" aria-hidden>
           {DASHBOARD_SECTIONS.map((section) => {
-            const isActive = section.id === sectionId;
+            const active =
+              (section.id === "revenue" && kpiTab === "revenue") ||
+              (section.id === "overview" && kpiTab === "overview");
             return (
               <span
                 key={section.id}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold sm:text-sm ${
-                  isActive ? theme.embeddedNavActive : "text-white/90"
+                className={`rounded-md px-2.5 py-1 text-sm font-semibold leading-none ${
+                  active ? theme.embeddedNavActive : "text-white/90"
                 }`}
               >
                 {section.label}
               </span>
             );
           })}
-        </nav>
-
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">
-            Reporting period
-          </p>
-          <div className="relative z-20 mt-1.5 rounded-xl border border-white/25 bg-white/10 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-              <div
-                role="group"
-                aria-label="Reporting period"
-                className="flex min-w-0 flex-1 flex-wrap gap-0.5 p-0.5"
-              >
-                {REPORTING_CHIPS.map(({ id, label }) => {
-                  const active = id === "last7";
-                  return (
-                    <span
-                      key={id}
-                      className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:px-3 sm:py-2 sm:text-sm ${
-                        active ? theme.embeddedPeriodActive : "text-white/95"
-                      }`}
-                    >
-                      {label}
-                    </span>
-                  );
-                })}
-              </div>
-              <p className="shrink-0 px-1 text-xs font-medium leading-none text-white/90 sm:pr-2 sm:text-sm">
-                {rangeLabel}
-              </p>
-            </div>
-          </div>
+          <span className="px-2 py-1 text-xs font-medium text-white/70">Connections</span>
+          <span className="px-2 py-1 text-xs font-medium text-white/70">Settings</span>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
+            Sample data
+          </span>
+          <span className="inline-flex items-center rounded-lg border border-white/30 bg-white/15 px-2.5 py-1 text-xs font-semibold text-white">
+            {rangeLabel}
+          </span>
         </div>
       </div>
 
@@ -468,7 +435,8 @@ export function DashboardAppearancePreview({
                 {rangeLabel} · Total{" "}
                 <CurrencyAmount
                   amount={PREVIEW_TREND_TOTAL}
-                  className={`inline font-semibold ${theme.metricValueA}`}
+                  colorClass={theme.metricValueA}
+                  className="inline font-semibold"
                 />
               </>
             }

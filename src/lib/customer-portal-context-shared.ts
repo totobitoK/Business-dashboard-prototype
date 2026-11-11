@@ -27,6 +27,8 @@ export interface CustomerPortalContextValue {
   moveRevenueKpi: (id: RevenueKpiId, direction: "up" | "down") => void;
   toggleRevenueKpiHidden: (id: RevenueKpiId) => void;
   theme: LayoutCustomizeTheme;
+  /** Company shown in the dashboard header. */
+  businessName: string;
   /** When set, dashboard section links stay on this path (live project preview). */
   navigationBase?: string;
   /** Live sample preview — no demo CRM client, no persisted settings. */

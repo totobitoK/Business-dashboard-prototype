@@ -13,7 +13,7 @@ export type QuickBooksActionResult = { ok: true } | { ok: false; error: string }
 
 function revalidate() {
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/connections");
 }
 
 export async function syncQuickBooksAction(companyId: string): Promise<QuickBooksActionResult> {

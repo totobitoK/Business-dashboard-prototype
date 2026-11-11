@@ -9,7 +9,7 @@ import { syncCompanyGoogleCalendar, releaseSyncLock } from "@/lib/google-calenda
 import { acquireSyncLease } from "@/lib/google-calendar/sync-lease";
 
 function settingsRedirect(origin: string, params: Record<string, string>) {
-  const u = new URL("/dashboard/settings", origin);
+  const u = new URL("/dashboard/connections", origin);
   for (const [k, v] of Object.entries(params)) {
     u.searchParams.set(k, v);
   }

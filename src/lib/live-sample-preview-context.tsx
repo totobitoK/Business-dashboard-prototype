@@ -147,6 +147,7 @@ export function LiveSamplePreviewProvider({
       moveRevenueKpi,
       toggleRevenueKpiHidden,
       theme,
+      businessName: workspace?.label ?? "Your company",
       navigationBase,
       liveSamplePreview: true,
     }),

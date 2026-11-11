@@ -17,6 +17,7 @@ import {
   DEMO_CHECKOUT_NOTE,
   formatPaymentRecordSource,
 } from "@/lib/payment-record-source";
+import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import type { Client } from "@/lib/types";
 
 export type CustomerPaymentPanelMode = "deposit" | "final-balance" | "auto";
@@ -61,10 +62,12 @@ export function CustomerPaymentCompactSummary({
   client,
   mode = "auto",
   showDemoNotice = true,
+  theme,
 }: {
   client: Client;
   mode?: CustomerPaymentPanelMode;
   showDemoNotice?: boolean;
+  theme?: LayoutCustomizeTheme;
 }) {
   const depositDue = getDepositAmount(client);
   const remaining = getSetupBalanceRemaining(client);
@@ -82,25 +85,25 @@ export function CustomerPaymentCompactSummary({
       <div>
         <dt className="text-ink-muted">Setup fee</dt>
         <dd className="font-semibold text-ink">
-          <CurrencyAmount amount={client.setupFee} />
+          <CurrencyAmount amount={client.setupFee} colorClass={theme?.metricValueA} />
         </dd>
       </div>
       <div>
         <dt className="text-ink-muted">Recorded toward setup</dt>
         <dd className="font-semibold text-ink">
-          <CurrencyAmount amount={client.setupPaidAmount} />
+          <CurrencyAmount amount={client.setupPaidAmount} colorClass={theme?.metricValueA} />
         </dd>
       </div>
       <div>
         <dt className="text-ink-muted">Remaining balance</dt>
         <dd className="font-semibold text-ink">
-          <CurrencyAmount amount={remaining} />
+          <CurrencyAmount amount={remaining} colorClass={theme?.metricValueA} />
         </dd>
       </div>
       <div>
         <dt className="text-ink-muted">Monthly subscription</dt>
         <dd className="font-semibold text-ink">
-          <CurrencyAmount amount={client.monthlyFee} />
+          <CurrencyAmount amount={client.monthlyFee} colorClass={theme?.metricValueA} />
           <span className="text-xs font-normal text-ink-muted"> /mo at launch</span>
         </dd>
       </div>
@@ -108,11 +111,20 @@ export function CustomerPaymentCompactSummary({
         <div className="sm:col-span-2">
           <dt className="text-ink-muted">Deposit due (50%)</dt>
           <dd className="font-semibold text-ink">
-            <CurrencyAmount amount={getOutstandingDepositAmount(client)} />
+            <CurrencyAmount
+              amount={getOutstandingDepositAmount(client)}
+              colorClass={theme?.metricValueA}
+            />
             {client.setupPaidAmount > 0 && (
               <span className="text-xs font-normal text-ink-muted">
                 {" "}
-                of <CurrencyAmount amount={depositDue} className="inline" /> target
+                of{" "}
+                <CurrencyAmount
+                  amount={depositDue}
+                  colorClass={theme?.metricValueA}
+                  className="inline"
+                />{" "}
+                target
               </span>
             )}
           </dd>
@@ -124,7 +136,9 @@ export function CustomerPaymentCompactSummary({
         </p>
       )}
       {showDemoNotice && !fullyPaid && (
-        <p className="sm:col-span-2 rounded-lg border border-dashed border-purple-200 bg-purple-50/40 px-3 py-2 text-sm text-ink">
+        <p
+          className={`sm:col-span-2 rounded-lg border border-dashed px-3 py-2 text-sm text-ink ${theme?.kpiEmptyState ?? "border-purple-200 bg-purple-50/40"}`}
+        >
           Checkout below simulates a card payment for this prototype. RavenView can also
           record payments received offline on your account.
         </p>
@@ -146,11 +160,13 @@ function CustomerDemoCheckoutModal({
   onClose,
   clientId,
   paymentLabel,
+  theme,
 }: {
   open: boolean;
   onClose: () => void;
   clientId: string;
   paymentLabel: string;
+  theme?: LayoutCustomizeTheme;
 }) {
   const { clients, addPayment } = useClientStore();
   const [submitting, setSubmitting] = useState(false);
@@ -213,9 +229,9 @@ function CustomerDemoCheckoutModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="demo-checkout-title"
-        className="fixed inset-x-4 top-[10vh] z-50 mx-auto w-full max-w-md rounded-xl border border-purple-100 bg-white shadow-card sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2"
+        className={`fixed inset-x-4 top-[10vh] z-50 mx-auto w-full max-w-md rounded-xl border bg-white shadow-card sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 ${theme?.detailPanelBorder ?? "border-purple-100"}`}
       >
-        <div className="border-b border-purple-100 px-5 py-4">
+        <div className={`border-b px-5 py-4 ${theme?.toolbarDivider ?? "border-purple-100"}`}>
           <h2 id="demo-checkout-title" className="text-lg font-semibold text-ink">
             {paymentLabel}
           </h2>
@@ -232,7 +248,7 @@ function CustomerDemoCheckoutModal({
             <button
               type="button"
               onClick={handleClose}
-              className="w-full rounded-lg bg-purple px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-dark"
+              className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold hover:opacity-90 ${theme?.navActive ?? "bg-purple text-white"}`}
             >
               Done
             </button>
@@ -256,7 +272,7 @@ function CustomerDemoCheckoutModal({
                 <input
                   readOnly
                   value="4242 4242 4242 4242"
-                  className="mt-1 w-full rounded-lg border border-purple-100 bg-purple-50/30 px-3 py-2 text-sm text-ink"
+                  className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm text-ink ${theme?.swatchRing ?? "border-purple-100"}`}
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -265,7 +281,7 @@ function CustomerDemoCheckoutModal({
                   <input
                     readOnly
                     value="12 / 34"
-                    className="mt-1 w-full rounded-lg border border-purple-100 bg-purple-50/30 px-3 py-2 text-sm text-ink"
+                    className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm text-ink ${theme?.swatchRing ?? "border-purple-100"}`}
                   />
                 </label>
                 <label className="block text-sm">
@@ -273,7 +289,7 @@ function CustomerDemoCheckoutModal({
                   <input
                     readOnly
                     value="123"
-                    className="mt-1 w-full rounded-lg border border-purple-100 bg-purple-50/30 px-3 py-2 text-sm text-ink"
+                    className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm text-ink ${theme?.swatchRing ?? "border-purple-100"}`}
                   />
                 </label>
               </div>
@@ -283,14 +299,14 @@ function CustomerDemoCheckoutModal({
                 type="button"
                 onClick={handleClose}
                 disabled={submitting}
-                className="flex-1 rounded-lg border border-purple-100 px-4 py-2.5 text-sm font-semibold text-ink hover:bg-purple-50 disabled:opacity-50"
+                className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-50 ${theme?.filterSecondaryButton ?? "border border-purple-100 text-ink hover:bg-purple-50"}`}
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitting || !offer?.ok}
-                className="flex-1 rounded-lg bg-purple px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-dark disabled:opacity-50"
+                className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50 ${theme?.navActive ?? "bg-purple text-white"}`}
               >
                 {submitting
                   ? "Processing…"
@@ -306,7 +322,13 @@ function CustomerDemoCheckoutModal({
   );
 }
 
-export function CustomerCompletePaymentButton({ client }: { client: Client }) {
+export function CustomerCompletePaymentButton({
+  client,
+  theme,
+}: {
+  client: Client;
+  theme?: LayoutCustomizeTheme;
+}) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const offer = getDemoCheckoutOffer(client);
 
@@ -316,7 +338,9 @@ export function CustomerCompletePaymentButton({ client }: { client: Client }) {
 
   if (!offer.ok) {
     return (
-      <p className="mt-4 rounded-lg border border-purple-100 bg-purple-50/40 px-3 py-2 text-sm text-ink-muted">
+      <p
+        className={`mt-4 rounded-lg border px-3 py-2 text-sm text-ink-muted ${theme?.kpiEmptyState ?? "border-purple-100 bg-purple-50/40"}`}
+      >
         {offer.reason}
       </p>
     );
@@ -327,7 +351,7 @@ export function CustomerCompletePaymentButton({ client }: { client: Client }) {
       <button
         type="button"
         onClick={() => setCheckoutOpen(true)}
-        className="w-full rounded-lg bg-purple px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-dark"
+        className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold hover:opacity-90 ${theme?.navActive ?? "bg-purple text-white"}`}
       >
         {offer.label}
       </button>
@@ -336,6 +360,7 @@ export function CustomerCompletePaymentButton({ client }: { client: Client }) {
         onClose={() => setCheckoutOpen(false)}
         clientId={client.id}
         paymentLabel={offer.modalTitle}
+        theme={theme}
       />
     </div>
   );

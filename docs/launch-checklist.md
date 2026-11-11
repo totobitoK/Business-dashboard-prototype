@@ -25,7 +25,7 @@ Set these server variables in `.env.local` only. Leave the customer flags unset.
 - `QUICKBOOKS_OAUTH_STATE_SECRET` (optional; otherwise the sandbox encryption key signs OAuth state)
 - `QUICKBOOKS_REPORTING_TIMEZONE` only when this deployment should override the company time zone. Companies default to Eastern (`America/New_York`). A new company with an address uses that address instead.
 
-`QUICKBOOKS_SANDBOX_QA=true` opens Connect on `/dashboard/settings` for a company owner on this sandbox process. It does nothing when `QUICKBOOKS_ENVIRONMENT` is `production`, and it does not mark the connector verified. Do not set `QUICKBOOKS_SANDBOX_QA` on a customer deployment.
+`QUICKBOOKS_SANDBOX_QA=true` opens Connect on `/dashboard/connections` for a company owner on this sandbox process. It does nothing when `QUICKBOOKS_ENVIRONMENT` is `production`, and it does not mark the connector verified. Do not set `QUICKBOOKS_SANDBOX_QA` on a customer deployment.
 
 After the migration is applied, sign in as a company owner and connect one sandbox company. The owner who starts the connection must be the one who finishes it. Then confirm:
 
@@ -93,7 +93,7 @@ Set these server variables in `.env.local` only. Leave the customer flags unset.
 - `SQUARE_OAUTH_REDIRECT_URI=http://localhost:3000/api/integrations/square/callback`
 - `SQUARE_OAUTH_STATE_SECRET` (optional; otherwise the sandbox encryption key signs OAuth state)
 
-`SQUARE_SANDBOX_QA=true` opens Connect on `/dashboard/settings` for a company owner on this sandbox process. It does nothing when `SQUARE_ENVIRONMENT` is `production`, and it does not mark the connector verified. Do not set `SQUARE_SANDBOX_QA` on a customer deployment.
+`SQUARE_SANDBOX_QA=true` opens Connect on `/dashboard/connections` for a company owner on this sandbox process. It does nothing when `SQUARE_ENVIRONMENT` is `production`, and it does not mark the connector verified. Do not set `SQUARE_SANDBOX_QA` on a customer deployment.
 
 The authorize request asks only for `MERCHANT_PROFILE_READ` and `PAYMENTS_READ`. After the owner connects, they choose the locations to include. Sync then reads completed payments and completed refunds for those locations. Totals use the company time zone, keep each currency separate, and are taken before processing fees.
 

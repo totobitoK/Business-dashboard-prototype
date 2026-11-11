@@ -45,8 +45,8 @@ function renderBody(
     return (
       <p className="text-sm text-ink-muted">
         No Google Calendar connected.{" "}
-        <a href="/dashboard/settings" className="font-semibold text-purple hover:underline">
-          Connect in settings
+        <a href="/dashboard/connections" className="font-semibold text-purple hover:underline">
+          Open Connections
         </a>{" "}
         (owners only).
       </p>
@@ -57,8 +57,8 @@ function renderBody(
     return (
       <p className="text-sm text-amber-900">
         Google Calendar needs to be reconnected before appointments can update.{" "}
-        <a href="/dashboard/settings" className="font-semibold text-purple hover:underline">
-          Open settings
+        <a href="/dashboard/connections" className="font-semibold text-purple hover:underline">
+          Open Connections
         </a>
         .
       </p>
@@ -69,8 +69,8 @@ function renderBody(
     return (
       <p className="text-sm text-ink-muted">
         Connected, but no calendars are selected yet. Owners can choose calendars in{" "}
-        <a href="/dashboard/settings" className="font-semibold text-purple hover:underline">
-          settings
+        <a href="/dashboard/connections" className="font-semibold text-purple hover:underline">
+          Connections
         </a>
         .
       </p>

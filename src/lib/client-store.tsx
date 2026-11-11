@@ -160,7 +160,13 @@ function readInitialClients(): Client[] {
   }
 }
 
-export function ClientStoreProvider({ children }: { children: ReactNode }) {
+export function ClientStoreProvider({
+  children,
+  loadingLabel = "Loading demo data…",
+}: {
+  children: ReactNode;
+  loadingLabel?: string;
+}) {
   const [clients, setClients] = useState<Client[]>(demoClients);
   const [hydrated, setHydrated] = useState(false);
   const clientsRef = useRef(clients);
@@ -933,7 +939,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
   if (!hydrated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
-        <p className="text-ink-muted text-sm">Loading demo data…</p>
+        <p className="text-ink-muted text-sm">{loadingLabel}</p>
       </div>
     );
   }
