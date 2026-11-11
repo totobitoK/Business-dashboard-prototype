@@ -49,6 +49,28 @@ export function dashboardSectionHref(
   return qs ? `${url.pathname}?${qs}` : url.pathname;
 }
 
+export type MoneyView = "receivables" | "collections";
+
+/** `section=revenue` remains the Money deep link. `view` picks the Money panel. */
+export function moneyViewFromSearchParams(
+  searchParams: Pick<URLSearchParams, "get">
+): MoneyView {
+  return searchParams.get("view") === "collections" ? "collections" : "receivables";
+}
+
+export function dashboardMoneyHref(
+  workspaceId: string,
+  view: MoneyView,
+  basePath: string = dashboardRoutes.home
+): string {
+  const href = dashboardSectionHref(workspaceId, "revenue", basePath);
+  if (view !== "collections") return href;
+  const url = new URL(href, "http://local");
+  url.searchParams.set("view", "collections");
+  const qs = url.searchParams.toString();
+  return qs ? `${url.pathname}?${qs}` : url.pathname;
+}
+
 export function resolveDashboardSection(
   pathname: string,
   searchParams: Pick<URLSearchParams, "get">

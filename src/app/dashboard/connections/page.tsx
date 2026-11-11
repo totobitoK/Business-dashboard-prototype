@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
-import { DashboardPageFrame } from "@/components/customer/DashboardWorkspaceNav";
+import { DailyDashboardFrame } from "@/components/customer/daily/DailyDashboardFrame";
 import { LiveGoogleCalendarPanel } from "@/components/google-calendar/LiveGoogleCalendarPanel";
 import type { GoogleCalendarStatus } from "@/components/google-calendar/LiveGoogleCalendarPanel";
 import { LiveQuickBooksPanel } from "@/components/quickbooks/LiveQuickBooksPanel";
@@ -7,7 +7,7 @@ import { LiveSquarePanel, type SquareLocationChoice } from "@/components/square/
 import { getGoogleCalendarMembershipRole } from "@/lib/actions/google-calendar";
 import { getQuickBooksMembershipRole } from "@/lib/actions/quickbooks";
 import { getSquareMembershipRole } from "@/lib/actions/square";
-import { listMemberCompanies } from "@/lib/db/projects.server";
+import { getAuthContext } from "@/lib/auth/authorization";
 import { isGoogleCalendarIntegrationConfigured } from "@/lib/google-calendar/config";
 import { isQuickBooksConnectAllowed } from "@/lib/quickbooks/config";
 import { isSquareConnectAllowed } from "@/lib/square/config";
@@ -21,18 +21,18 @@ export default async function LiveDashboardConnectionsPage({
   searchParams: Promise<{ google?: string; quickbooks?: string; square?: string }>;
 }) {
   const sp = await searchParams;
-  const companies = await listMemberCompanies();
-  const companyId = companies[0]?.id;
   const supabase = await createClient();
+  const ctx = await getAuthContext(supabase);
+  const companyId = ctx?.companyIds[0];
 
   if (!companyId) {
     return (
-      <DashboardPageFrame>
-        <div className="space-y-4">
+      <DailyDashboardFrame>
+        <div className="space-y-4 rounded-2xl bg-white p-5 text-ink">
           <PageHeader title="Connections" description="Company data connections." />
           <p className="text-sm text-ink-muted">No company linked to your account.</p>
         </div>
-      </DashboardPageFrame>
+      </DailyDashboardFrame>
     );
   }
 
@@ -75,8 +75,8 @@ export default async function LiveDashboardConnectionsPage({
   const squareStatus = (squareError ? null : squareRaw) as SquareStatusPayload | null;
 
   return (
-    <DashboardPageFrame>
-    <div className="space-y-6">
+    <DailyDashboardFrame>
+    <div className="space-y-6 rounded-2xl bg-white p-5 text-ink">
       <PageHeader
         title="Connections"
         description="Manage live data connections for your company."
@@ -130,6 +130,6 @@ export default async function LiveDashboardConnectionsPage({
         flashCode={sp.google ?? null}
       />
     </div>
-    </DashboardPageFrame>
+    </DailyDashboardFrame>
   );
 }

@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { CustomerPortalShell } from "@/components/customer/CustomerPortalShell";
-import { CustomerPortalWorkspaceGate } from "@/components/customer/CustomerPortalWorkspaceGate";
 import { getAuthContext } from "@/lib/auth/authorization";
 import { getMarketingPageTitle } from "@/lib/branding";
 import { ClientStoreProvider } from "@/lib/client-store";
@@ -45,9 +44,7 @@ export default async function LiveDashboardLayout({
     <ClientStoreProvider loadingLabel="Loading your dashboard…">
       <CustomerPortalProvider businessName={businessName}>
         <CustomerPortalQuerySync />
-        <CustomerPortalShell fillScreen>
-          <CustomerPortalWorkspaceGate>{children}</CustomerPortalWorkspaceGate>
-        </CustomerPortalShell>
+        <CustomerPortalShell fillScreen>{children}</CustomerPortalShell>
       </CustomerPortalProvider>
     </ClientStoreProvider>
   );

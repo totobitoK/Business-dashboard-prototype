@@ -1,267 +1,231 @@
 "use client";
 
-import Link from "next/link";
+import { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { LAYOUT_CUSTOMIZE_THEMES } from "@/lib/layout-customize-themes";
+import { DailyDashboardFrame } from "@/components/customer/daily/DailyDashboardFrame";
+import { DailyOverview } from "@/components/customer/daily/DailyOverview";
+import {
+  resolveDashboardPeriod,
+  summarizeCollectionsPeriod,
+} from "@/lib/daily-dashboard/collections-period";
+import { buildDemoDailySnapshot } from "@/lib/daily-dashboard/demo-snapshot";
+import { DAILY_THEMES, resolveDailyTheme } from "@/lib/daily-dashboard/theme";
+import type { DailyDashboardSnapshot } from "@/lib/daily-dashboard/types";
 import { dashboardRoutesForPathname } from "@/lib/dashboard-section-routes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import type { WorkspaceThemeId } from "@/lib/customer-portal-context";
-import { DashboardAppearancePreview } from "@/components/customer/DashboardAppearancePreview";
-import { DashboardPageFrame } from "@/components/customer/DashboardWorkspaceNav";
-import { DashboardKpiChipPicker } from "@/components/customer/DashboardKpiChipPicker";
-import { DashboardChipGroup } from "@/components/customer/dashboard-controls";
-import {
-  OVERVIEW_KPI_LABELS,
-  REVENUE_KPI_LABELS,
-  visibleKpiIds,
-} from "@/lib/workspace-kpi-layout";
-import {
-  DASHBOARD_WIDGET_IDS,
-  WIDGET_LABELS,
-} from "@/lib/workspace-widget-layout";
+import { formatRangeForDisplay } from "@/lib/workspace-reporting-period";
 
-export function CustomerSettingsPage() {
+const SECONDARY = [
+  { id: "collections_chart" as const, label: "Collections trend" },
+  { id: "job_activity" as const, label: "Square activity" },
+];
+
+export function CustomerSettingsPage({
+  liveSnapshot = null,
+}: {
+  liveSnapshot?: DailyDashboardSnapshot | null;
+}) {
   const {
     workspace,
+    businessName,
+    workspaceId,
     settings,
     updateSettings,
     resetLayoutToDefaults,
-    moveWidget,
     toggleWidgetHidden,
-    toggleOverviewKpiHidden,
-    toggleRevenueKpiHidden,
-    theme,
   } = useCustomerPortal();
   const routes = dashboardRoutesForPathname(usePathname());
   const [confirmReset, setConfirmReset] = useState(false);
-  const [kpiTab, setKpiTab] = useState<"overview" | "revenue">("overview");
+  const theme = resolveDailyTheme(settings.themeId);
 
-  if (!workspace) return null;
+  const previewSnapshot = useMemo(() => {
+    if (liveSnapshot) return liveSnapshot;
+    return buildDemoDailySnapshot({
+      workspaceId: workspaceId || "",
+      companyName: businessName,
+    });
+  }, [liveSnapshot, workspaceId, businessName]);
 
-  const visibleOverviewKpis = visibleKpiIds(
-    settings.overviewKpiOrder,
-    settings.overviewHiddenKpis
-  );
-  const visibleRevenueKpis = visibleKpiIds(
-    settings.revenueKpiOrder,
-    settings.revenueHiddenKpis
-  );
+  const period = resolveDashboardPeriod(previewSnapshot.asOfDate, "last7");
+  const summary = summarizeCollectionsPeriod({
+    transactions: previewSnapshot.collections.transactions,
+    range: period,
+    authoritativeDay: previewSnapshot.collections.authoritativeDay,
+    loadedCap: previewSnapshot.collections.loadedCap,
+  });
+  const chartFirst =
+    settings.widgetOrder.find((id) => id === "collections_chart" || id === "job_activity") !==
+    "job_activity";
+
+  if (!workspace && !liveSnapshot) return null;
+
+  function swapSecondary() {
+    const order = [...settings.widgetOrder];
+    const chart = order.indexOf("collections_chart");
+    const activity = order.indexOf("job_activity");
+    if (chart < 0 || activity < 0) return;
+    const chartId = order[chart]!;
+    order[chart] = order[activity]!;
+    order[activity] = chartId;
+    updateSettings({ widgetOrder: order });
+  }
 
   return (
-    <DashboardPageFrame>
-      <div className="space-y-8">
-      <div>
-        <p className={`text-sm font-semibold uppercase tracking-wide ${theme.metricValueA}`}>
-          {workspace.label}
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold text-ink">Appearance & layout</h1>
-        <p className="mt-2 max-w-2xl text-sm text-ink-muted">
-          Saved per demo workspace in your browser only — does not change CRM records,
-          connection permissions, or financial source data.
-        </p>
-      </div>
-
-      <section
-        className={`overflow-hidden rounded-2xl border shadow-soft ${theme.sectionPanel}`}
-        aria-labelledby="appearance-preview-heading"
-      >
-        <div className={`border-b px-5 py-4 ${theme.sectionHeader}`}>
-          <h2 id="appearance-preview-heading" className="text-sm font-semibold text-ink">
-            Color theme & preview
-          </h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            Pick a theme and see how the sample dashboard will look on Overview and Revenue.
+    <DailyDashboardFrame companyName={liveSnapshot?.companyName}>
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div>
+          <h1 className={`text-2xl font-semibold ${theme.text}`}>Appearance</h1>
+          <p className={`mt-2 max-w-2xl text-sm ${theme.muted}`}>
+            Theme, compact spacing, and secondary widgets are saved in this browser. They do not
+            change connection permissions or financial records.
           </p>
         </div>
 
-        <div className="space-y-5 p-5">
-          <fieldset>
-            <legend className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              Color theme
-            </legend>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              {LAYOUT_CUSTOMIZE_THEMES.map((t) => {
-                const selected = settings.themeId === t.id;
+        <section className={theme.card}>
+          <div className={`border-b px-5 py-4 ${theme.divider}`}>
+            <h2 className={`text-sm font-semibold ${theme.text}`}>Color theme</h2>
+            <p className={`mt-1 text-sm ${theme.muted}`}>
+              Preview uses the same dashboard. Saved RavenView purple, Forest & slate, and Ocean &
+              ink preferences open as Indigo, Evergreen Slate, and Porcelain.
+            </p>
+          </div>
+          <div className="space-y-5 p-5">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {DAILY_THEMES.map((choice) => {
+                const selected = settings.themeId === choice.id;
                 return (
                   <label
-                    key={t.id}
-                    className={`cursor-pointer rounded-xl border bg-white/80 p-4 transition-colors ${
-                      selected ? `ring-2 ring-offset-1 ${t.swatchRing}` : "border-black/10 hover:border-black/15"
-                    }`}
+                    key={choice.id}
+                    className={`cursor-pointer rounded-xl border p-4 ${theme.focus} ${
+                      selected ? `ring-2 ring-offset-2 ${choice.swatchRing}` : theme.divider
+                    } ${theme.nested}`}
                   >
                     <input
                       type="radio"
                       name="theme"
                       className="sr-only"
                       checked={selected}
-                      onChange={() => updateSettings({ themeId: t.id as WorkspaceThemeId })}
+                      onChange={() => updateSettings({ themeId: choice.id as WorkspaceThemeId })}
                     />
-                    <span className={`block h-2 rounded-full ${t.header}`} />
-                    <span className="mt-2 block text-sm font-semibold text-ink">{t.name}</span>
+                    <span className="flex gap-1">
+                      {choice.swatches.map((swatch) => (
+                        <span
+                          key={swatch}
+                          className="h-2 flex-1 rounded-full"
+                          style={{ backgroundColor: swatch }}
+                        />
+                      ))}
+                    </span>
+                    <span className={`mt-2 block text-sm font-semibold ${theme.text}`}>{choice.name}</span>
+                    <span className={`mt-1 block text-xs ${theme.muted}`}>{choice.description}</span>
                   </label>
                 );
               })}
             </div>
-          </fieldset>
 
-          <label className="flex items-start gap-3 rounded-xl border border-black/5 bg-white/70 p-4">
-            <input
-              type="checkbox"
-              checked={settings.showCompactMetrics}
-              onChange={(e) => updateSettings({ showCompactMetrics: e.target.checked })}
-              className={`mt-1 h-4 w-4 rounded border-black/20 ${theme.formAccent}`}
-            />
-            <span>
-              <span className="block text-sm font-semibold text-ink">Compact layout</span>
-              <span className="mt-1 block text-sm text-ink-muted">
-                Tighter spacing and smaller KPI type on the sample dashboard.
+            <label className={`flex items-start gap-3 rounded-xl p-4 ${theme.nested}`}>
+              <input
+                type="checkbox"
+                checked={settings.showCompactMetrics}
+                onChange={(event) => updateSettings({ showCompactMetrics: event.target.checked })}
+                className="mt-1 h-4 w-4"
+              />
+              <span>
+                <span className={`block text-sm font-semibold ${theme.text}`}>Compact layout</span>
+                <span className={`mt-1 block text-sm ${theme.muted}`}>
+                  Tighter spacing on the dashboard.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
 
-          <DashboardAppearancePreview
-            theme={theme}
-            kpiTab={kpiTab}
-            visibleOverviewKpis={visibleOverviewKpis}
-            visibleRevenueKpis={visibleRevenueKpis}
-            compact={settings.showCompactMetrics}
-          />
-
-          <div id="kpi-cards" className="scroll-mt-24 rounded-xl border border-black/5 bg-white/70 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-ink">KPI cards</p>
-                <p className="mt-0.5 text-sm text-ink-muted">
-                  Tap to show or hide. Order matches the default on each tab.
-                </p>
-              </div>
-              <DashboardChipGroup
+            <div className={`max-h-[36rem] overflow-auto rounded-xl border ${theme.divider}`}>
+              <DailyOverview
+                snapshot={previewSnapshot}
+                summary={summary}
+                rangeLabel={`${period.label} · ${formatRangeForDisplay(period)}`}
                 theme={theme}
-                aria-label="KPI preview tab"
-                value={kpiTab}
-                onChange={setKpiTab}
-                options={[
-                  { value: "overview", label: "Overview" },
-                  { value: "revenue", label: "Revenue" },
-                ]}
+                links={{ receivables: "#", schedule: "#", connections: routes.connections }}
+                showChart={!settings.hiddenWidgets.includes("collections_chart")}
+                showActivity={!settings.hiddenWidgets.includes("job_activity")}
+                chartFirst={chartFirst}
+                compact={settings.showCompactMetrics}
+                preview
               />
             </div>
-            <div className="mt-4">
-              {kpiTab === "overview" ? (
-                <DashboardKpiChipPicker
-                  order={settings.overviewKpiOrder}
-                  hidden={settings.overviewHiddenKpis}
-                  labels={OVERVIEW_KPI_LABELS}
-                  themeChipActive={theme.filterChipActive}
-                  themeChipIdle={theme.filterChipIdle}
-                  onToggleHidden={toggleOverviewKpiHidden}
-                />
-              ) : (
-                <DashboardKpiChipPicker
-                  order={settings.revenueKpiOrder}
-                  hidden={settings.revenueHiddenKpis}
-                  labels={REVENUE_KPI_LABELS}
-                  themeChipActive={theme.filterChipActive}
-                  themeChipIdle={theme.filterChipIdle}
-                  onToggleHidden={toggleRevenueKpiHidden}
-                />
-              )}
-            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <fieldset className={`rounded-2xl border p-5 shadow-soft ${theme.sectionPanel}`}>
-        <legend className="px-1 text-sm font-semibold text-ink">Dashboard widgets</legend>
-        <p className="mt-1 text-sm text-ink-muted">
-          Reorder optional sections or hide them. Order applies on the home preview.
-        </p>
-        <ul className="mt-4 space-y-2">
-          {settings.widgetOrder.map((id, index) => {
-            const hidden = settings.hiddenWidgets.includes(id);
-            return (
-              <li
-                key={id}
-                className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 ${theme.listRow}`}
-              >
-                <span className={`text-sm font-medium ${hidden ? "text-ink-muted line-through" : "text-ink"}`}>
-                  {WIDGET_LABELS[id]}
-                </span>
-                <div className="flex items-center gap-2">
+        <section className={`${theme.card} p-5`}>
+          <h2 className={`text-sm font-semibold ${theme.text}`}>Secondary widgets</h2>
+          <p className={`mt-1 text-sm ${theme.muted}`}>
+            Needs attention, receivables, next up, and collection totals stay in place. Reorder or
+            hide the trend and the Square activity list.
+          </p>
+          <ul className="mt-4 space-y-2">
+            {SECONDARY.map((widget) => {
+              const hidden = settings.hiddenWidgets.includes(widget.id);
+              return (
+                <li
+                  key={widget.id}
+                  className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 ${theme.row}`}
+                >
+                  <span className={`text-sm font-medium ${hidden ? theme.muted : theme.text}`}>
+                    {widget.label}
+                  </span>
                   <button
                     type="button"
-                    disabled={index === 0}
-                    onClick={() => moveWidget(id, "up")}
-                    className={`rounded border px-2 py-1 text-xs font-semibold disabled:opacity-40 ${theme.filterSecondaryButton}`}
-                  >
-                    Move up
-                  </button>
-                  <button
-                    type="button"
-                    disabled={index === settings.widgetOrder.length - 1}
-                    onClick={() => moveWidget(id, "down")}
-                    className={`rounded border px-2 py-1 text-xs font-semibold disabled:opacity-40 ${theme.filterSecondaryButton}`}
-                  >
-                    Move down
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleWidgetHidden(id)}
-                    className={`rounded border px-2 py-1 text-xs font-semibold ${theme.filterSecondaryButton}`}
+                    onClick={() => toggleWidgetHidden(widget.id)}
+                    className={`rounded-md border px-2 py-1 text-xs font-semibold ${theme.input} ${theme.focus}`}
                   >
                     {hidden ? "Show" : "Hide"}
                   </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        <p className="mt-2 text-xs text-ink-muted">
-          All widgets: {DASHBOARD_WIDGET_IDS.join(", ")}
-        </p>
-      </fieldset>
-
-      <div className={`rounded-2xl border p-5 shadow-soft ${theme.sectionPanel}`}>
-        <p className="text-sm font-semibold text-ink">Restore default layout</p>
-        {!confirmReset ? (
+                </li>
+              );
+            })}
+          </ul>
           <button
             type="button"
-            onClick={() => setConfirmReset(true)}
-            className="mt-3 rounded-lg border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-50"
+            onClick={swapSecondary}
+            className={`mt-3 rounded-md border px-3 py-1.5 text-sm font-semibold ${theme.input} ${theme.focus}`}
           >
-            Reset this workspace…
+            Swap trend and activity
           </button>
-        ) : (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                resetLayoutToDefaults();
-                setConfirmReset(false);
-              }}
-              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white"
-            >
-              Confirm reset
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmReset(false)}
-              className={`rounded-lg border px-4 py-2 text-sm font-semibold ${theme.filterSecondaryButton}`}
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-      </div>
+        </section>
 
-      <Link
-        href={routes.home}
-        className={`inline-block text-sm font-semibold hover:opacity-80 ${theme.metricValueA}`}
-      >
-        ← Back to home
-      </Link>
+        <section className={`${theme.card} p-5`}>
+          <h2 className={`text-sm font-semibold ${theme.text}`}>Restore default layout</h2>
+          {!confirmReset ? (
+            <button
+              type="button"
+              onClick={() => setConfirmReset(true)}
+              className={`mt-3 rounded-lg border border-amber-400 px-4 py-2 text-sm font-semibold ${theme.focus} ${theme.warning}`}
+            >
+              Reset this workspace…
+            </button>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  resetLayoutToDefaults();
+                  setConfirmReset(false);
+                }}
+                className={`rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white ${theme.focus}`}
+              >
+                Confirm reset
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmReset(false)}
+                className={`rounded-lg border px-4 py-2 text-sm font-semibold ${theme.input} ${theme.focus}`}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </section>
       </div>
-    </DashboardPageFrame>
+    </DailyDashboardFrame>
   );
 }

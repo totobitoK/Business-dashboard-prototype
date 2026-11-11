@@ -76,8 +76,21 @@ export function CustomerPortalProvider({
   const [workspaceSessionKey, setWorkspaceSessionKey] = useState(0);
 
   useEffect(() => {
+    const signedInCompany = Boolean(businessNameOverride?.trim());
     const fromQuery = resolveWorkspaceIdFromQuery();
-    if (fromQuery === "__invalid__") {
+    if (signedInCompany) {
+      // A demo workspace id in the URL or browser only picks saved appearance.
+      // It must not block the signed-in dashboard or choose the live company.
+      if (fromQuery && fromQuery !== "__invalid__") {
+        setWorkspaceIdState(fromQuery);
+      } else {
+        const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+        setWorkspaceIdState(
+          stored && isValidWorkspaceId(stored) ? stored : getDefaultWorkspaceId()
+        );
+      }
+      setWorkspaceInvalid(false);
+    } else if (fromQuery === "__invalid__") {
       setWorkspaceInvalid(true);
       setWorkspaceIdState("");
     } else if (fromQuery) {
@@ -98,7 +111,7 @@ export function CustomerPortalProvider({
     }
     setSettingsMap(loadSettings());
     setPortalSynced(true);
-  }, []);
+  }, [businessNameOverride]);
 
   useEffect(() => {
     if (!portalSynced || workspaceInvalid || !workspaceId) return;

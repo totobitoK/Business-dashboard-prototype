@@ -71,8 +71,16 @@ export function resolveReportingRange(
   customStart?: string,
   customEnd?: string
 ): ReportingRangeResult | ReportingRangeError {
-  const asOf = DEMO_AS_OF_DATE;
+  return resolveReportingRangeAsOf(DEMO_AS_OF_DATE, preset, customStart, customEnd);
+}
 
+/** Same presets as the demo helper, anchored to a company reporting date. */
+export function resolveReportingRangeAsOf(
+  asOf: string,
+  preset: ReportingPeriodPreset,
+  customStart?: string,
+  customEnd?: string
+): ReportingRangeResult | ReportingRangeError {
   if (preset === "last7") {
     const start = addCalendarDays(asOf, -6);
     return okRange(start, asOf, preset, "Last 7 days");
