@@ -17,11 +17,14 @@ import {
   formatCalendarDateDisplay,
   formatNaiveBusinessDateTime,
   formatRangeForDisplay,
+  isDateInRange,
+  isDateOnOrBeforeDemo,
   type ReportingPeriodPreset,
 } from "@/lib/workspace-reporting-period";
 import {
   DEMO_AS_OF_DATE,
   getWorkspaceBusinessData,
+  type BusinessInvoice,
   type BusinessJob,
 } from "@/lib/workspace-business-data";
 import {
@@ -200,8 +203,52 @@ const REVENUE_WIDGETS: DashboardWidgetId[] = [
   "metrics",
   "collections_chart",
   "invoices",
-  "needs_attention",
 ];
+
+const OVERVIEW_CHART_HEIGHT = 220;
+
+function openInvoiceGroups(invoices: BusinessInvoice[]): { currency: string; amount: number; count: number }[] {
+  const groups = new Map<string, { amount: number; count: number }>();
+  for (const invoice of invoices) {
+    if (invoice.balanceDue <= 0 || invoice.status === "Paid") continue;
+    const currency = invoice.currency?.trim() || "USD";
+    const current = groups.get(currency) ?? { amount: 0, count: 0 };
+    current.amount += invoice.balanceDue;
+    current.count += 1;
+    groups.set(currency, current);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === "USD" ? -1 : b === "USD" ? 1 : a.localeCompare(b)))
+    .map(([currency, value]) => ({ currency, ...value }));
+}
+
+function formatGroupedAmount(amount: number, currency: string, colorClass: string) {
+  if (currency === "USD") {
+    return (
+      <CurrencyAmount
+        amount={amount}
+        colorClass={colorClass}
+        className="text-2xl font-semibold tabular-nums leading-none"
+      />
+    );
+  }
+  return (
+    <span className={`text-2xl font-semibold tabular-nums leading-none ${colorClass}`}>
+      {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount)}
+    </span>
+  );
+}
+
+function completedJobAmount(
+  jobs: BusinessJob[],
+  range: { start: string; end: string; preset: ReportingPeriodPreset }
+): number {
+  return jobs.reduce((sum, job) => {
+    if (job.status !== "completed" || !job.completedDate) return sum;
+    if (!isDateOnOrBeforeDemo(job.completedDate) || !isDateInRange(job.completedDate, range)) return sum;
+    return sum + job.amount;
+  }, 0);
+}
 
 export function WorkspaceSampleDashboard({
   changesRequestedNote,
@@ -237,6 +284,8 @@ export function WorkspaceSampleDashboard({
   const [invoiceSort, setInvoiceSort] = useState<"dueDate" | "balance">("dueDate");
   const [invoiceLimit, setInvoiceLimit] = useState(INVOICE_PAGE_SIZE);
   const [insightFocus, setInsightFocus] = useState<"none" | "overdue">("none");
+  const [showInvoiceList, setShowInvoiceList] = useState(false);
+  const [showJobList, setShowJobList] = useState(false);
   const [appliedInvoiceStatusKey, setAppliedInvoiceStatusKey] =
     useState<InvoiceStatusFilter>("all");
   const appliedInvoiceStatusRef = useRef<InvoiceStatusFilter>("all");
@@ -507,6 +556,18 @@ export function WorkspaceSampleDashboard({
     </DashboardControlBar>
   );
 
+  const invoiceGroups = liveSnapshot?.receivables.showBalances
+    ? [
+        {
+          currency: "USD",
+          amount: liveSnapshot.receivables.openBalance ?? 0,
+          count: liveSnapshot.receivables.invoiceCount,
+        },
+      ]
+    : openInvoiceGroups(data.invoices);
+  const openInvoiceCount = invoiceGroups.reduce((sum, group) => sum + group.count, 0);
+  const summaryActionClass = `text-xs font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`;
+
   const widgetBlocks: Record<DashboardWidgetId, ReactNode> = {
     metrics: (
       <MetricsKpiGrid
@@ -522,50 +583,64 @@ export function WorkspaceSampleDashboard({
     ),
     collections_chart:
       computed.live?.chartMessage && !computed.live.trend ? (
-        <p className="px-1 py-8 text-center text-sm text-ink-muted">{computed.live.chartMessage}</p>
+        <p className={`px-1 text-sm text-ink-muted ${mode === "overview" ? "py-4 text-left" : "py-8 text-center"}`}>
+          {computed.live.chartMessage}
+        </p>
       ) : (
-        <CollectionsTrendChart trend={computed.trend} theme={theme} />
+        <CollectionsTrendChart
+          trend={computed.trend}
+          theme={theme}
+          height={mode === "overview" ? OVERVIEW_CHART_HEIGHT : undefined}
+        />
       ),
-    needs_attention: (
-      <NeedsAttentionPanel
-        theme={theme}
-        overdueCount={computed.overdueCount}
-        overdueTotal={computed.overdue}
-        oldestDays={computed.oldestDays}
-        aging={computed.aging}
-        notice={computed.live?.receivablesMessage ?? null}
-        hideAging={computed.live?.hideAging ?? false}
-        onViewOverdueInvoices={() => {
-          setInsightFocus("overdue");
-          setInvoiceStatus("Past due");
-          setSelectedInvoiceId(null);
-        }}
-      />
-    ),
     job_activity: computed.live ? (
-      <p className="px-1 py-8 text-center text-sm text-ink-muted">{computed.live.jobsMessage}</p>
+      <p className={`px-1 text-sm text-ink-muted ${mode === "overview" ? "py-1 text-left" : "py-8 text-center"}`}>
+        {computed.live.jobsMessage}
+      </p>
+    ) : mode === "overview" && !showJobList ? (
+      <div className="flex flex-wrap gap-x-8 gap-y-3">
+        <SummaryFigure
+          label="Completed"
+          value={
+            <span className={`text-2xl font-semibold tabular-nums leading-none ${theme.metricValueA}`}>
+              {computed.jobsCompleted}
+            </span>
+          }
+        />
+        <SummaryFigure
+          label="Completed value"
+          value={formatGroupedAmount(
+            completedJobAmount(data.jobs, computed.range),
+            "USD",
+            theme.metricValueA
+          )}
+        />
+      </div>
     ) : (
-      <OperationsJobsPanel
-        compact={compact}
-        theme={theme}
-        rangeLabel={formatRangeForDisplay(computed.range)}
-        jobStatus={jobStatus}
-        setJobStatus={setJobStatus}
-        jobCategory={jobCategory}
-        setJobCategory={setJobCategory}
-        jobCategories={computed.jobCategories}
-        categories={computed.categories}
-        jobs={computed.jobs}
-        selectedJobId={selectedJobId}
-        onSelectJob={(id) => {
-          setSelectedJobId(id);
-          setSelectedInvoiceId(null);
-          setSelectedAppointmentId(null);
-        }}
-        embedded
-        bare
-        filterPending={jobFilterPending}
-      />
+      <>
+        {mode === "overview" ? <div className="mb-3">{jobActivityToolbar}</div> : null}
+        <OperationsJobsPanel
+          compact={compact}
+          theme={theme}
+          rangeLabel={formatRangeForDisplay(computed.range)}
+          jobStatus={jobStatus}
+          setJobStatus={setJobStatus}
+          jobCategory={jobCategory}
+          setJobCategory={setJobCategory}
+          jobCategories={computed.jobCategories}
+          categories={computed.categories}
+          jobs={computed.jobs}
+          selectedJobId={selectedJobId}
+          onSelectJob={(id) => {
+            setSelectedJobId(id);
+            setSelectedInvoiceId(null);
+            setSelectedAppointmentId(null);
+          }}
+          embedded
+          bare
+          filterPending={jobFilterPending}
+        />
+      </>
     ),
     appointments: (
       <OperationsSchedulePanel
@@ -584,14 +659,43 @@ export function WorkspaceSampleDashboard({
         scheduleHref={dashboardSectionHref(workspaceId, "schedule", sectionLinkBase)}
         embedded
         bare
+        summary={mode === "overview"}
       />
     ),
     invoices: computed.live?.receivablesMessage ? (
-      <p className={`px-4 py-8 text-center text-sm text-ink-muted ${theme.widgetListShell}`}>
+      <p
+        className={`text-sm text-ink-muted ${
+          mode === "overview" ? "px-1 py-1 text-left" : `px-4 py-8 text-center ${theme.widgetListShell}`
+        }`}
+      >
         {computed.live.receivablesMessage}
       </p>
     ) : (
       <div key="invoices">
+        {mode === "overview" ? (
+          <div className={`flex flex-wrap gap-x-8 gap-y-3 ${showInvoiceList ? "mb-4" : ""}`}>
+            <SummaryFigure
+              label="Open invoices"
+              value={
+                <span className={`text-2xl font-semibold tabular-nums leading-none ${theme.metricValueA}`}>
+                  {openInvoiceCount}
+                </span>
+              }
+            />
+            {invoiceGroups.map((group) => (
+              <SummaryFigure
+                key={group.currency}
+                label={
+                  invoiceGroups.length > 1 ? `Outstanding · ${group.currency}` : "Outstanding"
+                }
+                value={formatGroupedAmount(group.amount, group.currency, theme.metricValueA)}
+              />
+            ))}
+          </div>
+        ) : null}
+        {mode === "overview" && !showInvoiceList ? null : (
+        <>
+        {mode === "overview" ? <div className="mb-3">{invoiceToolbar}</div> : null}
         <div
           aria-busy={invoiceTablePending}
           aria-label="Filtered invoices"
@@ -643,7 +747,19 @@ export function WorkspaceSampleDashboard({
                       }}
                     >
                       <td className={`truncate px-3 py-2.5 font-mono font-semibold ${selectedInvoiceId === inv.id ? "text-sm" : "text-xs"} ${theme.metricValueA}`}>
-                        {inv.invoiceNumber}
+                        {inv.href ? (
+                          <a
+                            href={inv.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(event) => event.stopPropagation()}
+                            className="underline decoration-current/40 underline-offset-2"
+                          >
+                            {inv.invoiceNumber}
+                          </a>
+                        ) : (
+                          inv.invoiceNumber
+                        )}
                       </td>
                       <td className="truncate px-3 py-2.5 font-medium text-ink">{inv.customer}</td>
                       <td className="px-3 py-2.5 text-ink-muted">{formatShortDate(inv.dueDate)}</td>
@@ -687,6 +803,8 @@ export function WorkspaceSampleDashboard({
             </DashboardSecondaryButton>
           )}
         </div>
+        </>
+        )}
       </div>
     ),
   };
@@ -721,19 +839,25 @@ export function WorkspaceSampleDashboard({
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col">
         {changesRequestedNote && (
           <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-ink">
             {changesRequestedNote}
           </p>
         )}
 
-        {renderWidgetRows(visibleWidgets, widgetBlocks, theme, compact, (id) => {
+        {(mode === "overview" ? renderOverviewRows : renderWidgetRows)(
+          visibleWidgets,
+          widgetBlocks,
+          theme,
+          compact,
+          (id) => {
           const rangeLabel = formatRangeForDisplay(computed.range);
+          const summaryAlign = mode === "overview" ? ("left" as const) : ("center" as const);
           switch (id) {
             case "metrics":
               return {
-                title: mode === "revenue" ? "Revenue Overview" : "General Overview",
+                title: "Revenue Overview",
                 subtitle: rangeLabel,
                 subtitleAlign: "center" as const,
               };
@@ -755,15 +879,28 @@ export function WorkspaceSampleDashboard({
                           />
                         </>
                       ),
-                subtitleAlign: "center" as const,
+                subtitleAlign: summaryAlign,
+                titleAlign: summaryAlign,
                 tightToolbar: true,
               };
             case "job_activity":
               return {
                 title: "Job activity",
                 subtitle: rangeLabel,
-                subtitleAlign: "center" as const,
-                headerAside: computed.live ? undefined : jobActivityToolbar,
+                subtitleAlign: summaryAlign,
+                titleAlign: summaryAlign,
+                headerAside:
+                  mode === "overview" && !computed.live ? (
+                    <button
+                      type="button"
+                      className={summaryActionClass}
+                      onClick={() => setShowJobList((open) => !open)}
+                    >
+                      {showJobList ? "Hide jobs" : "View jobs"}
+                    </button>
+                  ) : computed.live
+                    ? undefined
+                    : jobActivityToolbar,
                 tightToolbar: true,
               };
             case "appointments":
@@ -774,40 +911,61 @@ export function WorkspaceSampleDashboard({
                   : `${computed.upcoming} upcoming · from ${formatShortDate(computed.asOfDate)}${
                       computed.live?.scheduleNote ? ` · ${computed.live.scheduleNote}` : ""
                     }`,
-                subtitleAlign: "center" as const,
+                subtitleAlign: summaryAlign,
+                titleAlign: summaryAlign,
                 headerAside: (
                   <Link
                     href={dashboardSectionHref(workspaceId, "schedule", sectionLinkBase)}
                     onClick={(event) => keepDashboardSectionClick(event, selectSection, "schedule")}
-                    className={`inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${theme.filterSecondaryButton}`}
+                    className={
+                      mode === "overview"
+                        ? summaryActionClass
+                        : `inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${theme.filterSecondaryButton}`
+                    }
                   >
-                    Open schedule
+                    Schedule
                   </Link>
                 ),
               };
             case "invoices":
               return {
                 title: "Invoices",
-                subtitle: computed.live?.receivablesMessage ? (
-                  computed.live.receivablesMessage
-                ) : (
-                  <>
-                    {computed.invoices.length} shown · filtered balance{" "}
-                    <CurrencyAmount
-                      amount={computed.filteredBalance}
-                      colorClass={theme.metricValueA}
-                      className="inline font-semibold tabular-nums"
-                    />
-                  </>
-                ),
-                headerAside: computed.live?.receivablesMessage ? undefined : invoiceToolbar,
+                subtitle:
+                  mode === "overview" ? (
+                    computed.live?.receivablesMessage ? (
+                      computed.live.receivablesMessage
+                    ) : (
+                      `As of ${formatShortDate(computed.asOfDate)}`
+                    )
+                  ) : computed.live?.receivablesMessage ? (
+                    computed.live.receivablesMessage
+                  ) : (
+                    <>
+                      {computed.invoices.length} shown · filtered balance{" "}
+                      <CurrencyAmount
+                        amount={computed.filteredBalance}
+                        colorClass={theme.metricValueA}
+                        className="inline font-semibold tabular-nums"
+                      />
+                    </>
+                  ),
+                subtitleAlign: summaryAlign,
+                titleAlign: summaryAlign,
+                headerAside:
+                  mode === "overview" ? (
+                    computed.live?.receivablesMessage ? undefined : (
+                      <button
+                        type="button"
+                        className={summaryActionClass}
+                        onClick={() => setShowInvoiceList((open) => !open)}
+                      >
+                        {showInvoiceList ? "Hide invoices" : "View invoices"}
+                      </button>
+                    )
+                  ) : computed.live?.receivablesMessage ? undefined : (
+                    invoiceToolbar
+                  ),
                 tightToolbar: true,
-              };
-            case "needs_attention":
-              return {
-                title: "Needs attention",
-                subtitle: "Open receivables & aging",
-                subtitleAlign: "center" as const,
               };
             default:
               return { title: id };
@@ -823,6 +981,16 @@ export function WorkspaceSampleDashboard({
                 {selectedInvoice.invoiceNumber} — {selectedInvoice.customer}
               </p>
               <p className="text-sm text-ink-muted">{selectedInvoice.lineSummary}</p>
+              {selectedInvoice.href ? (
+                <a
+                  href={selectedInvoice.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`mt-1 inline-flex text-xs font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
+                >
+                  Open in QuickBooks
+                </a>
+              ) : null}
               <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
                 <div>
                   <dt className="text-ink-muted">Amount</dt>
@@ -946,15 +1114,17 @@ function MetricsKpiGrid({
 
   const lgCols =
     ids.length <= 1
-      ? "lg:grid-cols-1"
+      ? "xl:grid-cols-1"
       : ids.length === 2
-        ? "lg:grid-cols-2"
+        ? "xl:grid-cols-2"
         : ids.length === 3
-          ? "lg:grid-cols-3"
-          : "lg:grid-cols-4";
+          ? "xl:grid-cols-3"
+          : "xl:grid-cols-4";
+  const columns =
+    mode === "overview" ? `grid-cols-1 ${lgCols}` : `grid-cols-1 sm:grid-cols-2 ${lgCols.replaceAll("xl:", "lg:")}`;
 
   return (
-    <div key="metrics" className={`grid gap-2 sm:grid-cols-2 ${lgCols}`}>
+    <div key="metrics" className={`grid gap-3 ${columns}`}>
       {mode === "revenue"
         ? revenueKpiIds.map((id, index) => (
             <KpiStatCard
@@ -1156,142 +1326,6 @@ function overviewKpiCardProps(
       };
   }
 }
-
-const AGING_BUCKET_KEYS = [
-  ["Not due", "not_due"],
-  ["1–30", "1_30"],
-  ["31–60", "31_60"],
-  ["61–90", "61_90"],
-  ["90+", "90_plus"],
-] as const;
-
-type AgingBuckets = ReturnType<typeof invoiceAgingBuckets>;
-
-function NeedsAttentionPanel({
-  theme,
-  overdueCount,
-  overdueTotal,
-  oldestDays,
-  aging,
-  notice,
-  hideAging,
-  onViewOverdueInvoices,
-}: {
-  theme: LayoutCustomizeTheme;
-  overdueCount: number;
-  overdueTotal: number;
-  oldestDays: number | null;
-  aging: AgingBuckets;
-  notice: string | null;
-  hideAging: boolean;
-  onViewOverdueInvoices: () => void;
-}) {
-  if (notice) {
-    return <p className="px-1 py-6 text-sm text-ink-muted">{notice}</p>;
-  }
-  const critical = aging["90_plus"];
-
-  return (
-    <div key="needs_attention" className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-3">
-        <button
-          type="button"
-          onClick={onViewOverdueInvoices}
-          className={`rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md ${overdueCount > 0 ? "ring-1 ring-amber-200/60" : ""}`}
-        >
-          <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">
-            Past due
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-ink">
-            {overdueCount}{" "}
-            <span className="text-sm font-semibold text-ink-muted">invoices</span>
-          </p>
-          <p className={`mt-0.5 text-sm font-semibold ${theme.metricValueA}`}>
-            <CurrencyAmount amount={overdueTotal} colorClass={theme.metricValueA} />
-          </p>
-          <p className={`mt-1 text-[10px] font-semibold ${theme.linkAccent}`}>
-            View in invoice list →
-          </p>
-        </button>
-
-        <div className={`rounded-lg border p-3 shadow-sm ${theme.attentionMetricTile}`}>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-            Oldest overdue
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-ink">
-            {oldestDays != null && oldestDays > 0 ? (
-              <>
-                {oldestDays}{" "}
-                <span className="text-sm font-semibold text-ink-muted">days</span>
-              </>
-            ) : (
-              <span className="text-sm font-semibold text-ink-muted">None</span>
-            )}
-          </p>
-          <p className="mt-2 text-[10px] leading-snug text-ink-muted">
-            Longest-running unpaid balance past due date
-          </p>
-        </div>
-
-        <div
-          className={`rounded-lg border p-3 shadow-sm ${
-            critical.count > 0
-              ? "border-amber-200/90 bg-amber-50/70 ring-1 ring-amber-200/50"
-              : theme.attentionMetricTileIdle
-          }`}
-        >
-          <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-            90+ days overdue
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-ink">{critical.count}</p>
-          <p className={`mt-0.5 text-sm font-semibold ${theme.metricValueA}`}>
-            <CurrencyAmount amount={critical.total} colorClass={theme.metricValueA} />
-          </p>
-        </div>
-      </div>
-
-      {hideAging ? (
-        <p className="text-sm text-ink-muted">
-          Aging stays hidden until the invoice list covers every open balance.
-        </p>
-      ) : (
-      <div className={`overflow-hidden ${theme.widgetListShell}`}>
-        <p
-          className={`px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-ink-muted ${theme.widgetListHeader}`}
-        >
-          Open balance by aging bucket
-        </p>
-        <table className="w-full table-fixed text-center text-xs">
-          <thead>
-            <tr
-              className={`${theme.widgetListHeader} text-[10px] font-bold uppercase tracking-wide text-ink-muted`}
-            >
-              {AGING_BUCKET_KEYS.map(([label]) => (
-                <th key={label} className="px-2 py-2.5 font-bold">
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr className={`divide-x text-ink ${theme.widgetListRow} ${theme.widgetListColDivide}`}>
-              {AGING_BUCKET_KEYS.map(([label, key]) => (
-                <td key={key} className="px-2 py-2.5 tabular-nums">
-                  <span className="block font-semibold text-ink">{aging[key].count}</span>
-                  <span className={`mt-0.5 block text-[11px] font-medium ${theme.metricValueA}`}>
-                    <CurrencyAmount amount={aging[key].total} colorClass={theme.metricValueA} className="inline" />
-                  </span>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      )}
-    </div>
-  );
-}
-
 const OPERATIONS_PAIR: DashboardWidgetId[] = ["job_activity", "appointments"];
 
 type WidgetSectionMeta = {
@@ -1301,7 +1335,99 @@ type WidgetSectionMeta = {
   accent?: "default" | "alert";
   tightToolbar?: boolean;
   subtitleAlign?: "left" | "center" | "right";
+  titleAlign?: "left" | "center";
+  fill?: boolean;
 };
+
+function SummaryFigure({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-2xl font-semibold leading-none tracking-tight">{value}</div>
+      <p className="mt-1 text-xs text-ink-muted">{label}</p>
+    </div>
+  );
+}
+
+function renderOverviewRows(
+  visibleWidgets: DashboardWidgetId[],
+  widgetBlocks: Record<DashboardWidgetId, ReactNode>,
+  theme: LayoutCustomizeTheme,
+  compact: boolean,
+  sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta
+) {
+  const rows: ReactNode[] = [];
+  const skip = new Set<DashboardWidgetId>();
+  const visible = (id: DashboardWidgetId) => visibleWidgets.includes(id);
+
+  const wrapSection = (id: DashboardWidgetId, fill = false) => {
+    const meta = sectionFor(id);
+    return (
+      <DashboardSection
+        key={id}
+        theme={theme}
+        compact={compact}
+        title={meta.title}
+        subtitle={meta.subtitle}
+        headerAside={meta.headerAside}
+        accent={meta.accent}
+        tightToolbar={meta.tightToolbar}
+        subtitleAlign={meta.subtitleAlign ?? "left"}
+        titleAlign={meta.titleAlign ?? "left"}
+        fill={fill || meta.fill}
+      >
+        {widgetBlocks[id]}
+      </DashboardSection>
+    );
+  };
+
+  for (const id of visibleWidgets) {
+    if (skip.has(id)) continue;
+
+    if (id === "metrics") {
+      rows.push(
+        <div key="metrics">{widgetBlocks.metrics}</div>
+      );
+      continue;
+    }
+
+    if (id === "collections_chart" || id === "appointments") {
+      const showChart = visible("collections_chart");
+      const showAppointments = visible("appointments");
+      if (showChart) skip.add("collections_chart");
+      if (showAppointments) skip.add("appointments");
+      rows.push(
+        <div key="focus-row" className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-3">
+          {showChart ? (
+            <div className={showAppointments ? "min-w-0 xl:col-span-2" : "min-w-0 xl:col-span-3"}>
+              {wrapSection("collections_chart")}
+            </div>
+          ) : null}
+          {showAppointments ? (
+            <div className={showChart ? "flex min-w-0 xl:col-span-1" : "min-w-0 xl:col-span-3"}>
+              {wrapSection("appointments", true)}
+            </div>
+          ) : null}
+        </div>
+      );
+      continue;
+    }
+
+    if (id === "invoices" || id === "job_activity") {
+      const ordered = (["invoices", "job_activity"] as const).filter((widget) => visible(widget));
+      ordered.forEach((widget) => skip.add(widget));
+      rows.push(
+        <div
+          key="summary-row"
+          className={`grid grid-cols-1 gap-3 ${ordered.length > 1 ? "xl:grid-cols-2" : ""}`}
+        >
+          {ordered.map((widget) => wrapSection(widget))}
+        </div>
+      );
+    }
+  }
+
+  return <div className="flex flex-col gap-3 p-3 sm:p-4">{rows}</div>;
+}
 
 function renderWidgetRows(
   visibleWidgets: DashboardWidgetId[],
@@ -1328,6 +1454,7 @@ function renderWidgetRows(
         accent={meta.accent}
         tightToolbar={meta.tightToolbar}
         subtitleAlign={meta.subtitleAlign}
+        titleAlign={meta.titleAlign}
       >
         {widgetBlocks[id]}
       </DashboardSection>
@@ -1527,6 +1654,7 @@ function OperationsSchedulePanel({
   scheduleHref,
   embedded = false,
   bare = false,
+  summary = false,
 }: {
   compact: boolean;
   theme: ReturnType<typeof useCustomerPortal>["theme"];
@@ -1539,11 +1667,12 @@ function OperationsSchedulePanel({
   scheduleHref: string;
   embedded?: boolean;
   bare?: boolean;
+  summary?: boolean;
 }) {
   const selectSection = useDashboardSection()?.selectSection;
   const pad = compact ? "p-2.5 sm:p-3" : "p-3 sm:p-4";
   const density = getOperationsListDensity(upcomingList.length);
-  const visible = upcomingList.slice(0, density.maxVisible);
+  const visible = upcomingList.slice(0, summary ? 3 : density.maxVisible);
   const hiddenCount = upcomingList.length - visible.length;
   const assigneeBreakdown = appointmentAssigneeBreakdown(upcomingList);
 
@@ -1561,7 +1690,7 @@ function OperationsSchedulePanel({
           </p>
         </div>
       )}
-      {assigneeBreakdown.length > 0 && (
+      {!summary && assigneeBreakdown.length > 0 && (
         <div className={operationsSummaryStripClass}>
           {assigneeBreakdown.map(({ assignee, count }) => (
             <span key={assignee} className={theme.operationsSummaryChip}>
@@ -1571,7 +1700,7 @@ function OperationsSchedulePanel({
         </div>
       )}
       {visible.length === 0 ? (
-        <p className={`mt-3 text-center ${density.meta} text-ink-muted`}>
+        <p className={`${summary ? "text-left" : "mt-3 text-center"} ${density.meta} text-ink-muted`}>
           No upcoming appointments in this window.
         </p>
       ) : (

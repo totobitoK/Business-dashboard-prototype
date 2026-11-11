@@ -76,6 +76,7 @@ export function liveBusinessData(snapshot: DailyDashboardSnapshot): WorkspaceBus
         status: invoice.overdue ? "Past due" : "Open",
         lineSummary: "QuickBooks",
         sourceLabel: "QuickBooks",
+        href: invoice.href,
       }))
     : [];
 

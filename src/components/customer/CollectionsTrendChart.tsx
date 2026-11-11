@@ -8,7 +8,7 @@ import type { TrendBucket } from "@/lib/workspace-analytics";
 const PAD = { top: 10, right: 16, bottom: 30, left: 52 };
 const X_INSET = 24;
 
-const CHART_HEIGHT = 132;
+const DEFAULT_CHART_HEIGHT = 132;
 
 function buildPath(points: { x: number; y: number }[]): string {
   if (points.length === 0) return "";
@@ -30,9 +30,11 @@ function periodLabel(bucket: TrendBucket): string {
 export const CollectionsTrendChart = memo(function CollectionsTrendChart({
   trend,
   theme,
+  height = DEFAULT_CHART_HEIGHT,
 }: {
   trend: TrendBucket[];
   theme: LayoutCustomizeTheme;
+  height?: number;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -58,13 +60,13 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
     };
   }, []);
 
-  const labelY = CHART_HEIGHT - 6;
+  const labelY = height - 6;
 
   const layout = useMemo(() => {
     const width = Math.max(containerWidth, 1);
     const plotW = Math.max(width - PAD.left - PAD.right, 1);
     const innerW = Math.max(plotW - 2 * X_INSET, 1);
-    const plotH = CHART_HEIGHT - PAD.top - PAD.bottom;
+    const plotH = height - PAD.top - PAD.bottom;
     const maxAmount = Math.max(...trend.map((t) => t.amount), 0);
     const yMax = chartYAxisMax(maxAmount);
     const lastIdx = trend.length - 1;
@@ -102,7 +104,7 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
       hoverBandTop,
       hoverBandHeight,
     };
-  }, [trend, containerWidth, labelY]);
+  }, [trend, containerWidth, labelY, height]);
 
   const {
     width,
@@ -124,7 +126,7 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
         {ready && (
           <svg
             width={width}
-            height={CHART_HEIGHT}
+            height={height}
             className="block w-full text-ink-muted"
             role="img"
             aria-label="Collections trend line chart"

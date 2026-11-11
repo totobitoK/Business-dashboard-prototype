@@ -137,8 +137,9 @@ export function DashboardShell({
         </aside>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className={`relative z-20 ${theme.header} ${theme.headerText}`}>
-          <div className="relative z-10 flex items-center gap-3 px-4 py-3 sm:px-5">
+        <div className={`relative z-30 overflow-visible ${theme.headerText}`}>
+          <div aria-hidden className={`pointer-events-none absolute inset-0 ${theme.header}`} />
+          <div className="relative z-10 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
             {liveSamplePreview ? null : (
               <button
                 type="button"
@@ -152,7 +153,9 @@ export function DashboardShell({
             )}
             <h1 className="min-w-0 truncate text-lg font-semibold leading-none sm:text-xl">{title}</h1>
             {trailing ? (
-              <div className="ml-auto flex shrink-0 items-center gap-2">{trailing}</div>
+              <div className="ml-auto flex w-full min-w-0 shrink-0 basis-full items-center justify-end gap-2 sm:w-auto sm:basis-auto">
+                {trailing}
+              </div>
             ) : null}
           </div>
           {liveSamplePreview ? (

@@ -15,7 +15,6 @@ export const DASHBOARD_WIDGET_IDS = [
   "job_activity",
   "appointments",
   "invoices",
-  "needs_attention",
 ] as const;
 
 export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
@@ -24,7 +23,11 @@ const LEGACY_WIDGET_MAP: Record<string, DashboardWidgetId> = {
   trend: "collections_chart",
 };
 
+/** Removed from the overview. Saved layouts that still name it are ignored. */
+const RETIRED_WIDGET_IDS = new Set(["needs_attention"]);
+
 export function migrateWidgetId(id: string): DashboardWidgetId | null {
+  if (RETIRED_WIDGET_IDS.has(id)) return null;
   if (LEGACY_WIDGET_MAP[id]) return LEGACY_WIDGET_MAP[id];
   if ((DASHBOARD_WIDGET_IDS as readonly string[]).includes(id)) {
     return id as DashboardWidgetId;
@@ -74,11 +77,11 @@ export function normalizeLayoutSettings(
     (id) => !visibleOrder.includes(id) && !hidden.includes(id)
   );
 
-  const mergedOrder = pinNeedsAttentionLast([
+  const mergedOrder = [
     ...visibleOrder,
     ...missing,
     ...hidden.filter((h) => !order.includes(h)),
-  ]);
+  ];
 
   const overviewKpis = normalizeOverviewKpiLayout(partial);
   const revenueKpis = normalizeRevenueKpiLayout(partial);
@@ -94,12 +97,6 @@ export function normalizeLayoutSettings(
     revenueKpiOrder: revenueKpis.order,
     revenueHiddenKpis: revenueKpis.hidden,
   };
-}
-
-/** Keep overdue / insight callouts at the bottom of the overview stack. */
-function pinNeedsAttentionLast(order: DashboardWidgetId[]): DashboardWidgetId[] {
-  if (!order.includes("needs_attention")) return order;
-  return [...order.filter((id) => id !== "needs_attention"), "needs_attention"];
 }
 
 export function moveWidget(
@@ -119,8 +116,7 @@ export function moveWidget(
 export const WIDGET_LABELS: Record<DashboardWidgetId, string> = {
   metrics: "KPI summary",
   collections_chart: "Collections trend",
-  needs_attention: "Needs attention",
   job_activity: "Job activity",
   appointments: "Upcoming appointments",
-  invoices: "Invoice table",
+  invoices: "Invoices",
 };

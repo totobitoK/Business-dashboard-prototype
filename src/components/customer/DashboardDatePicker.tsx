@@ -298,17 +298,17 @@ export function DashboardRangeCalendar({
   const label = `${formatCalendarDateDisplay(start)} – ${formatCalendarDateDisplay(end)}`;
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative max-w-full">
       <button
         type="button"
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={`Reporting period ${label}. Choose a start day, then an end day.`}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/15 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-white/25 focus:outline-none focus:ring-2 focus:ring-white/50"
+        className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/30 bg-white/15 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-white/25 focus:outline-none focus:ring-2 focus:ring-white/50"
       >
         <CalendarIcon className="shrink-0" />
-        <span className="whitespace-nowrap">{label}</span>
+        <span className="min-w-0 truncate">{label}</span>
       </button>
 
       {popup.present && (
