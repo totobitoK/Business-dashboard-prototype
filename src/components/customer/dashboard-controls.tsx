@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -44,6 +45,68 @@ function CheckIcon({ className }: { className?: string }) {
       />
     </svg>
   );
+}
+
+const POPUP_FRAMES: Keyframe[] = [
+  { opacity: 0, transform: "scaleY(0.35)" },
+  { opacity: 1, transform: "scaleY(1)" },
+];
+
+function popupTiming(opening: boolean): KeyframeAnimationOptions {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return {
+    duration: reduce ? 0 : 320,
+    easing: "cubic-bezier(0.16, 0.84, 0.32, 1)",
+    fill: "both",
+    direction: opening ? "normal" : "reverse",
+  };
+}
+
+/**
+ * Mounts the menu, then plays an open animation from the button.
+ * A CSS class change was finishing before the first paint, so the menu appeared instantly.
+ */
+export function usePopupPresence(open: boolean) {
+  const [present, setPresent] = useState(false);
+  const nodeRef = useRef<HTMLElement | null>(null);
+  const animRef = useRef<Animation | null>(null);
+
+  const play = useCallback((node: HTMLElement, opening: boolean) => {
+    animRef.current?.cancel();
+    const anim = node.animate(POPUP_FRAMES, popupTiming(opening));
+    animRef.current = anim;
+    if (!opening) {
+      anim.onfinish = () => {
+        if (animRef.current === anim) setPresent(false);
+      };
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      setPresent(true);
+      if (nodeRef.current) play(nodeRef.current, true);
+      return;
+    }
+    const node = nodeRef.current;
+    if (!node) {
+      setPresent(false);
+      return;
+    }
+    play(node, false);
+  }, [open, play]);
+
+  const panelRef = useCallback(
+    (node: HTMLElement | null) => {
+      nodeRef.current = node;
+      if (!node || !open) return;
+      node.style.transformOrigin = "top";
+      play(node, true);
+    },
+    [open, play]
+  );
+
+  return { present, panelRef };
 }
 
 function SearchIcon({ className }: { className?: string }) {
@@ -123,6 +186,7 @@ export function DashboardSelect<T extends string>({
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const popup = usePopupPresence(open);
   const selected = options.find((o) => o.value === value) ?? options[0]!;
 
   useEffect(() => {
@@ -160,17 +224,18 @@ export function DashboardSelect<T extends string>({
         aria-controls={listboxId}
         aria-label={ariaLabel ?? label ?? selected.label}
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center justify-between gap-1.5 rounded-lg border text-left font-semibold shadow-sm transition ${triggerSize} ${theme.filterControl}`}
+        className={`flex items-center justify-between gap-1.5 rounded-lg text-left font-semibold transition ${triggerSize} ${theme.filterControl}`}
       >
         <span className="truncate">{selected.label}</span>
         <ChevronDown className={`shrink-0 ${theme.filterChevron}`} open={open} />
       </button>
-      {open && (
+      {popup.present && (
         <ul
           id={listboxId}
           role="listbox"
           aria-label={ariaLabel ?? label}
-          className={`absolute top-full z-[100] mt-1.5 max-h-60 min-w-full overflow-y-auto ${
+          ref={popup.panelRef}
+          className={`absolute top-full z-[100] mt-1.5 max-h-60 min-w-full origin-top overflow-y-auto ${
             align === "right" ? "right-0" : "left-0"
           } ${theme.filterMenuPanel}`}
         >
@@ -217,7 +282,7 @@ export function DashboardSearchInput({
       <input
         type="search"
         {...props}
-        className={`h-9 w-full rounded-lg border py-0 pl-9 pr-3 text-xs font-medium shadow-sm transition ${theme.filterControl}`}
+        className={`h-9 w-full rounded-lg py-0 pl-9 pr-3 text-xs font-medium transition ${theme.filterControl}`}
       />
     </label>
   );
@@ -282,7 +347,7 @@ export function DashboardSecondaryButton({
     <button
       type="button"
       {...props}
-      className={`h-9 shrink-0 rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${theme.filterSecondaryButton} ${className}`}
+      className={`h-9 shrink-0 rounded-lg px-3 text-xs font-semibold transition ${theme.filterSecondaryButton} ${className}`}
     >
       {children}
     </button>

@@ -56,6 +56,10 @@ import {
 import { DashboardRangeCalendar } from "@/components/customer/DashboardDatePicker";
 import { DashboardShell } from "@/components/customer/DashboardWorkspaceNav";
 import {
+  keepDashboardSectionClick,
+  useDashboardSection,
+} from "@/components/customer/dashboard-section-context";
+import {
   dashboardRoutesForPathname,
   dashboardSectionHref,
 } from "@/lib/dashboard-section-routes";
@@ -218,6 +222,7 @@ export function WorkspaceSampleDashboard({
     liveSamplePreview,
   } = useCustomerPortal();
   const pathname = usePathname();
+  const selectSection = useDashboardSection()?.selectSection;
   const portalRoutes = dashboardRoutesForPathname(pathname);
   const sectionLinkBase = navigationBase ?? portalRoutes.home;
   const [preset, setPreset] = useState<ReportingPeriodPreset>("custom");
@@ -773,6 +778,7 @@ export function WorkspaceSampleDashboard({
                 headerAside: (
                   <Link
                     href={dashboardSectionHref(workspaceId, "schedule", sectionLinkBase)}
+                    onClick={(event) => keepDashboardSectionClick(event, selectSection, "schedule")}
                     className={`inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${theme.filterSecondaryButton}`}
                   >
                     Open schedule
@@ -1534,6 +1540,7 @@ function OperationsSchedulePanel({
   embedded?: boolean;
   bare?: boolean;
 }) {
+  const selectSection = useDashboardSection()?.selectSection;
   const pad = compact ? "p-2.5 sm:p-3" : "p-3 sm:p-4";
   const density = getOperationsListDensity(upcomingList.length);
   const visible = upcomingList.slice(0, density.maxVisible);
@@ -1601,6 +1608,7 @@ function OperationsSchedulePanel({
           + {hiddenCount} more —{" "}
           <Link
             href={scheduleHref}
+            onClick={(event) => keepDashboardSectionClick(event, selectSection, "schedule")}
             className={`font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
           >
             open Schedule

@@ -1,4 +1,4 @@
-import { getAuthContext } from "@/lib/auth/authorization";
+import { getDashboardRequest } from "@/lib/auth/dashboard-request";
 import { formatAppointmentWhen } from "@/lib/google-calendar/format-appointment";
 import { isGoogleCalendarIntegrationConfigured } from "@/lib/google-calendar/config";
 import { EASTERN_TIME_ZONE } from "@/lib/company-time-zone";
@@ -12,7 +12,6 @@ import {
   buildSquareCollectionsViewModel,
   type SquareStatusPayload,
 } from "@/lib/square/collections-presentation";
-import { createClient } from "@/lib/supabase/server";
 import { classifyCalendar, classifyQuickBooks, classifySquare } from "./connector-state";
 import { emptyLiveSnapshot, type DailyAppointment, type DailyDashboardSnapshot } from "./types";
 
@@ -42,8 +41,7 @@ type CalendarStatus = {
  * dashboard layout already selected. A demo selector or URL parameter is not read here.
  */
 export async function loadLiveDailyDashboard(): Promise<DailyDashboardSnapshot> {
-  const supabase = await createClient();
-  const ctx = await getAuthContext(supabase);
+  const { supabase, ctx } = await getDashboardRequest();
   const companyId = ctx?.companyIds[0] ?? null;
   const today = todayInTimeZone(EASTERN_TIME_ZONE);
   if (!ctx || !companyId) return emptyLiveSnapshot("Your company", today);

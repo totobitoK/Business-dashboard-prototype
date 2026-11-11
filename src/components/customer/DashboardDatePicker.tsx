@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePopupPresence } from "@/components/customer/dashboard-controls";
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import {
   BUSINESS_TIMEZONE,
@@ -75,6 +76,7 @@ export function DashboardDatePicker({
 }) {
   const parsed = parseIsoDate(value);
   const [open, setOpen] = useState(false);
+  const popup = usePopupPresence(open);
   const [viewY, setViewY] = useState(parsed.y);
   const [viewM, setViewM] = useState(parsed.m);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -130,11 +132,12 @@ export function DashboardDatePicker({
         <CalendarIcon className={`shrink-0 ${theme.metricValueB}`} />
       </button>
 
-      {open && (
+      {popup.present && (
         <div
           role="dialog"
           aria-label={`Choose ${label} date`}
-          className={`absolute right-0 top-full z-[100] mt-1.5 w-[16.75rem] origin-top-right overflow-hidden p-2 ${theme.filterMenuPanel}`}
+          ref={popup.panelRef}
+          className={`absolute right-0 top-full z-[100] mt-1.5 w-[16.75rem] origin-top overflow-hidden p-2 ${theme.filterMenuPanel}`}
         >
           <div className="mb-1 flex items-center justify-between gap-1">
             <button
@@ -245,6 +248,7 @@ export function DashboardRangeCalendar({
 }) {
   const parsed = parseIsoDate(start);
   const [open, setOpen] = useState(false);
+  const popup = usePopupPresence(open);
   const [picking, setPicking] = useState<string | null>(null);
   const [viewY, setViewY] = useState(parsed.y);
   const [viewM, setViewM] = useState(parsed.m);
@@ -307,11 +311,12 @@ export function DashboardRangeCalendar({
         <span className="whitespace-nowrap">{label}</span>
       </button>
 
-      {open && (
+      {popup.present && (
         <div
           role="dialog"
           aria-label="Choose reporting period"
-          className={`absolute right-0 top-full z-[100] mt-1.5 w-[16.75rem] origin-top-right overflow-hidden p-2 ${theme.filterMenuPanel}`}
+          ref={popup.panelRef}
+          className={`absolute right-0 top-full z-[100] mt-1.5 w-[16.75rem] origin-top overflow-hidden p-2 ${theme.filterMenuPanel}`}
         >
           <p className={`px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${theme.detailSectionLabel}`}>
             {picking ? "Choose the end day" : "Choose the start day"}

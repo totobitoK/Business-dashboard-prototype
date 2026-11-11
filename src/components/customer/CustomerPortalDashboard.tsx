@@ -1,22 +1,22 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
 import { WorkspaceSampleDashboard } from "@/components/customer/WorkspaceSampleDashboard";
 import { WorkspaceScheduleDashboard } from "@/components/customer/WorkspaceScheduleDashboard";
+import {
+  DashboardSectionProvider,
+  useDashboardSection,
+} from "@/components/customer/dashboard-section-context";
 import type { DailyDashboardSnapshot } from "@/lib/daily-dashboard/types";
-import { resolveDashboardSection } from "@/lib/dashboard-section-routes";
 
 /** Restored customer dashboard. Demo preview and signed-in routes share this layout. */
-export function CustomerPortalDashboard({
+function CustomerPortalDashboardView({
   liveSnapshot = null,
   changesRequestedNote,
 }: {
   liveSnapshot?: DailyDashboardSnapshot | null;
   changesRequestedNote?: string;
 }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const section = resolveDashboardSection(pathname, searchParams);
+  const section = useDashboardSection()?.section ?? "overview";
 
   if (section === "schedule") {
     return (
@@ -34,5 +34,16 @@ export function CustomerPortalDashboard({
         liveSnapshot={liveSnapshot}
       />
     </div>
+  );
+}
+
+export function CustomerPortalDashboard(props: {
+  liveSnapshot?: DailyDashboardSnapshot | null;
+  changesRequestedNote?: string;
+}) {
+  return (
+    <DashboardSectionProvider>
+      <CustomerPortalDashboardView {...props} />
+    </DashboardSectionProvider>
   );
 }

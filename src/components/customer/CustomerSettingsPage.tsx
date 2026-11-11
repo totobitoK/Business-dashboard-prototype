@@ -9,6 +9,7 @@ import { useCustomerPortal } from "@/lib/customer-portal-context";
 import type { WorkspaceThemeId } from "@/lib/customer-portal-context";
 import { DashboardAppearancePreview } from "@/components/customer/DashboardAppearancePreview";
 import { DashboardPageFrame } from "@/components/customer/DashboardWorkspaceNav";
+import { useSignedInNav } from "@/components/customer/signed-in-nav-context";
 import { DashboardKpiChipPicker } from "@/components/customer/DashboardKpiChipPicker";
 import { DashboardChipGroup } from "@/components/customer/dashboard-controls";
 import {
@@ -35,10 +36,11 @@ export function CustomerSettingsPage() {
     theme,
   } = useCustomerPortal();
   const routes = dashboardRoutesForPathname(usePathname());
+  const signedInNav = useSignedInNav();
   const [confirmReset, setConfirmReset] = useState(false);
   const [kpiTab, setKpiTab] = useState<"overview" | "revenue">("overview");
 
-  if (!workspace) return null;
+  if (!workspace && !businessName) return null;
 
   const visibleOverviewKpis = visibleKpiIds(
     settings.overviewKpiOrder,
@@ -259,6 +261,13 @@ export function CustomerSettingsPage() {
 
       <Link
         href={routes.home}
+        onClick={(event) => {
+          if (!signedInNav?.canSwap || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+          }
+          event.preventDefault();
+          signedInNav.showDashboard("overview");
+        }}
         className={`inline-block text-sm font-semibold hover:opacity-80 ${theme.metricValueA}`}
       >
         ← Back to home

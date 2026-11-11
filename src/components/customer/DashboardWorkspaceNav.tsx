@@ -12,6 +12,11 @@ import {
 } from "@/lib/dashboard-section-routes";
 import { DEMO_DASHBOARD } from "@/lib/routes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
+import {
+  keepDashboardSectionClick,
+  useDashboardSection,
+} from "@/components/customer/dashboard-section-context";
+import { useSignedInNav } from "@/components/customer/signed-in-nav-context";
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 
 type NavChrome = {
@@ -72,8 +77,9 @@ function pageTitleForPath(
 export function DashboardPageFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const showingSettings = useSignedInNav()?.showingSettings ?? false;
   return (
-    <DashboardShell title={pageTitleForPath(pathname, searchParams)}>
+    <DashboardShell title={showingSettings ? "Settings" : pageTitleForPath(pathname, searchParams)}>
       <div className="min-h-0 flex-1 p-4 sm:p-5">{children}</div>
     </DashboardShell>
   );
@@ -95,8 +101,12 @@ export function DashboardShell({
   const routes = dashboardRoutesForPathname(pathname);
   const onConnections = pathname.startsWith(routes.connections);
   const onSettings = pathname.startsWith(routes.settings);
+  const showingSettings = useSignedInNav()?.showingSettings ?? false;
+  const selectedSection = useDashboardSection()?.section;
   const activeSection =
-    onConnections || onSettings ? null : resolveDashboardSection(pathname, searchParams);
+    onConnections || onSettings || showingSettings
+      ? null
+      : selectedSection ?? resolveDashboardSection(pathname, searchParams);
   const [menuOpen, setMenuOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(activeSection != null);
 
@@ -186,11 +196,13 @@ function DashboardNav({
   chrome: NavChrome;
 }) {
   const pathname = usePathname();
+  const sectionState = useDashboardSection();
+  const signedInNav = useSignedInNav();
   const { workspaceId, navigationBase, liveSamplePreview } = useCustomerPortal();
   const routes = dashboardRoutesForPathname(pathname);
   const linkBase = navigationBase ?? routes.home;
   const onConnections = pathname.startsWith(routes.connections);
-  const onSettings = pathname.startsWith(routes.settings);
+  const onSettings = pathname.startsWith(routes.settings) || (signedInNav?.showingSettings ?? false);
   const showUtility = Boolean(workspaceId) && !navigationBase && !liveSamplePreview;
   const showSignOut =
     showUtility && pathname.startsWith("/dashboard") && !pathname.startsWith(DEMO_DASHBOARD);
@@ -198,7 +210,9 @@ function DashboardNav({
   const itemClass = `rounded-md px-2.5 py-2 text-left text-sm font-medium leading-none ${chrome.focus}`;
 
   const utilityHref = (path: string) =>
-    workspaceId ? `${path}?workspace=${encodeURIComponent(workspaceId)}` : path;
+    pathname.startsWith(DEMO_DASHBOARD) && workspaceId
+      ? `${path}?workspace=${encodeURIComponent(workspaceId)}`
+      : path;
 
   if (!workspaceId) return null;
 
@@ -216,7 +230,14 @@ function DashboardNav({
         Dashboard
         <Chevron expanded={groupOpen} />
       </button>
-      <div id={sectionsId} className={`${groupOpen ? "flex" : "hidden"} flex-col gap-1 pl-3`}>
+      <div
+        id={sectionsId}
+        className={`grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,0.84,0.32,1)] motion-reduce:transition-none ${
+          groupOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="overflow-hidden" inert={groupOpen ? undefined : true}>
+        <div className="flex flex-col gap-1 pl-3 pt-1">
         {DASHBOARD_SECTIONS.map((section) => {
           const isActive = section.id === activeSection;
           return (
@@ -226,13 +247,30 @@ function DashboardNav({
               scroll={false}
               title={section.description}
               aria-current={isActive ? "page" : undefined}
-              onClick={onNavigate}
+              onClick={(event) => {
+                onNavigate?.();
+                if (
+                  signedInNav?.canSwap &&
+                  event.button === 0 &&
+                  !event.metaKey &&
+                  !event.ctrlKey &&
+                  !event.shiftKey &&
+                  !event.altKey
+                ) {
+                  event.preventDefault();
+                  signedInNav.showDashboard(section.id);
+                  return;
+                }
+                keepDashboardSectionClick(event, sectionState?.selectSection, section.id);
+              }}
               className={`${itemClass} ${isActive ? chrome.active : chrome.idle}`}
             >
               {section.label}
             </Link>
           );
         })}
+        </div>
+        </div>
       </div>
       {showUtility ? (
         <>
@@ -248,7 +286,21 @@ function DashboardNav({
           <Link
             href={utilityHref(routes.settings)}
             aria-current={onSettings ? "page" : undefined}
-            onClick={onNavigate}
+            onClick={(event) => {
+              onNavigate?.();
+              if (
+                !signedInNav?.canSwap ||
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+              ) {
+                return;
+              }
+              event.preventDefault();
+              signedInNav.showSettings();
+            }}
             className={`${itemClass} ${onSettings ? chrome.active : chrome.idle}`}
           >
             Settings
@@ -267,6 +319,7 @@ function DashboardNav({
 }
 
 function PreviewSectionLinks({ activeSection }: { activeSection: DashboardSectionId }) {
+  const sectionState = useDashboardSection();
   const { workspaceId, theme, navigationBase } = useCustomerPortal();
   const linkBase = navigationBase ?? dashboardRoutesForPathname(usePathname()).home;
   if (!workspaceId || !linkBase) return null;
@@ -280,6 +333,9 @@ function PreviewSectionLinks({ activeSection }: { activeSection: DashboardSectio
             href={dashboardSectionHref(workspaceId, section.id, linkBase)}
             scroll={false}
             aria-current={isActive ? "page" : undefined}
+            onClick={(event) =>
+              keepDashboardSectionClick(event, sectionState?.selectSection, section.id)
+            }
             className={`rounded-md px-2.5 py-1 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 ${
               isActive ? theme.embeddedNavActive : theme.headerLink
             }`}
@@ -294,9 +350,17 @@ function PreviewSectionLinks({ activeSection }: { activeSection: DashboardSectio
 
 function Chevron({ expanded }: { expanded: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden className="shrink-0">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      aria-hidden
+      className={`shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.16,0.84,0.32,1)] motion-reduce:transition-none ${
+        expanded ? "rotate-90" : ""
+      }`}
+    >
       <path
-        d={expanded ? "M4 6.5 8 10.5 12 6.5" : "M6.5 4 10.5 8 6.5 12"}
+        d="M6.5 4 10.5 8 6.5 12"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"

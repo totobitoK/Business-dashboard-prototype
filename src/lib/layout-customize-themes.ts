@@ -107,20 +107,18 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     dashboardCanvas: "bg-[#12141a]",
     sectionPanel: "rounded-2xl border border-white/10 bg-[#1c1f2a]",
     sectionHeader: "border-b border-white/10",
-    filterTrack:
-      "rounded-xl bg-purple-50/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ring-1 ring-purple-100/80",
+    filterTrack: "rounded-xl bg-transparent",
     filterControl:
-      "border-purple-100/90 bg-white text-purple-dark hover:border-purple-200 focus:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple/15",
-    filterChevron: "text-purple/50",
+      "border-transparent bg-transparent text-white shadow-none hover:bg-white/10 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-white/40",
+    filterChevron: "text-white/70",
     filterLabel: "text-ink-subtle",
-    filterChipActive: "bg-white text-purple-dark shadow-sm ring-1 ring-purple-100/90",
-    filterChipIdle: "text-ink-muted hover:bg-white/50 hover:text-ink",
+    filterChipActive: "bg-white/15 text-white",
+    filterChipIdle: "text-zinc-300 hover:bg-white/10 hover:text-white",
     filterSecondaryButton:
-      "border-purple-200/90 bg-white text-purple-dark hover:border-purple-300 hover:bg-purple-50/60",
-    filterMenuPanel:
-      "rounded-xl border border-purple-200/90 bg-gradient-to-b from-white via-white to-purple-50/90 py-1 shadow-[0_12px_32px_-12px_rgba(124,58,237,0.35)] ring-1 ring-purple-100",
-    filterMenuItemActive: "bg-purple-50 text-purple-dark",
-    filterMenuItemIdle: "text-ink hover:bg-purple-50/60",
+      "border-transparent bg-transparent text-white shadow-none hover:bg-white/10",
+    filterMenuPanel: "rounded-xl bg-[#232734] py-1 shadow-lg",
+    filterMenuItemActive: "bg-white/15 text-white",
+    filterMenuItemIdle: "text-zinc-200 hover:bg-white/10",
     swatches: ["#12141A", "#2A2440", "#A78BFA"],
     swatchRing: "border-purple-200",
     embeddedNavActive: "bg-[#c7d2fe] text-[#312e81] shadow-sm",
@@ -182,20 +180,18 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     dashboardCanvas: "bg-[#121816]",
     sectionPanel: "rounded-2xl border border-white/10 bg-[#1c2422]",
     sectionHeader: "border-b border-white/10",
-    filterTrack:
-      "rounded-xl bg-emerald-50/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ring-1 ring-emerald-100/80",
+    filterTrack: "rounded-xl bg-transparent",
     filterControl:
-      "border-emerald-100/90 bg-white text-emerald-900 hover:border-emerald-200 focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-600/15",
-    filterChevron: "text-emerald-600/45",
+      "border-transparent bg-transparent text-white shadow-none hover:bg-white/10 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-200/70",
+    filterChevron: "text-white/70",
     filterLabel: "text-ink-subtle",
-    filterChipActive: "bg-white text-emerald-900 shadow-sm ring-1 ring-emerald-100/90",
-    filterChipIdle: "text-ink-muted hover:bg-white/50 hover:text-ink",
+    filterChipActive: "bg-white/15 text-white",
+    filterChipIdle: "text-zinc-300 hover:bg-white/10 hover:text-white",
     filterSecondaryButton:
-      "border-emerald-200/90 bg-white text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50/60",
-    filterMenuPanel:
-      "rounded-xl border border-emerald-200/90 bg-gradient-to-b from-white via-white to-emerald-50/90 py-1 shadow-[0_12px_32px_-12px_rgba(5,150,105,0.22)] ring-1 ring-emerald-100",
-    filterMenuItemActive: "bg-emerald-50 text-emerald-900",
-    filterMenuItemIdle: "text-ink hover:bg-emerald-50/60",
+      "border-transparent bg-transparent text-white shadow-none hover:bg-white/10",
+    filterMenuPanel: "rounded-xl bg-[#24302c] py-1 shadow-lg",
+    filterMenuItemActive: "bg-white/15 text-white",
+    filterMenuItemIdle: "text-zinc-200 hover:bg-white/10",
     swatches: ["#121816", "#1B3A2F", "#6EE7B7"],
     swatchRing: "border-emerald-200",
     embeddedNavActive: "bg-emerald-200 text-emerald-950 shadow-sm",
@@ -260,13 +256,13 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     filterTrack:
       "rounded-xl bg-sky-50/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ring-1 ring-sky-100/80",
     filterControl:
-      "border-sky-100/90 bg-white text-sky-900 hover:border-sky-200 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-600/15",
+      "border border-stone-200 bg-white text-zinc-800 shadow-sm hover:border-stone-300 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-600/15",
     filterChevron: "text-sky-600/45",
     filterLabel: "text-ink-subtle",
     filterChipActive: "bg-white text-sky-900 shadow-sm ring-1 ring-sky-100/90",
     filterChipIdle: "text-ink-muted hover:bg-white/50 hover:text-ink",
     filterSecondaryButton:
-      "border-sky-200/90 bg-white text-sky-900 hover:border-sky-300 hover:bg-sky-50/60",
+      "border border-stone-200 bg-white text-zinc-800 shadow-sm hover:border-stone-300 hover:bg-violet-50",
     filterMenuPanel:
       "rounded-xl border border-sky-200/90 bg-gradient-to-b from-white via-white to-sky-50/90 py-1 shadow-[0_12px_32px_-12px_rgba(2,132,199,0.22)] ring-1 ring-sky-100",
     filterMenuItemActive: "bg-sky-50 text-sky-900",

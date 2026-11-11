@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { LAYOUT_CUSTOMIZE_THEMES } from "./layout-customize-themes";
 import {
@@ -26,6 +27,8 @@ import {
 
 const WORKSPACE_STORAGE_KEY = "customer-portal-demo-workspace";
 const SETTINGS_STORAGE_KEY = "customer-portal-workspace-settings";
+/** Appearance bucket for the signed-in company. It is not a demo workspace. */
+const SIGNED_IN_APPEARANCE_KEY = "signed-in";
 
 export type WorkspaceThemeId = (typeof LAYOUT_CUSTOMIZE_THEMES)[number]["id"];
 
@@ -42,7 +45,7 @@ function loadSettings(): SettingsMap {
     const parsed = JSON.parse(raw) as SettingsMap;
     const out: SettingsMap = {};
     for (const [id, partial] of Object.entries(parsed)) {
-      if (isValidWorkspaceId(id)) {
+      if (isValidWorkspaceId(id) || id === SIGNED_IN_APPEARANCE_KEY) {
         out[id] = normalizeLayoutSettings(partial);
       }
     }
@@ -69,26 +72,19 @@ export function CustomerPortalProvider({
   businessName?: string;
 }) {
   const { clients } = useClientStore();
-  const [workspaceId, setWorkspaceIdState] = useState(getDefaultWorkspaceId);
+  const signedInCompany = Boolean(businessNameOverride?.trim());
+  const [workspaceId, setWorkspaceIdState] = useState(() =>
+    signedInCompany ? SIGNED_IN_APPEARANCE_KEY : getDefaultWorkspaceId()
+  );
   const [workspaceInvalid, setWorkspaceInvalid] = useState(false);
   const [settingsMap, setSettingsMap] = useState<SettingsMap>({});
   const [portalSynced, setPortalSynced] = useState(false);
   const [workspaceSessionKey, setWorkspaceSessionKey] = useState(0);
 
   useEffect(() => {
-    const signedInCompany = Boolean(businessNameOverride?.trim());
     const fromQuery = resolveWorkspaceIdFromQuery();
     if (signedInCompany) {
-      // A demo workspace id in the URL or browser only picks saved appearance.
-      // It must not block the signed-in dashboard or choose the live company.
-      if (fromQuery && fromQuery !== "__invalid__") {
-        setWorkspaceIdState(fromQuery);
-      } else {
-        const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY);
-        setWorkspaceIdState(
-          stored && isValidWorkspaceId(stored) ? stored : getDefaultWorkspaceId()
-        );
-      }
+      setWorkspaceIdState(SIGNED_IN_APPEARANCE_KEY);
       setWorkspaceInvalid(false);
     } else if (fromQuery === "__invalid__") {
       setWorkspaceInvalid(true);
@@ -111,10 +107,10 @@ export function CustomerPortalProvider({
     }
     setSettingsMap(loadSettings());
     setPortalSynced(true);
-  }, [businessNameOverride]);
+  }, [signedInCompany]);
 
   useEffect(() => {
-    if (!portalSynced || workspaceInvalid || !workspaceId) return;
+    if (!portalSynced || workspaceInvalid || !isValidWorkspaceId(workspaceId)) return;
     localStorage.setItem(WORKSPACE_STORAGE_KEY, workspaceId);
   }, [workspaceId, portalSynced, workspaceInvalid]);
 
@@ -148,14 +144,14 @@ export function CustomerPortalProvider({
     "Your company";
 
   const setWorkspaceId = useCallback((id: string) => {
-    if (!isValidWorkspaceId(id)) return;
+    if (signedInCompany || !isValidWorkspaceId(id)) return;
     setWorkspaceInvalid(false);
     setWorkspaceIdState((prev) => {
       if (prev === id) return prev;
       setWorkspaceSessionKey((k) => k + 1);
       return id;
     });
-  }, []);
+  }, [signedInCompany]);
 
   const updateSettings = useCallback(
     (patch: Partial<WorkspaceAppearanceSettings>) => {
@@ -347,9 +343,22 @@ export function CustomerPortalProvider({
 
 export function CustomerPortalQuerySync() {
   const { setWorkspaceId, liveSamplePreview } = useCustomerPortalShared();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (liveSamplePreview) return;
+    if (pathname.startsWith("/dashboard")) {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has("workspace")) return;
+      url.searchParams.delete("workspace");
+      const qs = url.searchParams.toString();
+      window.history.replaceState(
+        window.history.state,
+        "",
+        qs ? `${url.pathname}?${qs}` : url.pathname
+      );
+      return;
+    }
     function applyFromUrl() {
       const param = new URLSearchParams(window.location.search).get("workspace");
       if (param && isValidWorkspaceId(param)) {
@@ -359,7 +368,7 @@ export function CustomerPortalQuerySync() {
     applyFromUrl();
     window.addEventListener("popstate", applyFromUrl);
     return () => window.removeEventListener("popstate", applyFromUrl);
-  }, [setWorkspaceId, liveSamplePreview]);
+  }, [setWorkspaceId, liveSamplePreview, pathname]);
 
   return null;
 }

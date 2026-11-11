@@ -39,7 +39,8 @@ export function dashboardSectionHref(
 ): string {
   const url = new URL(basePath, "http://local");
   const liveProjectPreview = basePath.includes("/onboarding/") && basePath.endsWith("/preview");
-  if (!liveProjectPreview) {
+  const signedInDashboard = basePath === DASHBOARD || basePath.startsWith(`${DASHBOARD}/`);
+  if (!liveProjectPreview && !signedInDashboard) {
     url.searchParams.set("workspace", workspaceId);
   }
   if (sectionId !== "overview") {
