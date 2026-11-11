@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectorCatalogList } from "@/components/connectors/ConnectorCatalogList";
-import { DailyDashboardFrame } from "@/components/customer/daily/DailyDashboardFrame";
+import { DashboardPageFrame } from "@/components/customer/DashboardWorkspaceNav";
 import { CONNECTION_STATUS_LABELS } from "@/lib/client-milestones";
 import { dashboardRoutesForPathname } from "@/lib/dashboard-section-routes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
@@ -30,8 +30,8 @@ export function CustomerConnectionsPage() {
   const connections = client.guidedConnections ?? [];
 
   return (
-    <DailyDashboardFrame>
-      <div className="space-y-6 rounded-2xl bg-white p-5 text-ink">
+    <DashboardPageFrame>
+      <div className="space-y-6">
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-purple">
           {workspace.label}
@@ -135,6 +135,6 @@ export function CustomerConnectionsPage() {
         ← Back to home
       </Link>
       </div>
-    </DailyDashboardFrame>
+    </DashboardPageFrame>
   );
 }

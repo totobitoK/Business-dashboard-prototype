@@ -291,6 +291,7 @@ function mapAppointments(
           timezone: row.timezone,
         }),
         isoDate,
+        startsAt: row.starts_at ?? (row.all_day ? `${isoDate}T12:00:00Z` : null),
         calendarName: calendarNames[row.google_calendar_id] ?? null,
       },
     ];

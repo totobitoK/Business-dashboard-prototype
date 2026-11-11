@@ -166,6 +166,11 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
             {points.length > 0 && (
               <>
                 <path
+                  d={`${buildPath(points)} L ${points[lastIdx]!.x.toFixed(1)} ${(PAD.top + plotH).toFixed(1)} L ${points[0]!.x.toFixed(1)} ${(PAD.top + plotH).toFixed(1)} Z`}
+                  className={theme.chartArea}
+                  stroke="none"
+                />
+                <path
                   d={buildPath(points)}
                   fill="none"
                   className={theme.chartLine}

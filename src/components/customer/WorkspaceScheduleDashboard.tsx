@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DashboardTopBar } from "@/components/customer/DashboardWorkspaceNav";
+import { DashboardShell } from "@/components/customer/DashboardWorkspaceNav";
+import { liveAppointments } from "@/lib/daily-dashboard/live-figures";
+import type { DailyDashboardSnapshot } from "@/lib/daily-dashboard/types";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import {
   DEMO_AS_OF_DATE,
@@ -98,20 +100,29 @@ function buildMonthGrid(year: number, month: number): CalendarCell[] {
   return cells;
 }
 
-export function WorkspaceScheduleDashboard() {
-  const { workspaceId, theme, workspaceSessionKey, businessName } = useCustomerPortal();
-  const data = getWorkspaceBusinessData(workspaceId);
-  const asOf = parseIsoDate(DEMO_AS_OF_DATE);
+export function WorkspaceScheduleDashboard({
+  liveSnapshot = null,
+}: {
+  liveSnapshot?: DailyDashboardSnapshot | null;
+}) {
+  const { workspaceId, theme, workspaceSessionKey } = useCustomerPortal();
+  const sample = liveSnapshot ? undefined : getWorkspaceBusinessData(workspaceId);
+  const asOfDate = liveSnapshot?.asOfDate ?? DEMO_AS_OF_DATE;
+  const appointments = useMemo(
+    () => (liveSnapshot ? liveAppointments(liveSnapshot) : sample?.appointments ?? []),
+    [liveSnapshot, sample]
+  );
+  const asOf = parseIsoDate(asOfDate);
   const [viewYear, setViewYear] = useState(asOf.y);
   const [viewMonth, setViewMonth] = useState(asOf.m);
-  const [selectedIso, setSelectedIso] = useState(DEMO_AS_OF_DATE);
+  const [selectedIso, setSelectedIso] = useState(asOfDate);
   const [selectedUpcomingId, setSelectedUpcomingId] = useState<string | null>(null);
-  const isHvac = workspaceId.includes("hvac");
+  const isHvac = !liveSnapshot && workspaceId.includes("hvac");
 
   const appointmentsByIso = useMemo(() => {
     const byIso = new Map<string, BusinessAppointment[]>();
-    if (!data) return byIso;
-    for (const appt of data.appointments) {
+    if (!liveSnapshot && !sample) return byIso;
+    for (const appt of appointments) {
       if (appt.status === "canceled") continue;
       const iso = appt.startAt.slice(0, 10);
       const list = byIso.get(iso) ?? [];
@@ -119,15 +130,15 @@ export function WorkspaceScheduleDashboard() {
       byIso.set(iso, list);
     }
     return byIso;
-  }, [data]);
+  }, [appointments, liveSnapshot, sample]);
 
   const cells = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const upcoming = useMemo(
-    () => (data ? listUpcomingAppointments(data.appointments, 14, DEMO_AS_OF_DATE) : []),
-    [data]
+    () => listUpcomingAppointments(appointments, 14, asOfDate),
+    [appointments, asOfDate]
   );
 
-  if (!data) {
+  if (!liveSnapshot && !sample) {
     return <p className="text-sm text-ink-muted">No schedule data for this workspace.</p>;
   }
 
@@ -159,21 +170,17 @@ export function WorkspaceScheduleDashboard() {
   }
 
   return (
-    <div
+    <DashboardShell
       key={`schedule-${workspaceId}-${workspaceSessionKey}`}
-      className={`flex min-h-full w-full flex-1 flex-col overflow-hidden border-0 shadow-none ${theme.dashboardCanvas}`}
+      title="Schedule"
+      trailing={
+        liveSnapshot ? null : (
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
+            Sample data
+          </span>
+        )
+      }
     >
-      <div className={`${theme.header} ${theme.headerText}`}>
-        <DashboardTopBar
-          title={businessName}
-          trailing={
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
-              Sample data
-            </span>
-          }
-        />
-      </div>
-
       <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-4 lg:grid-cols-5 lg:p-5">
         <div className="contents">
           <section
@@ -287,9 +294,10 @@ export function WorkspaceScheduleDashboard() {
           <section className={`overflow-hidden lg:col-span-3 lg:col-start-1 lg:row-start-2 ${theme.sectionPanel}`}>
             <div className={`px-4 py-3 ${theme.sectionHeader}`}>
               <h3 className="text-sm font-semibold text-ink">Next 14 days</h3>
-              <p className={`mt-0.5 text-xs ${theme.detailSectionLabel}`}>
-                From {formatDateTime(`${DEMO_AS_OF_DATE}T12:00:00`).date}
-              </p>
+                <p className={`mt-0.5 text-xs ${theme.detailSectionLabel}`}>
+                  From {formatDateTime(`${asOfDate}T12:00:00`).date}
+                  {liveSnapshot ? " · Today / Upcoming" : ""}
+                </p>
             </div>
             <ul className="space-y-2 p-3">
               {upcoming.length === 0 ? (
@@ -394,7 +402,7 @@ export function WorkspaceScheduleDashboard() {
           </ul>
         </aside>
       </div>
-    </div>
+    </DashboardShell>
   );
 }
 

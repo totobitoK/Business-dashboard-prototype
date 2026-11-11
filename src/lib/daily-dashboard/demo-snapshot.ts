@@ -71,6 +71,7 @@ export function buildDemoDailySnapshot(input: {
         title: appointment.title,
         whenLabel: when.time ? `${when.date} · ${when.time}` : when.date,
         isoDate: appointment.startAt.slice(0, 10),
+        startsAt: appointment.startAt,
         calendarName: appointment.location,
       };
     })

@@ -25,6 +25,13 @@ import {
   type BusinessJob,
 } from "@/lib/workspace-business-data";
 import {
+  defaultLiveRangeStart,
+  describeLiveFigures,
+  liveBusinessData,
+  type LiveFigures,
+} from "@/lib/daily-dashboard/live-figures";
+import type { DailyDashboardSnapshot } from "@/lib/daily-dashboard/types";
+import {
   buildCollectionsTrend,
   computeRevenueOverviewMetrics,
   countCompletedJobsInRange,
@@ -47,7 +54,7 @@ import {
   sumPaymentsInRange,
 } from "@/lib/workspace-analytics";
 import { DashboardRangeCalendar } from "@/components/customer/DashboardDatePicker";
-import { DashboardTopBar } from "@/components/customer/DashboardWorkspaceNav";
+import { DashboardShell } from "@/components/customer/DashboardWorkspaceNav";
 import {
   dashboardRoutesForPathname,
   dashboardSectionHref,
@@ -195,9 +202,12 @@ const REVENUE_WIDGETS: DashboardWidgetId[] = [
 export function WorkspaceSampleDashboard({
   changesRequestedNote,
   mode = "overview",
+  liveSnapshot = null,
 }: {
   changesRequestedNote?: string;
   mode?: "overview" | "revenue";
+  /** Signed-in company read. Demo routes leave this null and use sample records. */
+  liveSnapshot?: DailyDashboardSnapshot | null;
 }) {
   const {
     workspaceId,
@@ -206,16 +216,15 @@ export function WorkspaceSampleDashboard({
     workspaceSessionKey,
     navigationBase,
     liveSamplePreview,
-    businessName,
   } = useCustomerPortal();
   const pathname = usePathname();
   const portalRoutes = dashboardRoutesForPathname(pathname);
   const sectionLinkBase = navigationBase ?? portalRoutes.home;
-  const data = getWorkspaceBusinessData(workspaceId);
-
   const [preset, setPreset] = useState<ReportingPeriodPreset>("custom");
-  const [customStart, setCustomStart] = useState("2026-03-01");
-  const [customEnd, setCustomEnd] = useState(DEMO_AS_OF_DATE);
+  const [customStart, setCustomStart] = useState(
+    liveSnapshot ? defaultLiveRangeStart(liveSnapshot.asOfDate) : "2026-03-01"
+  );
+  const [customEnd, setCustomEnd] = useState(liveSnapshot?.asOfDate ?? DEMO_AS_OF_DATE);
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const [invoiceSearch, setInvoiceSearch] = useState("");
@@ -290,22 +299,35 @@ export function WorkspaceSampleDashboard({
   const jobFilterPendingRaw = jobFilterSignature !== deferredJobFilterSignature;
   const jobFilterPending = useMinFilterPending(jobFilterPendingRaw);
 
+  const data = useMemo(
+    () => (liveSnapshot ? liveBusinessData(liveSnapshot) : getWorkspaceBusinessData(workspaceId)),
+    [liveSnapshot, workspaceId]
+  );
+
   const analyticsCore = useMemo(() => {
     if (!data || !rangeResult.range) return null;
     const range = rangeResult.range;
     const compareRange = getComparisonRange(range);
+    const live = liveSnapshot ? describeLiveFigures(liveSnapshot, range) : null;
 
-    const paymentsCollected = sumPaymentsInRange(data.payments, range);
+    const paymentsCollected =
+      live?.paymentsAmount ?? sumPaymentsInRange(data.payments, range);
     const paymentsPrior = sumPaymentsInRange(data.payments, compareRange);
     const jobsCompleted = countCompletedJobsInRange(data.jobs, range);
     const jobsPrior = countCompletedJobsInRange(data.jobs, compareRange);
-    const outstanding = sumOutstandingInvoices(data.invoices);
-    const overdue = sumOverdueInvoices(data.invoices);
-    const overdueCount = countOverdueInvoices(data.invoices);
-    const oldestDays = oldestUnpaidInvoiceDaysOverdue(data.invoices);
-    const trend = buildCollectionsTrend(data.payments, range);
+    const outstanding = liveSnapshot?.receivables.showBalances
+      ? (liveSnapshot.receivables.openBalance ?? 0)
+      : sumOutstandingInvoices(data.invoices);
+    const overdue = liveSnapshot?.receivables.showBalances
+      ? (liveSnapshot.receivables.overdueBalance ?? 0)
+      : sumOverdueInvoices(data.invoices, data.demoAsOf);
+    const overdueCount = liveSnapshot?.receivables.showBalances
+      ? liveSnapshot.receivables.overdueCount
+      : countOverdueInvoices(data.invoices, data.demoAsOf);
+    const oldestDays = oldestUnpaidInvoiceDaysOverdue(data.invoices, data.demoAsOf);
+    const trend = live?.trend ?? buildCollectionsTrend(data.payments, range);
     const trendTotal = trend.reduce((s, b) => s + b.amount, 0);
-    const aging = invoiceAgingBuckets(data.invoices);
+    const aging = invoiceAgingBuckets(data.invoices, data.demoAsOf);
     const categories = serviceCategoryBreakdown(data.jobs, range);
     const jobCategories = [...new Set(data.jobs.map((j) => j.category))].sort();
 
@@ -331,11 +353,13 @@ export function WorkspaceSampleDashboard({
       categories,
       invoiceTotal: data.invoices.length,
       jobCategories,
-      upcoming: countUpcomingAppointments(data.appointments),
-      upcomingList: listUpcomingAppointments(data.appointments),
+      upcoming: countUpcomingAppointments(data.appointments, 7, data.demoAsOf),
+      upcomingList: listUpcomingAppointments(data.appointments, 7, data.demoAsOf),
+      asOfDate: data.demoAsOf,
+      live,
       ...revenueOverview,
     };
-  }, [data, rangeResult.range]);
+  }, [data, liveSnapshot, rangeResult.range]);
 
   const invoiceList = useMemo(() => {
     if (!data || !analyticsCore) return null;
@@ -400,8 +424,6 @@ export function WorkspaceSampleDashboard({
     mode === "revenue"
       ? REVENUE_WIDGETS.filter((id) => !settings.hiddenWidgets.includes(id))
       : settings.widgetOrder.filter((id) => !settings.hiddenWidgets.includes(id));
-
-  const isHvac = workspaceId.includes("hvac");
 
   const visibleInvoices = computed.invoices.slice(0, invoiceLimit);
   const invoicePadRowCount = Math.max(0, invoiceLimit - visibleInvoices.length);
@@ -493,7 +515,12 @@ export function WorkspaceSampleDashboard({
         settingsHref={portalRoutes.settings}
       />
     ),
-    collections_chart: <CollectionsTrendChart trend={computed.trend} theme={theme} />,
+    collections_chart:
+      computed.live?.chartMessage && !computed.live.trend ? (
+        <p className="px-1 py-8 text-center text-sm text-ink-muted">{computed.live.chartMessage}</p>
+      ) : (
+        <CollectionsTrendChart trend={computed.trend} theme={theme} />
+      ),
     needs_attention: (
       <NeedsAttentionPanel
         theme={theme}
@@ -501,6 +528,8 @@ export function WorkspaceSampleDashboard({
         overdueTotal={computed.overdue}
         oldestDays={computed.oldestDays}
         aging={computed.aging}
+        notice={computed.live?.receivablesMessage ?? null}
+        hideAging={computed.live?.hideAging ?? false}
         onViewOverdueInvoices={() => {
           setInsightFocus("overdue");
           setInvoiceStatus("Past due");
@@ -508,7 +537,9 @@ export function WorkspaceSampleDashboard({
         }}
       />
     ),
-    job_activity: (
+    job_activity: computed.live ? (
+      <p className="px-1 py-8 text-center text-sm text-ink-muted">{computed.live.jobsMessage}</p>
+    ) : (
       <OperationsJobsPanel
         compact={compact}
         theme={theme}
@@ -544,12 +575,17 @@ export function WorkspaceSampleDashboard({
           setSelectedJobId(null);
         }}
         formatDateTime={formatAppointmentDateTime}
+        asOf={computed.asOfDate}
         scheduleHref={dashboardSectionHref(workspaceId, "schedule", sectionLinkBase)}
         embedded
         bare
       />
     ),
-    invoices: (
+    invoices: computed.live?.receivablesMessage ? (
+      <p className={`px-4 py-8 text-center text-sm text-ink-muted ${theme.widgetListShell}`}>
+        {computed.live.receivablesMessage}
+      </p>
+    ) : (
       <div key="invoices">
         <div
           aria-busy={invoiceTablePending}
@@ -651,37 +687,34 @@ export function WorkspaceSampleDashboard({
   };
 
   return (
-    <div
+    <DashboardShell
       key={`${workspaceId}-${workspaceSessionKey}`}
-      className="flex min-h-full w-full flex-1 flex-col border-0 bg-white shadow-none"
+      title={mode === "revenue" ? "Revenue" : "Overview"}
+      trailing={
+        <>
+          {liveSnapshot ? null : (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
+              Sample data
+            </span>
+          )}
+          <DashboardRangeCalendar
+            start={customStart}
+            end={customEnd}
+            theme={theme}
+            onChange={(start, end) => {
+              setPreset("custom");
+              setCustomStart(start);
+              setCustomEnd(end);
+            }}
+          />
+        </>
+      }
     >
-      <div className={`relative overflow-visible ${theme.header} ${theme.headerText}`}>
-        <DashboardTopBar
-          title={mode === "revenue" ? "Revenue & collections" : businessName}
-          trailing={
-            <>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
-                Sample data
-              </span>
-              <DashboardRangeCalendar
-                start={customStart}
-                end={customEnd}
-                theme={theme}
-                onChange={(start, end) => {
-                  setPreset("custom");
-                  setCustomStart(start);
-                  setCustomEnd(end);
-                }}
-              />
-            </>
-          }
-        />
-        {rangeError && (
-          <p className="absolute bottom-1 left-4 rounded bg-white/20 px-2 py-1 text-xs sm:left-5" role="alert">
-            {rangeError}
-          </p>
-        )}
-      </div>
+      {rangeError && (
+        <p className="bg-amber-100 px-4 py-2 text-xs text-amber-950" role="alert">
+          {rangeError}
+        </p>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {changesRequestedNote && (
@@ -702,16 +735,21 @@ export function WorkspaceSampleDashboard({
             case "collections_chart":
               return {
                 title: "Collections trend",
-                subtitle: (
-                  <>
-                    {rangeLabel} · Total{" "}
-                    <CurrencyAmount
-                      amount={computed.trendTotal}
-                      colorClass={theme.metricValueA}
-                      className="inline font-semibold"
-                    />
-                  </>
-                ),
+                subtitle:
+                  computed.live?.chartMessage && !computed.live.trend
+                    ? computed.live.chartMessage
+                    : computed.live?.trend
+                      ? `${rangeLabel} · Square net before fees`
+                      : (
+                        <>
+                          {rangeLabel} · Total{" "}
+                          <CurrencyAmount
+                            amount={computed.trendTotal}
+                            colorClass={theme.metricValueA}
+                            className="inline font-semibold tabular-nums"
+                          />
+                        </>
+                      ),
                 subtitleAlign: "center" as const,
                 tightToolbar: true,
               };
@@ -720,13 +758,17 @@ export function WorkspaceSampleDashboard({
                 title: "Job activity",
                 subtitle: rangeLabel,
                 subtitleAlign: "center" as const,
-                headerAside: jobActivityToolbar,
+                headerAside: computed.live ? undefined : jobActivityToolbar,
                 tightToolbar: true,
               };
             case "appointments":
               return {
                 title: "Next 7 days",
-                subtitle: `${computed.upcoming} upcoming · from ${formatShortDate(DEMO_AS_OF_DATE)}`,
+                subtitle: computed.live?.scheduleBlocked
+                  ? computed.live.scheduleBlocked
+                  : `${computed.upcoming} upcoming · from ${formatShortDate(computed.asOfDate)}${
+                      computed.live?.scheduleNote ? ` · ${computed.live.scheduleNote}` : ""
+                    }`,
                 subtitleAlign: "center" as const,
                 headerAside: (
                   <Link
@@ -740,17 +782,19 @@ export function WorkspaceSampleDashboard({
             case "invoices":
               return {
                 title: "Invoices",
-                subtitle: (
+                subtitle: computed.live?.receivablesMessage ? (
+                  computed.live.receivablesMessage
+                ) : (
                   <>
                     {computed.invoices.length} shown · filtered balance{" "}
                     <CurrencyAmount
                       amount={computed.filteredBalance}
                       colorClass={theme.metricValueA}
-                      className="inline font-semibold"
+                      className="inline font-semibold tabular-nums"
                     />
                   </>
                 ),
-                headerAside: invoiceToolbar,
+                headerAside: computed.live?.receivablesMessage ? undefined : invoiceToolbar,
                 tightToolbar: true,
               };
             case "needs_attention":
@@ -825,7 +869,7 @@ export function WorkspaceSampleDashboard({
         </div>
       )}
       </div>
-    </div>
+    </DashboardShell>
   );
 }
 
@@ -845,6 +889,8 @@ type MetricsKpiComputed = {
   monthlyRangeLabel: string;
   monthPipeline: number;
   monthPipelineLabel: string;
+  asOfDate: string;
+  live: LiveFigures | null;
 };
 
 function MetricsKpiGrid({
@@ -926,6 +972,14 @@ function MetricsKpiGrid({
   );
 }
 
+function unavailableCard(message: string, className: string) {
+  return {
+    sub: "No figure is shown for this metric.",
+    value: <span className="block text-sm font-semibold leading-snug">{message}</span>,
+    className,
+  };
+}
+
 function revenueKpiCardProps(
   id: RevenueKpiId,
   computed: MetricsKpiComputed,
@@ -935,6 +989,7 @@ function revenueKpiCardProps(
   const className = index % 2 === 0 ? theme.metricA : theme.metricB;
   switch (id) {
     case "weekly_revenue":
+      if (computed.live) return unavailableCard(computed.live.revenueMessage, className);
       return {
         higherIsBetter: true,
         sub: computed.weeklyRangeLabel,
@@ -944,12 +999,13 @@ function revenueKpiCardProps(
           <CurrencyAmount
             amount={computed.weeklyRevenue}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "monthly_revenue":
+      if (computed.live) return unavailableCard(computed.live.revenueMessage, className);
       return {
         higherIsBetter: true,
         sub: computed.monthlyRangeLabel,
@@ -959,32 +1015,36 @@ function revenueKpiCardProps(
           <CurrencyAmount
             amount={computed.monthlyRevenue}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "month_pipeline":
+      if (computed.live) return unavailableCard(computed.live.pipelineMessage, className);
       return {
         sub: computed.monthPipelineLabel,
         value: (
           <CurrencyAmount
             amount={computed.monthPipeline}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "overdue_ar":
+      if (computed.live?.receivablesMessage) {
+        return unavailableCard(computed.live.receivablesMessage, className);
+      }
       return {
         higherIsBetter: false,
-        sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
+        sub: `As of ${formatShortDate(computed.asOfDate)}`,
         value: (
           <CurrencyAmount
             amount={computed.overdue}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
@@ -1001,6 +1061,33 @@ function overviewKpiCardProps(
   const className = index % 2 === 0 ? theme.metricA : theme.metricB;
   switch (id) {
     case "payments_collected":
+      if (computed.live?.paymentsMessage) {
+        return unavailableCard(computed.live.paymentsMessage, className);
+      }
+      if (computed.live) {
+        return {
+          higherIsBetter: true,
+          sub: `${formatRangeForDisplay(computed.range)}${
+            computed.live.paymentsCurrency ? ` · ${computed.live.paymentsCurrency}` : ""
+          }`,
+          value:
+            computed.live.paymentsCurrency && computed.live.paymentsCurrency !== "USD" ? (
+              <span className={`text-xl font-bold tabular-nums sm:text-2xl ${theme.metricValueA}`}>
+                {new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: computed.live.paymentsCurrency,
+                }).format(computed.live.paymentsAmount ?? 0)}
+              </span>
+            ) : (
+              <CurrencyAmount
+                amount={computed.live.paymentsAmount ?? 0}
+                colorClass={theme.metricValueA}
+                className="text-xl font-bold tabular-nums sm:text-2xl"
+              />
+            ),
+          className,
+        };
+      }
       return {
         higherIsBetter: true,
         sub: formatRangeForDisplay(computed.range),
@@ -1010,12 +1097,13 @@ function overviewKpiCardProps(
           <CurrencyAmount
             amount={computed.paymentsCollected}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "jobs_completed":
+      if (computed.live) return unavailableCard(computed.live.jobsMessage, className);
       return {
         higherIsBetter: true,
         sub: formatRangeForDisplay(computed.range),
@@ -1029,27 +1117,33 @@ function overviewKpiCardProps(
         className,
       };
     case "outstanding_balance":
+      if (computed.live?.receivablesMessage) {
+        return unavailableCard(computed.live.receivablesMessage, className);
+      }
       return {
         higherIsBetter: false,
-        sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
+        sub: `As of ${formatShortDate(computed.asOfDate)}`,
         value: (
           <CurrencyAmount
             amount={computed.outstanding}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "overdue_balance":
+      if (computed.live?.receivablesMessage) {
+        return unavailableCard(computed.live.receivablesMessage, className);
+      }
       return {
         higherIsBetter: false,
-        sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
+        sub: `As of ${formatShortDate(computed.asOfDate)}`,
         value: (
           <CurrencyAmount
             amount={computed.overdue}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
@@ -1073,6 +1167,8 @@ function NeedsAttentionPanel({
   overdueTotal,
   oldestDays,
   aging,
+  notice,
+  hideAging,
   onViewOverdueInvoices,
 }: {
   theme: LayoutCustomizeTheme;
@@ -1080,8 +1176,13 @@ function NeedsAttentionPanel({
   overdueTotal: number;
   oldestDays: number | null;
   aging: AgingBuckets;
+  notice: string | null;
+  hideAging: boolean;
   onViewOverdueInvoices: () => void;
 }) {
+  if (notice) {
+    return <p className="px-1 py-6 text-sm text-ink-muted">{notice}</p>;
+  }
   const critical = aging["90_plus"];
 
   return (
@@ -1143,6 +1244,11 @@ function NeedsAttentionPanel({
         </div>
       </div>
 
+      {hideAging ? (
+        <p className="text-sm text-ink-muted">
+          Aging stays hidden until the invoice list covers every open balance.
+        </p>
+      ) : (
       <div className={`overflow-hidden ${theme.widgetListShell}`}>
         <p
           className={`px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-ink-muted ${theme.widgetListHeader}`}
@@ -1175,6 +1281,7 @@ function NeedsAttentionPanel({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
@@ -1410,6 +1517,7 @@ function OperationsSchedulePanel({
   selectedAppointmentId,
   onSelectAppointment,
   formatDateTime,
+  asOf = DEMO_AS_OF_DATE,
   scheduleHref,
   embedded = false,
   bare = false,
@@ -1421,6 +1529,7 @@ function OperationsSchedulePanel({
   selectedAppointmentId: string | null;
   onSelectAppointment: (id: string) => void;
   formatDateTime: (iso: string) => { date: string; time: string };
+  asOf?: string;
   scheduleHref: string;
   embedded?: boolean;
   bare?: boolean;
@@ -1441,7 +1550,7 @@ function OperationsSchedulePanel({
         <div className={`border-b pb-2 ${theme.toolbarDivider}`}>
           <h3 className="text-sm font-semibold text-ink">Next 7 days</h3>
           <p className="text-[11px] text-ink-muted">
-            From {formatShortDate(DEMO_AS_OF_DATE)} · {upcoming} scheduled
+            From {formatShortDate(asOf)} · {upcoming} scheduled
           </p>
         </div>
       )}

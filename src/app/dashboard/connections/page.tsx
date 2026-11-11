@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
-import { DailyDashboardFrame } from "@/components/customer/daily/DailyDashboardFrame";
+import { DashboardPageFrame } from "@/components/customer/DashboardWorkspaceNav";
 import { LiveGoogleCalendarPanel } from "@/components/google-calendar/LiveGoogleCalendarPanel";
 import type { GoogleCalendarStatus } from "@/components/google-calendar/LiveGoogleCalendarPanel";
 import { LiveQuickBooksPanel } from "@/components/quickbooks/LiveQuickBooksPanel";
@@ -27,12 +27,12 @@ export default async function LiveDashboardConnectionsPage({
 
   if (!companyId) {
     return (
-      <DailyDashboardFrame>
-        <div className="space-y-4 rounded-2xl bg-white p-5 text-ink">
+      <DashboardPageFrame>
+        <div className="space-y-4">
           <PageHeader title="Connections" description="Company data connections." />
           <p className="text-sm text-ink-muted">No company linked to your account.</p>
         </div>
-      </DailyDashboardFrame>
+      </DashboardPageFrame>
     );
   }
 
@@ -75,8 +75,8 @@ export default async function LiveDashboardConnectionsPage({
   const squareStatus = (squareError ? null : squareRaw) as SquareStatusPayload | null;
 
   return (
-    <DailyDashboardFrame>
-    <div className="space-y-6 rounded-2xl bg-white p-5 text-ink">
+    <DashboardPageFrame>
+    <div className="space-y-6">
       <PageHeader
         title="Connections"
         description="Manage live data connections for your company."
@@ -130,6 +130,6 @@ export default async function LiveDashboardConnectionsPage({
         flashCode={sp.google ?? null}
       />
     </div>
-    </DailyDashboardFrame>
+    </DashboardPageFrame>
   );
 }

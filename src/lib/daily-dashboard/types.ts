@@ -43,6 +43,8 @@ export type DailyAppointment = {
   title: string;
   whenLabel: string;
   isoDate: string;
+  /** Instant used to place the visit on the calendar. Null for date-only rows. */
+  startsAt: string | null;
   calendarName: string | null;
 };
 

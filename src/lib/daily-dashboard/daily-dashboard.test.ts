@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { emptyLiveSnapshot } from "./types";
+import { describeLiveFigures, liveBusinessData } from "./live-figures";
 import { describe, expect, it } from "vitest";
 import { WORKSPACE_ALPINE_HVAC } from "@/lib/customer-workspaces";
 import { classifyCalendar, classifyQuickBooks, classifySquare } from "./connector-state";
@@ -152,5 +154,50 @@ describe("live dashboard company selection", () => {
     expect(src).toContain("companyIds[0]");
     expect(src).not.toContain("searchParams");
     expect(src).not.toMatch(/workspace/i);
+  });
+});
+
+describe("live figures in the restored sections", () => {
+  it("hides unsupported metrics and does not invent a zero from a disconnected read", () => {
+    const snapshot = emptyLiveSnapshot("Acme Heating", "2026-11-11");
+    const figures = describeLiveFigures(snapshot, {
+      start: "2026-11-05",
+      end: "2026-11-11",
+    });
+    const data = liveBusinessData(snapshot);
+
+    expect(figures.paymentsAmount).toBeNull();
+    expect(figures.paymentsMessage).toBeTruthy();
+    expect(figures.revenueMessage).toMatch(/revenue/i);
+    expect(figures.pipelineMessage).toMatch(/pipeline/i);
+    expect(figures.jobsMessage).toMatch(/job/i);
+    expect(figures.receivablesMessage).toBeTruthy();
+    expect(data.jobs).toEqual([]);
+    expect(data.payments).toEqual([]);
+    expect(data.invoices).toEqual([]);
+    expect(data.workspaceId).toBe("live-company");
+  });
+
+  it("shows a zero only after a successful empty collections read", () => {
+    const snapshot = emptyLiveSnapshot("Acme Heating", "2026-11-11");
+    snapshot.collections = {
+      ...snapshot.collections,
+      state: "verified_empty",
+      messages: [],
+      showTotals: true,
+      authoritativeDay: {
+        date: "2026-11-11",
+        currencies: [{ currency: "USD", paymentsMinor: 0, refundsMinor: 0, netMinor: 0 }],
+      },
+      transactions: [],
+      loadedCap: 40,
+    };
+    const figures = describeLiveFigures(snapshot, {
+      start: "2026-11-11",
+      end: "2026-11-11",
+    });
+    expect(figures.paymentsMessage).toBeNull();
+    expect(figures.paymentsAmount).toBe(0);
+    expect(figures.revenueMessage).toMatch(/revenue/i);
   });
 });
