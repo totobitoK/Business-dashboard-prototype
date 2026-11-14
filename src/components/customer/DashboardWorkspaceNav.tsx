@@ -31,7 +31,7 @@ type NavChrome = {
 function navChrome(theme: LayoutCustomizeTheme): NavChrome {
   if (theme.id === "forest") {
     return {
-      aside: "border-r border-white/10 bg-[#15241c] text-zinc-100",
+      aside: "border-r border-white/10 bg-[#15241c]/45 text-zinc-100 backdrop-blur-xl",
       idle: "text-zinc-300 hover:bg-white/5 hover:text-white",
       active: "bg-emerald-200 text-emerald-950",
       focus:
@@ -42,17 +42,50 @@ function navChrome(theme: LayoutCustomizeTheme): NavChrome {
   }
   if (theme.id === "ocean") {
     return {
-      aside: "border-r border-stone-200 bg-[#fbfaf7] text-zinc-900",
-      idle: "text-zinc-600 hover:bg-violet-50 hover:text-zinc-950",
-      active: "bg-violet-100 text-violet-950",
+      aside: "border-r border-stone-200/80 bg-[#f7f3ee]/70 text-zinc-900 backdrop-blur-xl",
+      idle: "text-zinc-600 hover:bg-[#f3ece4] hover:text-zinc-950",
+      active: "bg-[#3c2a1e] text-[#f7f3ee]",
       focus:
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f7f4ef]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6b4f3a] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f7f3ee]",
       menu: "border-stone-200 bg-white",
       rule: "bg-stone-200",
     };
   }
+  if (theme.id === "harbor") {
+    return {
+      aside: "border-r border-[#d5dee8] bg-[#f4f7fb]/80 text-zinc-900 backdrop-blur-xl",
+      idle: "text-zinc-600 hover:bg-[#e7eef5] hover:text-zinc-950",
+      active: "bg-[#1e3a5f] text-[#f4f7fb]",
+      focus:
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e3a5f] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f4f7fb]",
+      menu: "border-[#d5dee8] bg-white",
+      rule: "bg-[#d5dee8]",
+    };
+  }
+  if (theme.id === "ash") {
+    return {
+      aside: "border-r border-zinc-200 bg-[#f3f4f6]/80 text-zinc-900 backdrop-blur-xl",
+      idle: "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950",
+      active: "bg-[#2c2c2c] text-[#f4f4f5]",
+      focus:
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2c2c2c] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f3f4f6]",
+      menu: "border-zinc-200 bg-white",
+      rule: "bg-zinc-200",
+    };
+  }
+  if (theme.id === "carbon") {
+    return {
+      aside: "border-r border-white/10 bg-[#141414]/55 text-zinc-100 backdrop-blur-xl",
+      idle: "text-zinc-300 hover:bg-white/5 hover:text-white",
+      active: "bg-[#e7e2d8] text-[#1a1a1a]",
+      focus:
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e7e2d8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#141414]",
+      menu: "border-white/10 bg-[#1c1c1c]",
+      rule: "bg-white/15",
+    };
+  }
   return {
-    aside: "border-r border-white/10 bg-[#171924] text-zinc-100",
+    aside: "border-r border-white/10 bg-[#171924]/45 text-zinc-100 backdrop-blur-xl",
     idle: "text-zinc-300 hover:bg-white/5 hover:text-white",
     active: "bg-[#c7d2fe] text-[#312e81]",
     focus:
@@ -108,11 +141,6 @@ export function DashboardShell({
       ? null
       : selectedSection ?? resolveDashboardSection(pathname, searchParams);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [groupOpen, setGroupOpen] = useState(activeSection != null);
-
-  useEffect(() => {
-    if (activeSection) setGroupOpen(true);
-  }, [activeSection]);
 
   const query = searchParams.toString();
   useEffect(() => {
@@ -123,17 +151,11 @@ export function DashboardShell({
 
   return (
     <div
-      className={`flex min-h-full w-full flex-1 flex-col lg:flex-row ${theme.scopeClass} ${theme.dashboardCanvas}`}
+      className={`flex min-h-full w-full flex-1 flex-col lg:flex-row ${theme.scopeClass} ${theme.dashboardAtmosphere}`}
     >
       {liveSamplePreview ? null : (
         <aside className={`hidden w-48 shrink-0 lg:flex lg:flex-col ${chrome.aside}`}>
-          <DashboardNav
-            idPrefix="desktop"
-            activeSection={activeSection}
-            groupOpen={groupOpen}
-            onToggleGroup={() => setGroupOpen((open) => !open)}
-            chrome={chrome}
-          />
+          <DashboardNav activeSection={activeSection} chrome={chrome} />
         </aside>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -167,34 +189,27 @@ export function DashboardShell({
               className={`border-t lg:hidden ${chrome.menu} ${chrome.aside}`}
             >
               <DashboardNav
-                idPrefix="mobile"
                 activeSection={activeSection}
-                groupOpen={groupOpen}
-                onToggleGroup={() => setGroupOpen((open) => !open)}
                 onNavigate={() => setMenuOpen(false)}
                 chrome={chrome}
               />
             </div>
           ) : null}
         </div>
-        {children}
+        <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${theme.dashboardCanvas}`}>
+          {children}
+        </div>
       </div>
     </div>
   );
 }
 
 function DashboardNav({
-  idPrefix,
   activeSection,
-  groupOpen,
-  onToggleGroup,
   onNavigate,
   chrome,
 }: {
-  idPrefix: string;
   activeSection: DashboardSectionId | null;
-  groupOpen: boolean;
-  onToggleGroup: () => void;
   onNavigate?: () => void;
   chrome: NavChrome;
 }) {
@@ -209,7 +224,6 @@ function DashboardNav({
   const showUtility = Boolean(workspaceId) && !navigationBase && !liveSamplePreview;
   const showSignOut =
     showUtility && pathname.startsWith("/dashboard") && !pathname.startsWith(DEMO_DASHBOARD);
-  const sectionsId = `${idPrefix}-dashboard-sections`;
   const itemClass = `rounded-md px-2.5 py-2 text-left text-sm font-medium leading-none ${chrome.focus}`;
 
   const utilityHref = (path: string) =>
@@ -221,26 +235,8 @@ function DashboardNav({
 
   return (
     <nav aria-label="Dashboard" className="flex flex-col gap-1 p-3">
-      <button
-        type="button"
-        className={`${itemClass} flex items-center justify-between gap-2 font-semibold ${
-          activeSection && !groupOpen ? chrome.active : chrome.idle
-        }`}
-        aria-expanded={groupOpen}
-        aria-controls={sectionsId}
-        onClick={onToggleGroup}
-      >
-        Dashboard
-        <Chevron expanded={groupOpen} />
-      </button>
-      <div
-        id={sectionsId}
-        className={`grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,0.84,0.32,1)] motion-reduce:transition-none ${
-          groupOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-        }`}
-      >
-        <div className="overflow-hidden" inert={groupOpen ? undefined : true}>
-        <div className="flex flex-col gap-1 pl-3 pt-1">
+      <p className="px-2.5 py-2 text-sm font-semibold leading-none">Dashboard</p>
+      <div className="flex flex-col gap-1 pl-3">
         {DASHBOARD_SECTIONS.map((section) => {
           const isActive = section.id === activeSection;
           return (
@@ -272,8 +268,6 @@ function DashboardNav({
             </Link>
           );
         })}
-        </div>
-        </div>
       </div>
       {showUtility ? (
         <>
@@ -351,25 +345,3 @@ function PreviewSectionLinks({ activeSection }: { activeSection: DashboardSectio
   );
 }
 
-function Chevron({ expanded }: { expanded: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      aria-hidden
-      className={`shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.16,0.84,0.32,1)] motion-reduce:transition-none ${
-        expanded ? "rotate-90" : ""
-      }`}
-    >
-      <path
-        d="M6.5 4 10.5 8 6.5 12"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}

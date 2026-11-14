@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  dashboardBaseFromPathname,
   resolveDashboardSection,
   type DashboardSectionId,
 } from "@/lib/dashboard-section-routes";

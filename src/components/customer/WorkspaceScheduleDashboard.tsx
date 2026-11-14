@@ -5,6 +5,8 @@ import { DashboardShell } from "@/components/customer/DashboardWorkspaceNav";
 import { liveAppointments } from "@/lib/daily-dashboard/live-figures";
 import type { DailyDashboardSnapshot } from "@/lib/daily-dashboard/types";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
+import { isLightDashboardTheme } from "@/lib/layout-customize-themes";
+import { WORKSPACE_ALPINE_HVAC, isValidWorkspaceId } from "@/lib/customer-workspaces";
 import {
   DEMO_AS_OF_DATE,
   getWorkspaceBusinessData,
@@ -106,7 +108,10 @@ export function WorkspaceScheduleDashboard({
   liveSnapshot?: DailyDashboardSnapshot | null;
 }) {
   const { workspaceId, theme, workspaceSessionKey } = useCustomerPortal();
-  const sample = liveSnapshot ? undefined : getWorkspaceBusinessData(workspaceId);
+  const sampleWorkspaceId = isValidWorkspaceId(workspaceId)
+    ? workspaceId
+    : WORKSPACE_ALPINE_HVAC;
+  const sample = liveSnapshot ? undefined : getWorkspaceBusinessData(sampleWorkspaceId);
   const asOfDate = liveSnapshot?.asOfDate ?? DEMO_AS_OF_DATE;
   const appointments = useMemo(
     () => (liveSnapshot ? liveAppointments(liveSnapshot) : sample?.appointments ?? []),
@@ -150,6 +155,10 @@ export function WorkspaceScheduleDashboard({
     0
   );
   const viewingAsOfMonth = viewYear === asOf.y && viewMonth === asOf.m;
+  const scheduleNotice =
+    liveSnapshot && !["ready", "verified_empty", "stale"].includes(liveSnapshot.schedule.state)
+      ? liveSnapshot.schedule.messages[0] ?? "Appointments are unavailable."
+      : null;
 
   function showMonth(year: number, month: number, day?: number) {
     setViewYear(year);
@@ -173,13 +182,6 @@ export function WorkspaceScheduleDashboard({
     <DashboardShell
       key={`schedule-${workspaceId}-${workspaceSessionKey}`}
       title="Schedule"
-      trailing={
-        liveSnapshot ? null : (
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
-            Sample data
-          </span>
-        )
-      }
     >
       <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-4 lg:grid-cols-5 lg:p-5">
         <div className="contents">
@@ -187,7 +189,7 @@ export function WorkspaceScheduleDashboard({
             className={`overflow-hidden lg:col-span-3 ${theme.sectionPanel}`}
             aria-label={`${monthTitle(viewYear, viewMonth)} calendar`}
           >
-            <div className={`flex items-center justify-between gap-3 px-4 py-3 ${theme.header} ${theme.headerText}`}>
+            <div className={`flex items-center justify-between gap-3 border-b px-4 py-3 text-ink ${theme.sectionHeader}`}>
               <button
                 type="button"
                 onClick={() => {
@@ -203,8 +205,9 @@ export function WorkspaceScheduleDashboard({
                 <p className="text-lg font-semibold leading-none sm:text-xl">
                   {monthTitle(viewYear, viewMonth)}
                 </p>
-                <p className="mt-1 text-[11px] opacity-90">
-                  {`${isHvac ? "Field schedule" : "Operations calendar"} · ${monthCount} visit${monthCount === 1 ? "" : "s"} · ${BUSINESS_TIMEZONE}`}
+                <p className={scheduleNotice ? "mt-1 text-xs text-ink" : "mt-1 text-[11px] opacity-90"}>
+                  {scheduleNotice ??
+                    `${isHvac ? "Field schedule" : "Operations calendar"} · ${monthCount} visit${monthCount === 1 ? "" : "s"} · ${BUSINESS_TIMEZONE}`}
                 </p>
               </div>
               <div className="flex items-center gap-1.5">
@@ -256,7 +259,9 @@ export function WorkspaceScheduleDashboard({
                     aria-label={`${cell.iso}, ${visits.length} visit${visits.length === 1 ? "" : "s"}`}
                     className={`flex min-h-16 flex-col items-stretch border-b border-r p-1 text-left transition sm:min-h-24 ${theme.detailPanelBorder} ${
                       selectedDay
-                        ? `${theme.sectionPanel} !rounded-none text-ink`
+                        ? isLightDashboardTheme(theme.id)
+                          ? "bg-white text-ink"
+                          : "bg-white/[0.2] text-ink"
                         : !cell.inMonth
                           ? "bg-black/[0.03] text-ink-muted/60"
                           : `bg-white/70 ${theme.operationsListHover}`
@@ -295,13 +300,17 @@ export function WorkspaceScheduleDashboard({
             <div className={`px-4 py-3 ${theme.sectionHeader}`}>
               <h3 className="text-sm font-semibold text-ink">Next 14 days</h3>
                 <p className={`mt-0.5 text-xs ${theme.detailSectionLabel}`}>
-                  From {formatDateTime(`${asOfDate}T12:00:00`).date}
-                  {liveSnapshot ? " · Today / Upcoming" : ""}
+                  {scheduleNotice ??
+                    `From ${formatDateTime(`${asOfDate}T12:00:00`).date}${
+                      liveSnapshot ? " · Today / Upcoming" : ""
+                    }`}
                 </p>
             </div>
             <ul className="space-y-2 p-3">
               {upcoming.length === 0 ? (
-                <li className="px-1 py-2 text-sm text-ink-muted">No upcoming visits.</li>
+                scheduleNotice ? null : (
+                  <li className="px-1 py-2 text-sm text-ink-muted">No upcoming visits.</li>
+                )
               ) : (
                 upcoming.map((appt) => {
                   const { date, time } = formatDateTime(appt.startAt);

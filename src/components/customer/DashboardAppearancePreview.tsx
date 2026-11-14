@@ -38,8 +38,8 @@ const PREVIEW_JOBS = [
 ] as const;
 
 const PREVIEW_APPOINTMENTS = [
-  { title: "Estimate — Plaza HVAC", when: "Mar 31 · 10:00 AM" },
-  { title: "Filter delivery — Oak St", when: "Apr 1 · 8:30 AM" },
+  { title: "Estimate — Plaza HVAC", when: "Mar 31 · 10:00 AM", assignee: "Tech team B" },
+  { title: "Filter delivery — Oak St", when: "Apr 1 · 8:30 AM", assignee: "Maria Santos" },
 ] as const;
 
 const PREVIEW_INVOICES = [
@@ -72,9 +72,9 @@ function overviewPreviewProps(
   id: OverviewKpiId,
   rangeLabel: string,
   theme: LayoutCustomizeTheme,
-  index: number
+  _index: number
 ) {
-  const className = index % 2 === 0 ? theme.metricA : theme.metricB;
+  const className = theme.metricA;
   const asOf = formatCalendarDateDisplay(DEMO_AS_OF_DATE);
   switch (id) {
     case "payments_collected":
@@ -300,13 +300,12 @@ function PreviewScheduleList({ theme, compact }: { theme: LayoutCustomizeTheme; 
       <ul className={`divide-y ${theme.widgetListDivide}`}>
         {PREVIEW_APPOINTMENTS.map((appt) => (
           <li key={appt.title}>
-            <div
-              className={`flex w-full flex-col gap-0.5 px-3 text-left sm:flex-row sm:items-center sm:justify-between ${rowPy} ${theme.widgetListRow}`}
-            >
-              <p className="truncate font-semibold text-ink">{appt.title}</p>
-              <span className={`shrink-0 font-semibold ${theme.listAccent} ${meta}`}>
-                {appt.when}
-              </span>
+            <div className={`flex w-full flex-col items-start gap-0.5 px-3 text-left ${rowPy} ${theme.widgetListRow}`}>
+              <p className="font-semibold text-ink">{appt.title}</p>
+              <p className={meta}>
+                <span className={`font-semibold ${theme.listAccent}`}>{appt.when}</span>
+                <span className="text-ink-muted"> · {appt.assignee}</span>
+              </p>
             </div>
           </li>
         ))}
@@ -370,7 +369,6 @@ export function DashboardAppearancePreview({
   const resolved = resolveReportingRange("last7");
   const rangeLabel = resolved.ok ? formatRangeForDisplay(resolved.range) : "Last 7 days";
   const headerTitle = kpiTab === "revenue" ? "Revenue & collections" : businessName;
-  const metricsTitle = kpiTab === "revenue" ? "Revenue Overview" : "General Overview";
 
   return (
     <div className={`rounded-2xl shadow-card ${theme.card}`} aria-label="Sample dashboard preview">
@@ -407,24 +405,16 @@ export function DashboardAppearancePreview({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-b-2xl">
+      <div className={`overflow-hidden rounded-b-2xl ${theme.dashboardAtmosphere}`}>
         <div className={`flex flex-col gap-4 p-4 sm:p-5 ${theme.dashboardCanvas}`}>
-          <DashboardSection
+          <PreviewMetricsGrid
+            kpiTab={kpiTab}
+            visibleOverviewKpis={visibleOverviewKpis}
+            visibleRevenueKpis={visibleRevenueKpis}
             theme={theme}
             compact={compact}
-            title={metricsTitle}
-            subtitle={rangeLabel}
-            subtitleAlign="center"
-          >
-            <PreviewMetricsGrid
-              kpiTab={kpiTab}
-              visibleOverviewKpis={visibleOverviewKpis}
-              visibleRevenueKpis={visibleRevenueKpis}
-              theme={theme}
-              compact={compact}
-              rangeLabel={rangeLabel}
-            />
-          </DashboardSection>
+            rangeLabel={rangeLabel}
+          />
 
           <DashboardSection
             theme={theme}
@@ -447,7 +437,7 @@ export function DashboardAppearancePreview({
           </DashboardSection>
 
           {kpiTab === "overview" ? (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid items-start gap-4 lg:grid-cols-2">
               <DashboardSection
                 theme={theme}
                 compact={compact}

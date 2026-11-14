@@ -20,7 +20,7 @@ function formatSync(iso?: string): string {
 }
 
 export function CustomerConnectionsPage() {
-  const { client, workspace, workspaceId } = useCustomerPortal();
+  const { client, workspace, workspaceId, theme } = useCustomerPortal();
   const routes = dashboardRoutesForPathname(usePathname());
 
   if (!client || !workspace) {
@@ -33,7 +33,7 @@ export function CustomerConnectionsPage() {
     <DashboardPageFrame>
       <div className="space-y-6">
       <div>
-        <p className="text-sm font-semibold uppercase tracking-wide text-purple">
+        <p className={`text-sm font-semibold uppercase tracking-wide ${theme.metricValueA}`}>
           {workspace.label}
         </p>
         <h1 className="mt-1 text-2xl font-semibold text-ink">Data connections</h1>
@@ -44,7 +44,7 @@ export function CustomerConnectionsPage() {
       </div>
 
       {connections.length === 0 ? (
-        <div className="rounded-xl border border-purple-100 bg-purple-50/30 p-5 text-sm text-ink">
+        <div className={`rounded-xl border p-5 text-sm text-ink ${theme.detailPanelBorder} ${theme.badge}`}>
           No connections listed yet. They appear when scope is confirmed in admin.
         </div>
       ) : (
@@ -52,7 +52,7 @@ export function CustomerConnectionsPage() {
           {connections.map((conn) => (
             <li
               key={conn.id}
-              className="rounded-xl border border-purple-100 bg-white px-4 py-4 shadow-soft"
+              className={`rounded-xl border bg-white px-4 py-4 shadow-soft ${theme.detailPanelBorder}`}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -61,7 +61,7 @@ export function CustomerConnectionsPage() {
                     Provider: {conn.provider ?? conn.label}
                   </p>
                 </div>
-                <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-dark">
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${theme.badge} ${theme.metricValueA}`}>
                   {CONNECTION_STATUS_LABELS[conn.demoStatus]}
                 </span>
               </div>
@@ -114,7 +114,7 @@ export function CustomerConnectionsPage() {
         </ul>
       )}
 
-      <div className="space-y-3 border-t border-purple-100 pt-6">
+      <div className={`space-y-3 border-t pt-6 ${theme.detailPanelBorder}`}>
         <h2 className="text-lg font-semibold text-ink">Available connections</h2>
         <p className="text-sm text-ink-muted">
           Connect actions appear only for integrations that are operational and
@@ -130,7 +130,7 @@ export function CustomerConnectionsPage() {
 
       <Link
         href={routes.home}
-        className="inline-block text-sm font-semibold text-purple hover:text-purple-dark"
+        className={`inline-block text-sm font-semibold ${theme.metricValueA} ${theme.linkAccentHover}`}
       >
         ← Back to home
       </Link>

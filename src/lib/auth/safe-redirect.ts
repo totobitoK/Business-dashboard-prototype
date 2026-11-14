@@ -1,4 +1,4 @@
-const LIVE_POST_LOGIN_PREFIXES = ["/dashboard", "/admin"] as const;
+const LIVE_POST_LOGIN_PREFIXES = ["/dashboard", "/admin", "/onboarding"] as const;
 
 /**
  * Restrict post-login redirects to same-origin relative live app paths.

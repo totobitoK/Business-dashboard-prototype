@@ -62,7 +62,8 @@ export function CustomerSettingsPage() {
         <p className="mt-2 max-w-2xl text-sm text-ink-muted">
           Theme, compact layout, KPI cards, and widget order are saved in this browser. Saved
           purple, forest, and ocean preferences open as RavenView Indigo, Evergreen Slate, and
-          Porcelain. They do not change connection permissions or financial records.
+          Espresso. Harbor, Carbon, and Ash follow the same layout. They do not change
+          connection permissions or financial records.
         </p>
       </div>
 
@@ -101,7 +102,7 @@ export function CustomerSettingsPage() {
                       checked={selected}
                       onChange={() => updateSettings({ themeId: t.id as WorkspaceThemeId })}
                     />
-                    <span className={`block h-2 rounded-full ${t.header}`} />
+                    <span className={`block h-2 rounded-full ${t.pickerBar ?? t.header}`} />
                     <span className="mt-2 block text-sm font-semibold text-ink">{t.name}</span>
                   </label>
                 );

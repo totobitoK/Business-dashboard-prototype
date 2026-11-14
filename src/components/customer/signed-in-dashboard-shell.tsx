@@ -5,7 +5,7 @@ import { Suspense, useCallback, useEffect, useState, type ReactNode } from "reac
 import { CustomerSettingsPage } from "@/components/customer/CustomerSettingsPage";
 import { selectMountedDashboardSection } from "@/components/customer/dashboard-section-context";
 import { SignedInNavContext } from "@/components/customer/signed-in-nav-context";
-import type { DashboardSectionId } from "@/lib/dashboard-section-routes";
+import { dashboardBaseFromPathname, type DashboardSectionId } from "@/lib/dashboard-section-routes";
 
 /**
  * Settings is a different route, so a normal click waits on the server and then
@@ -14,7 +14,8 @@ import type { DashboardSectionId } from "@/lib/dashboard-section-routes";
  */
 export function SignedInDashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const canSwap = pathname === "/dashboard";
+  const dashboardHome = dashboardBaseFromPathname(pathname);
+  const canSwap = pathname === dashboardHome;
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
@@ -23,19 +24,19 @@ export function SignedInDashboardShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function onPopState() {
-      setShowSettings(window.location.pathname.startsWith("/dashboard/settings"));
+      setShowSettings(window.location.pathname.startsWith(`${dashboardHome}/settings`));
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [dashboardHome]);
 
   const openSettings = useCallback(() => {
     setShowSettings(true);
     const url = new URL(window.location.href);
-    url.pathname = "/dashboard/settings";
+    url.pathname = `${dashboardHome}/settings`;
     url.searchParams.delete("section");
     window.history.pushState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, []);
+  }, [dashboardHome]);
 
   const openDashboard = useCallback((section?: DashboardSectionId) => {
     setShowSettings(false);

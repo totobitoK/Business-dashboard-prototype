@@ -1,18 +1,32 @@
 "use client";
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { chartYAxisMax, formatChartCurrency } from "@/lib/format-chart-currency";
+import { chartYAxisTicks, formatChartCurrency } from "@/lib/format-chart-currency";
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import type { TrendBucket } from "@/lib/workspace-analytics";
 
 const PAD = { top: 10, right: 16, bottom: 30, left: 52 };
-const X_INSET = 24;
 
 const DEFAULT_CHART_HEIGHT = 132;
 
-function buildPath(points: { x: number; y: number }[]): string {
+/** Cubic curve through each bucket so the trend reads as a flow, not a polyline. */
+function buildPath(points: { x: number; y: number }[], floorY: number, ceilY: number): string {
   if (points.length === 0) return "";
-  return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const clamp = (y: number) => Math.min(ceilY, Math.max(floorY, y));
+  let d = `M ${points[0]!.x.toFixed(1)} ${points[0]!.y.toFixed(1)}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] ?? points[i]!;
+    const p1 = points[i]!;
+    const p2 = points[i + 1]!;
+    const p3 = points[i + 2] ?? p2;
+    const pull = 0.32;
+    const c1x = p1.x + (p2.x - p0.x) * pull;
+    const c1y = clamp(p1.y + (p2.y - p0.y) * pull);
+    const c2x = p2.x - (p3.x - p1.x) * pull;
+    const c2y = clamp(p2.y - (p3.y - p1.y) * pull);
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
 }
 
 function numericDay(iso: string): string {
@@ -31,10 +45,13 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
   trend,
   theme,
   height = DEFAULT_CHART_HEIGHT,
+  yTickCount = 3,
 }: {
   trend: TrendBucket[];
   theme: LayoutCustomizeTheme;
   height?: number;
+  /** Revenue uses two labels. Overview keeps three. */
+  yTickCount?: 2 | 3;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -65,22 +82,17 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
   const layout = useMemo(() => {
     const width = Math.max(containerWidth, 1);
     const plotW = Math.max(width - PAD.left - PAD.right, 1);
-    const innerW = Math.max(plotW - 2 * X_INSET, 1);
     const plotH = height - PAD.top - PAD.bottom;
     const maxAmount = Math.max(...trend.map((t) => t.amount), 0);
-    const yMax = chartYAxisMax(maxAmount);
+    const yTicks = chartYAxisTicks(maxAmount, yTickCount);
+    const yMax = yTicks[yTicks.length - 1] ?? 0;
     const lastIdx = trend.length - 1;
 
     const points = trend.map((b, i) => {
-      const x =
-        PAD.left +
-        X_INSET +
-        (trend.length <= 1 ? innerW / 2 : (i / lastIdx) * innerW);
+      const x = PAD.left + (trend.length <= 1 ? plotW / 2 : (i / lastIdx) * plotW);
       const y = PAD.top + plotH - (yMax > 0 ? (b.amount / yMax) * plotH : 0);
       return { x, y, ...b };
     });
-
-    const yTicks = [0, yMax / 2, yMax];
 
     const hoverBands = points.map((p, i) => {
       const left =
@@ -104,7 +116,7 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
       hoverBandTop,
       hoverBandHeight,
     };
-  }, [trend, containerWidth, labelY, height]);
+  }, [trend, containerWidth, labelY, height, yTickCount]);
 
   const {
     width,
@@ -135,31 +147,22 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
             {yTicks.map((tick) => {
               const y = PAD.top + plotH - (yMax > 0 ? (tick / yMax) * plotH : 0);
               return (
-                <g key={tick}>
-                  <line
-                    x1={PAD.left}
-                    y1={y}
-                    x2={width - PAD.right}
-                    y2={y}
-                    className={theme.chartGridLine}
-                    strokeWidth={1}
-                  />
-                  <text
-                    x={PAD.left - 8}
-                    y={y + 3}
-                    textAnchor="end"
-                    className="fill-ink-muted text-[10px] font-medium"
-                  >
-                    {formatChartCurrency(tick)}
-                  </text>
-                </g>
+                <text
+                  key={tick}
+                  x={PAD.left - 8}
+                  y={y + 3}
+                  textAnchor="end"
+                  className="fill-ink-muted text-[10px] font-medium"
+                >
+                  {formatChartCurrency(tick)}
+                </text>
               );
             })}
 
             <line
               x1={PAD.left}
-              y1={PAD.top + plotH}
-              x2={width - PAD.right}
+              y1={PAD.top}
+              x2={PAD.left}
               y2={PAD.top + plotH}
               className={theme.chartAxisLine}
               strokeWidth={1}
@@ -168,15 +171,15 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
             {points.length > 0 && (
               <>
                 <path
-                  d={`${buildPath(points)} L ${points[lastIdx]!.x.toFixed(1)} ${(PAD.top + plotH).toFixed(1)} L ${points[0]!.x.toFixed(1)} ${(PAD.top + plotH).toFixed(1)} Z`}
+                  d={`${buildPath(points, PAD.top, PAD.top + plotH)} L ${points[lastIdx]!.x.toFixed(1)} ${(PAD.top + plotH).toFixed(1)} L ${points[0]!.x.toFixed(1)} ${(PAD.top + plotH).toFixed(1)} Z`}
                   className={theme.chartArea}
                   stroke="none"
                 />
                 <path
-                  d={buildPath(points)}
+                  d={buildPath(points, PAD.top, PAD.top + plotH)}
                   fill="none"
                   className={theme.chartLine}
-                  strokeWidth={2}
+                  strokeWidth={2.25}
                   strokeLinejoin="round"
                   strokeLinecap="round"
                 />
@@ -244,23 +247,25 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
         )}
       </p>
 
-      <table className="sr-only">
-        <caption>Collections trend data</caption>
-        <thead>
-          <tr>
-            <th>Period</th>
-            <th>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {trend.map((b) => (
-            <tr key={b.start}>
-              <td>{b.label}</td>
-              <td>{b.amount}</td>
+      <div className="sr-only">
+        <table>
+          <caption>Collections trend data</caption>
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>Amount</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {trend.map((b) => (
+              <tr key={b.start}>
+                <td>{b.label}</td>
+                <td>{b.amount}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 });

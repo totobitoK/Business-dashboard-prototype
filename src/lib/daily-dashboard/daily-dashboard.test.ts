@@ -14,7 +14,10 @@ describe("daily dashboard themes", () => {
   it("maps saved appearance ids onto the three client themes", () => {
     expect(resolveDailyTheme("purple").name).toBe("RavenView Indigo");
     expect(resolveDailyTheme("forest").name).toBe("Evergreen Slate");
-    expect(resolveDailyTheme("ocean").name).toBe("Porcelain");
+    expect(resolveDailyTheme("ocean").name).toBe("Espresso");
+    expect(resolveDailyTheme("harbor").name).toBe("Harbor");
+    expect(resolveDailyTheme("carbon").name).toBe("Carbon");
+    expect(resolveDailyTheme("ash").name).toBe("Ash");
     expect(resolveDailyTheme("missing").id).toBe("purple");
   });
 });
@@ -198,6 +201,74 @@ describe("live figures in the restored sections", () => {
     });
     expect(figures.paymentsMessage).toBeNull();
     expect(figures.paymentsAmount).toBe(0);
+    expect(figures.paymentsAreNet).toBe(false);
+    expect(figures.freshnessNote).toBeNull();
     expect(figures.revenueMessage).toMatch(/revenue/i);
+  });
+
+  it("matches the payments figure to net collections and names a stale sync", () => {
+    const snapshot = emptyLiveSnapshot("Acme Heating", "2026-11-06");
+    snapshot.collections = {
+      ...snapshot.collections,
+      state: "stale",
+      showTotals: true,
+      messages: [],
+      transactions: [
+        {
+          id: "pay",
+          kind: "payment",
+          locationName: null,
+          createdAt: "2026-11-06T15:00:00Z",
+          reportingDate: "2026-11-06",
+          currency: "USD",
+          amountMinor: 1010,
+          sourceType: null,
+        },
+        {
+          id: "refund",
+          kind: "refund",
+          locationName: null,
+          createdAt: "2026-11-06T16:00:00Z",
+          reportingDate: "2026-11-06",
+          currency: "USD",
+          amountMinor: 252,
+          sourceType: null,
+        },
+      ],
+      loadedCap: 40,
+    };
+    snapshot.connectors = [
+      {
+        id: "quickbooks",
+        label: "QuickBooks",
+        state: "stale",
+        detail: "",
+        lastSuccessfulSyncAt: "2026-11-06T15:00:00Z",
+      },
+      {
+        id: "square",
+        label: "Square",
+        state: "stale",
+        detail: "",
+        lastSuccessfulSyncAt: "2026-11-06T17:00:00Z",
+      },
+      {
+        id: "google-calendar",
+        label: "Google Calendar",
+        state: "unavailable",
+        detail: "",
+        lastSuccessfulSyncAt: null,
+      },
+    ];
+    const figures = describeLiveFigures(snapshot, {
+      start: "2026-10-31",
+      end: "2026-11-06",
+    });
+    expect(figures.paymentsAmount).toBe(7.58);
+    expect(figures.paymentsAreNet).toBe(true);
+    expect(figures.trend?.at(-1)?.amount).toBe(7.58);
+    expect(figures.freshnessNote).toBe(
+      "QuickBooks and Square last synced more than a day ago, so these figures may be out of date."
+    );
   });
 });

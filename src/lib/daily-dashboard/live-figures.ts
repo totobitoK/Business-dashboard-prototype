@@ -26,6 +26,10 @@ export type LiveFigures = {
   paymentsMessage: string | null;
   paymentsAmount: number | null;
   paymentsCurrency: string | null;
+  /** True when the payments figure subtracts refunds, matching the collections chart. */
+  paymentsAreNet: boolean;
+  /** Shown with the figures when a connector sync is more than a day old. */
+  freshnessNote: string | null;
   jobsMessage: string;
   receivablesMessage: string | null;
   revenueMessage: string;
@@ -47,6 +51,7 @@ export function describeLiveFigures(
     : snapshot.schedule.messages[0] ?? "Appointments are unavailable.";
   return {
     ...collections,
+    freshnessNote: freshnessNote(snapshot),
     jobsMessage: LIVE_JOBS_UNAVAILABLE,
     receivablesMessage: snapshot.receivables.showBalances
       ? null
@@ -110,12 +115,28 @@ export function liveAppointments(snapshot: DailyDashboardSnapshot): BusinessAppo
   });
 }
 
+function freshnessNote(snapshot: DailyDashboardSnapshot): string | null {
+  const stale = snapshot.connectors.filter((connector) => connector.state === "stale");
+  if (stale.length === 0) return null;
+  const names = stale.map((connector) => connector.label);
+  const who =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${who} last synced more than a day ago, so these figures may be out of date.`;
+}
+
 function collectionFigures(
   snapshot: DailyDashboardSnapshot,
   range: { start: string; end: string }
 ): Pick<
   LiveFigures,
-  "paymentsMessage" | "paymentsAmount" | "paymentsCurrency" | "chartMessage" | "trend"
+  | "paymentsMessage"
+  | "paymentsAmount"
+  | "paymentsCurrency"
+  | "paymentsAreNet"
+  | "chartMessage"
+  | "trend"
 > {
   const collections = snapshot.collections;
   if (!collections.showTotals) {
@@ -124,6 +145,7 @@ function collectionFigures(
       paymentsMessage: message,
       paymentsAmount: null,
       paymentsCurrency: null,
+      paymentsAreNet: false,
       chartMessage: message,
       trend: null,
     };
@@ -142,6 +164,7 @@ function collectionFigures(
       paymentsMessage: message,
       paymentsAmount: null,
       paymentsCurrency: null,
+      paymentsAreNet: false,
       chartMessage: message,
       trend: null,
     };
@@ -151,6 +174,7 @@ function collectionFigures(
       paymentsMessage: "Payments stay separated by currency, so one combined total is not shown.",
       paymentsAmount: null,
       paymentsCurrency: summary.currency,
+      paymentsAreNet: false,
       chartMessage: null,
       trend: summary.showChart ? summary.trend : null,
     };
@@ -158,11 +182,12 @@ function collectionFigures(
 
   const currency = summary.currency ?? "USD";
   const row = summary.currencies.find((item) => item.currency === currency);
-  const amount = row ? row.paymentsMinor / 10 ** currencyExponent(currency) : 0;
+  const amount = row ? row.netMinor / 10 ** currencyExponent(currency) : 0;
   return {
     paymentsMessage: null,
     paymentsAmount: amount,
     paymentsCurrency: currency,
+    paymentsAreNet: (row?.refundsMinor ?? 0) > 0,
     chartMessage: summary.showChart
       ? null
       : summary.verifiedEmpty
