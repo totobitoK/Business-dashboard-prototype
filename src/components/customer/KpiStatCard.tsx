@@ -62,7 +62,7 @@ function TrendArrow({ up }: { up: boolean }) {
       <path
         d={up ? "M7 17 17 7M9 7h8v8" : "M7 7l10 10M17 9v8h-8"}
         stroke="currentColor"
-        strokeWidth={2}
+        strokeWidth={3}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -70,13 +70,9 @@ function TrendArrow({ up }: { up: boolean }) {
   );
 }
 
-function deltaClass(
-  tone: "neutral" | "up" | "down" | undefined,
-  higherIsBetter: boolean
-): string {
+function deltaClass(tone: "neutral" | "up" | "down" | undefined): string {
   if (!tone || tone === "neutral") return "text-ink-muted";
-  const favorable = tone === "up" ? higherIsBetter : !higherIsBetter;
-  return favorable ? "text-emerald-700" : "text-amber-800";
+  return "text-ink";
 }
 
 export function KpiStatCard({
@@ -115,7 +111,7 @@ export function KpiStatCard({
           <p className="mt-0.5 text-[10px] text-ink-muted">{sub}</p>
           {compare ? (
             <p
-              className={`mt-1.5 flex items-center gap-1 text-[11px] font-medium ${deltaClass(compareTone, higherIsBetter)}`}
+              className={`mt-1.5 flex items-center gap-1 text-[11px] font-medium ${deltaClass(compareTone)}`}
             >
               {compareTone === "up" || compareTone === "down" ? (
                 <TrendArrow up={compareTone === "up"} />

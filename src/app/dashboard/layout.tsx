@@ -3,12 +3,11 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { CustomerPortalShell } from "@/components/customer/CustomerPortalShell";
-import { CustomerPortalWorkspaceGate } from "@/components/customer/CustomerPortalWorkspaceGate";
-import { getAuthContext } from "@/lib/auth/authorization";
+import { getDashboardRequest } from "@/lib/auth/dashboard-request";
 import { getMarketingPageTitle } from "@/lib/branding";
 import { ClientStoreProvider } from "@/lib/client-store";
 import { CustomerPortalProvider, CustomerPortalQuerySync } from "@/lib/customer-portal-context";
-import { createClient } from "@/lib/supabase/server";
+import { SignedInDashboardShell } from "@/components/customer/signed-in-dashboard-shell";
 
 export const metadata: Metadata = {
   title: `Customer portal | ${getMarketingPageTitle().split("|")[0]?.trim()}`,
@@ -18,8 +17,7 @@ export const metadata: Metadata = {
 export default async function LiveDashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const supabase = await createClient();
-  const ctx = await getAuthContext(supabase);
+  const { supabase, ctx } = await getDashboardRequest();
   if (!ctx) {
     redirect("/login?next=/dashboard");
   }
@@ -46,7 +44,7 @@ export default async function LiveDashboardLayout({
       <CustomerPortalProvider businessName={businessName}>
         <CustomerPortalQuerySync />
         <CustomerPortalShell fillScreen>
-          <CustomerPortalWorkspaceGate>{children}</CustomerPortalWorkspaceGate>
+          <SignedInDashboardShell>{children}</SignedInDashboardShell>
         </CustomerPortalShell>
       </CustomerPortalProvider>
     </ClientStoreProvider>

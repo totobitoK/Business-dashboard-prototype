@@ -9,6 +9,7 @@ import { useCustomerPortal } from "@/lib/customer-portal-context";
 import type { WorkspaceThemeId } from "@/lib/customer-portal-context";
 import { DashboardAppearancePreview } from "@/components/customer/DashboardAppearancePreview";
 import { DashboardPageFrame } from "@/components/customer/DashboardWorkspaceNav";
+import { useSignedInNav } from "@/components/customer/signed-in-nav-context";
 import { DashboardKpiChipPicker } from "@/components/customer/DashboardKpiChipPicker";
 import { DashboardChipGroup } from "@/components/customer/dashboard-controls";
 import {
@@ -24,6 +25,7 @@ import {
 export function CustomerSettingsPage() {
   const {
     workspace,
+    businessName,
     settings,
     updateSettings,
     resetLayoutToDefaults,
@@ -34,10 +36,11 @@ export function CustomerSettingsPage() {
     theme,
   } = useCustomerPortal();
   const routes = dashboardRoutesForPathname(usePathname());
+  const signedInNav = useSignedInNav();
   const [confirmReset, setConfirmReset] = useState(false);
   const [kpiTab, setKpiTab] = useState<"overview" | "revenue">("overview");
 
-  if (!workspace) return null;
+  if (!workspace && !businessName) return null;
 
   const visibleOverviewKpis = visibleKpiIds(
     settings.overviewKpiOrder,
@@ -53,12 +56,14 @@ export function CustomerSettingsPage() {
       <div className="space-y-8">
       <div>
         <p className={`text-sm font-semibold uppercase tracking-wide ${theme.metricValueA}`}>
-          {workspace.label}
+          {businessName}
         </p>
         <h1 className="mt-1 text-2xl font-semibold text-ink">Appearance & layout</h1>
         <p className="mt-2 max-w-2xl text-sm text-ink-muted">
-          Saved per demo workspace in your browser only — does not change CRM records,
-          connection permissions, or financial source data.
+          Theme, compact layout, KPI cards, and widget order are saved in this browser. Saved
+          purple, forest, and ocean preferences open as RavenView Indigo, Evergreen Slate, and
+          Espresso. Harbor, Carbon, and Ash follow the same layout. They do not change
+          connection permissions or financial records.
         </p>
       </div>
 
@@ -71,7 +76,7 @@ export function CustomerSettingsPage() {
             Color theme & preview
           </h2>
           <p className="mt-1 text-sm text-ink-muted">
-            Pick a theme and see how the sample dashboard will look on Overview and Revenue.
+            Pick a theme and preview the same dashboard on Overview and Revenue.
           </p>
         </div>
 
@@ -97,7 +102,7 @@ export function CustomerSettingsPage() {
                       checked={selected}
                       onChange={() => updateSettings({ themeId: t.id as WorkspaceThemeId })}
                     />
-                    <span className={`block h-2 rounded-full ${t.header}`} />
+                    <span className={`block h-2 rounded-full ${t.pickerBar ?? t.header}`} />
                     <span className="mt-2 block text-sm font-semibold text-ink">{t.name}</span>
                   </label>
                 );
@@ -257,6 +262,13 @@ export function CustomerSettingsPage() {
 
       <Link
         href={routes.home}
+        onClick={(event) => {
+          if (!signedInNav?.canSwap || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+          }
+          event.preventDefault();
+          signedInNav.showDashboard("overview");
+        }}
         className={`inline-block text-sm font-semibold hover:opacity-80 ${theme.metricValueA}`}
       >
         ← Back to home

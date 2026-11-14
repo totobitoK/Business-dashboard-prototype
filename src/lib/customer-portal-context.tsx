@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { LAYOUT_CUSTOMIZE_THEMES } from "./layout-customize-themes";
 import {
@@ -26,6 +27,8 @@ import {
 
 const WORKSPACE_STORAGE_KEY = "customer-portal-demo-workspace";
 const SETTINGS_STORAGE_KEY = "customer-portal-workspace-settings";
+/** Signed-in shell id. It is not a demo workspace, and it does not keep its own layout. */
+const SIGNED_IN_APPEARANCE_KEY = "signed-in";
 
 export type WorkspaceThemeId = (typeof LAYOUT_CUSTOMIZE_THEMES)[number]["id"];
 
@@ -42,7 +45,7 @@ function loadSettings(): SettingsMap {
     const parsed = JSON.parse(raw) as SettingsMap;
     const out: SettingsMap = {};
     for (const [id, partial] of Object.entries(parsed)) {
-      if (isValidWorkspaceId(id)) {
+      if (isValidWorkspaceId(id) || id === SIGNED_IN_APPEARANCE_KEY) {
         out[id] = normalizeLayoutSettings(partial);
       }
     }
@@ -69,15 +72,22 @@ export function CustomerPortalProvider({
   businessName?: string;
 }) {
   const { clients } = useClientStore();
-  const [workspaceId, setWorkspaceIdState] = useState(getDefaultWorkspaceId);
+  const signedInCompany = Boolean(businessNameOverride?.trim());
+  const [workspaceId, setWorkspaceIdState] = useState(() =>
+    signedInCompany ? SIGNED_IN_APPEARANCE_KEY : getDefaultWorkspaceId()
+  );
   const [workspaceInvalid, setWorkspaceInvalid] = useState(false);
   const [settingsMap, setSettingsMap] = useState<SettingsMap>({});
   const [portalSynced, setPortalSynced] = useState(false);
   const [workspaceSessionKey, setWorkspaceSessionKey] = useState(0);
+  const appearanceId = signedInCompany ? getDefaultWorkspaceId() : workspaceId;
 
   useEffect(() => {
     const fromQuery = resolveWorkspaceIdFromQuery();
-    if (fromQuery === "__invalid__") {
+    if (signedInCompany) {
+      setWorkspaceIdState(SIGNED_IN_APPEARANCE_KEY);
+      setWorkspaceInvalid(false);
+    } else if (fromQuery === "__invalid__") {
       setWorkspaceInvalid(true);
       setWorkspaceIdState("");
     } else if (fromQuery) {
@@ -98,10 +108,10 @@ export function CustomerPortalProvider({
     }
     setSettingsMap(loadSettings());
     setPortalSynced(true);
-  }, []);
+  }, [signedInCompany]);
 
   useEffect(() => {
-    if (!portalSynced || workspaceInvalid || !workspaceId) return;
+    if (!portalSynced || workspaceInvalid || !isValidWorkspaceId(workspaceId)) return;
     localStorage.setItem(WORKSPACE_STORAGE_KEY, workspaceId);
   }, [workspaceId, portalSynced, workspaceInvalid]);
 
@@ -119,8 +129,10 @@ export function CustomerPortalProvider({
     : undefined;
 
   const settings = normalizeLayoutSettings(
-    workspaceId && !workspaceInvalid
-      ? settingsMap[workspaceId] ?? defaultSettings
+    appearanceId && !workspaceInvalid
+      ? settingsMap[appearanceId] ??
+          (signedInCompany ? settingsMap[SIGNED_IN_APPEARANCE_KEY] : undefined) ??
+          defaultSettings
       : defaultSettings
   );
 
@@ -135,42 +147,46 @@ export function CustomerPortalProvider({
     "Your company";
 
   const setWorkspaceId = useCallback((id: string) => {
-    if (!isValidWorkspaceId(id)) return;
+    if (signedInCompany || !isValidWorkspaceId(id)) return;
     setWorkspaceInvalid(false);
     setWorkspaceIdState((prev) => {
       if (prev === id) return prev;
       setWorkspaceSessionKey((k) => k + 1);
       return id;
     });
-  }, []);
+  }, [signedInCompany]);
 
   const updateSettings = useCallback(
     (patch: Partial<WorkspaceAppearanceSettings>) => {
       if (workspaceInvalid || !workspaceId) return;
       setSettingsMap((prev) => ({
         ...prev,
-        [workspaceId]: normalizeLayoutSettings({
-          ...(prev[workspaceId] ?? defaultSettings),
+        [appearanceId]: normalizeLayoutSettings({
+          ...(prev[appearanceId] ??
+            (signedInCompany ? prev[SIGNED_IN_APPEARANCE_KEY] : undefined) ??
+            defaultSettings),
           ...patch,
         }),
       }));
     },
-    [workspaceId, workspaceInvalid]
+    [appearanceId, signedInCompany, workspaceId, workspaceInvalid]
   );
 
   const resetLayoutToDefaults = useCallback(() => {
     if (workspaceInvalid || !workspaceId) return;
     setSettingsMap((prev) => ({
       ...prev,
-      [workspaceId]: { ...DEFAULT_WORKSPACE_LAYOUT },
+      [appearanceId]: { ...DEFAULT_WORKSPACE_LAYOUT },
     }));
-  }, [workspaceId, workspaceInvalid]);
+  }, [appearanceId, signedInCompany, workspaceInvalid]);
 
   const moveWidget = useCallback(
     (id: DashboardWidgetId, direction: "up" | "down") => {
       if (workspaceInvalid || !workspaceId) return;
       setSettingsMap((prev) => {
-        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        const current = normalizeLayoutSettings(prev[appearanceId] ??
+          (signedInCompany ? prev[SIGNED_IN_APPEARANCE_KEY] : undefined) ??
+          defaultSettings);
         const order = [...current.widgetOrder];
         const idx = order.indexOf(id);
         if (idx < 0) return prev;
@@ -179,58 +195,64 @@ export function CustomerPortalProvider({
         [order[idx], order[swap]] = [order[swap], order[idx]];
         return {
           ...prev,
-          [workspaceId]: normalizeLayoutSettings({ ...current, widgetOrder: order }),
+          [appearanceId]: normalizeLayoutSettings({ ...current, widgetOrder: order }),
         };
       });
     },
-    [workspaceId, workspaceInvalid]
+    [appearanceId, signedInCompany, workspaceId, workspaceInvalid]
   );
 
   const toggleWidgetHidden = useCallback(
     (id: DashboardWidgetId) => {
       if (workspaceInvalid || !workspaceId) return;
       setSettingsMap((prev) => {
-        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        const current = normalizeLayoutSettings(prev[appearanceId] ??
+          (signedInCompany ? prev[SIGNED_IN_APPEARANCE_KEY] : undefined) ??
+          defaultSettings);
         const hidden = new Set(current.hiddenWidgets);
         if (hidden.has(id)) hidden.delete(id);
         else hidden.add(id);
         return {
           ...prev,
-          [workspaceId]: normalizeLayoutSettings({
+          [appearanceId]: normalizeLayoutSettings({
             ...current,
             hiddenWidgets: [...hidden],
           }),
         };
       });
     },
-    [workspaceId, workspaceInvalid]
+    [appearanceId, signedInCompany, workspaceId, workspaceInvalid]
   );
 
   const moveOverviewKpi = useCallback(
     (id: OverviewKpiId, direction: "up" | "down") => {
       if (workspaceInvalid || !workspaceId) return;
       setSettingsMap((prev) => {
-        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        const current = normalizeLayoutSettings(prev[appearanceId] ??
+          (signedInCompany ? prev[SIGNED_IN_APPEARANCE_KEY] : undefined) ??
+          defaultSettings);
         return {
           ...prev,
-          [workspaceId]: normalizeLayoutSettings({
+          [appearanceId]: normalizeLayoutSettings({
             ...current,
             overviewKpiOrder: moveKpi(current.overviewKpiOrder, id, direction),
           }),
         };
       });
     },
-    [workspaceId, workspaceInvalid]
+    [appearanceId, signedInCompany, workspaceId, workspaceInvalid]
   );
 
   const toggleOverviewKpiHidden = useCallback(
     (id: OverviewKpiId) => {
       if (workspaceInvalid || !workspaceId) return;
       setSettingsMap((prev) => {
-        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        const current = normalizeLayoutSettings(prev[appearanceId] ??
+          (signedInCompany ? prev[SIGNED_IN_APPEARANCE_KEY] : undefined) ??
+          defaultSettings);
         return {
           ...prev,
-          [workspaceId]: normalizeLayoutSettings({
+          [appearanceId]: normalizeLayoutSettings({
             ...current,
             overviewHiddenKpis: toggleKpiHidden(
               current.overviewKpiOrder,
@@ -241,34 +263,38 @@ export function CustomerPortalProvider({
         };
       });
     },
-    [workspaceId, workspaceInvalid]
+    [appearanceId, signedInCompany, workspaceId, workspaceInvalid]
   );
 
   const moveRevenueKpi = useCallback(
     (id: RevenueKpiId, direction: "up" | "down") => {
       if (workspaceInvalid || !workspaceId) return;
       setSettingsMap((prev) => {
-        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        const current = normalizeLayoutSettings(prev[appearanceId] ??
+          (signedInCompany ? prev[SIGNED_IN_APPEARANCE_KEY] : undefined) ??
+          defaultSettings);
         return {
           ...prev,
-          [workspaceId]: normalizeLayoutSettings({
+          [appearanceId]: normalizeLayoutSettings({
             ...current,
             revenueKpiOrder: moveKpi(current.revenueKpiOrder, id, direction),
           }),
         };
       });
     },
-    [workspaceId, workspaceInvalid]
+    [appearanceId, signedInCompany, workspaceId, workspaceInvalid]
   );
 
   const toggleRevenueKpiHidden = useCallback(
     (id: RevenueKpiId) => {
       if (workspaceInvalid || !workspaceId) return;
       setSettingsMap((prev) => {
-        const current = normalizeLayoutSettings(prev[workspaceId] ?? defaultSettings);
+        const current = normalizeLayoutSettings(prev[appearanceId] ??
+          (signedInCompany ? prev[SIGNED_IN_APPEARANCE_KEY] : undefined) ??
+          defaultSettings);
         return {
           ...prev,
-          [workspaceId]: normalizeLayoutSettings({
+          [appearanceId]: normalizeLayoutSettings({
             ...current,
             revenueHiddenKpis: toggleKpiHidden(
               current.revenueKpiOrder,
@@ -279,7 +305,7 @@ export function CustomerPortalProvider({
         };
       });
     },
-    [workspaceId, workspaceInvalid]
+    [appearanceId, signedInCompany, workspaceId, workspaceInvalid]
   );
 
   const value = useMemo<CustomerPortalContextValue>(
@@ -334,9 +360,22 @@ export function CustomerPortalProvider({
 
 export function CustomerPortalQuerySync() {
   const { setWorkspaceId, liveSamplePreview } = useCustomerPortalShared();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (liveSamplePreview) return;
+    if (pathname.startsWith("/dashboard")) {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has("workspace")) return;
+      url.searchParams.delete("workspace");
+      const qs = url.searchParams.toString();
+      window.history.replaceState(
+        window.history.state,
+        "",
+        qs ? `${url.pathname}?${qs}` : url.pathname
+      );
+      return;
+    }
     function applyFromUrl() {
       const param = new URLSearchParams(window.location.search).get("workspace");
       if (param && isValidWorkspaceId(param)) {
@@ -346,7 +385,7 @@ export function CustomerPortalQuerySync() {
     applyFromUrl();
     window.addEventListener("popstate", applyFromUrl);
     return () => window.removeEventListener("popstate", applyFromUrl);
-  }, [setWorkspaceId, liveSamplePreview]);
+  }, [setWorkspaceId, liveSamplePreview, pathname]);
 
   return null;
 }

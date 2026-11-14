@@ -3,7 +3,7 @@ import { CustomerPortalDashboard } from "@/components/customer/CustomerPortalDas
 
 export default function LiveCustomerDashboardPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-ink-muted">Loading dashboard…</p>}>
+    <Suspense fallback={<p className="p-6 text-sm text-zinc-500">Loading dashboard…</p>}>
       <CustomerPortalDashboard />
     </Suspense>
   );

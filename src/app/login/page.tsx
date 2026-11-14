@@ -11,11 +11,16 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const next = sanitizeAuthRedirectPath(searchParams.get("next"));
   const configError = searchParams.get("error") === "config";
+  const noCompany = searchParams.get("error") === "no_company";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(
-    configError ? "Supabase is not configured. Add env vars to .env.local." : null
+    configError
+      ? "Supabase is not configured. Add env vars to .env.local."
+      : noCompany
+        ? "This account is not linked to a company."
+        : null
   );
   const [loading, setLoading] = useState(false);
 

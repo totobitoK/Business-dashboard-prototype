@@ -7,7 +7,7 @@ import { LiveSquarePanel, type SquareLocationChoice } from "@/components/square/
 import { getGoogleCalendarMembershipRole } from "@/lib/actions/google-calendar";
 import { getQuickBooksMembershipRole } from "@/lib/actions/quickbooks";
 import { getSquareMembershipRole } from "@/lib/actions/square";
-import { listMemberCompanies } from "@/lib/db/projects.server";
+import { getAuthContext } from "@/lib/auth/authorization";
 import { isGoogleCalendarIntegrationConfigured } from "@/lib/google-calendar/config";
 import { isQuickBooksConnectAllowed } from "@/lib/quickbooks/config";
 import { isSquareConnectAllowed } from "@/lib/square/config";
@@ -21,9 +21,9 @@ export default async function LiveDashboardConnectionsPage({
   searchParams: Promise<{ google?: string; quickbooks?: string; square?: string }>;
 }) {
   const sp = await searchParams;
-  const companies = await listMemberCompanies();
-  const companyId = companies[0]?.id;
   const supabase = await createClient();
+  const ctx = await getAuthContext(supabase);
+  const companyId = ctx?.companyIds[0];
 
   if (!companyId) {
     return (

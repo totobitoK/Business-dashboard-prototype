@@ -41,6 +41,10 @@ export interface BusinessInvoice {
   status: "Open" | "Past due" | "Paid";
   lineSummary: string;
   sourceLabel: string;
+  /** Present when the source invoice can be opened, such as a QuickBooks invoice URL. */
+  href?: string | null;
+  /** Set when an invoice is denominated in a currency other than the company default. */
+  currency?: string | null;
 }
 
 export type BusinessJobStatus = "completed" | "scheduled" | "canceled" | "in_progress";

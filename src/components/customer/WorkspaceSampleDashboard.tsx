@@ -12,18 +12,29 @@ import {
   type ReactNode,
 } from "react";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { CountUpMoney } from "@/components/customer/CountUpFigure";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import {
   formatCalendarDateDisplay,
   formatNaiveBusinessDateTime,
   formatRangeForDisplay,
+  isDateInRange,
   type ReportingPeriodPreset,
 } from "@/lib/workspace-reporting-period";
 import {
   DEMO_AS_OF_DATE,
   getWorkspaceBusinessData,
+  type BusinessInvoice,
   type BusinessJob,
 } from "@/lib/workspace-business-data";
+import {
+  defaultLiveRangeStart,
+  describeLiveFigures,
+  liveBusinessData,
+  type LiveFigures,
+} from "@/lib/daily-dashboard/live-figures";
+import type { DailyDashboardSnapshot } from "@/lib/daily-dashboard/types";
+import { WORKSPACE_ALPINE_HVAC, isValidWorkspaceId } from "@/lib/customer-workspaces";
 import {
   buildCollectionsTrend,
   computeRevenueOverviewMetrics,
@@ -47,7 +58,11 @@ import {
   sumPaymentsInRange,
 } from "@/lib/workspace-analytics";
 import { DashboardRangeCalendar } from "@/components/customer/DashboardDatePicker";
-import { DashboardTopBar } from "@/components/customer/DashboardWorkspaceNav";
+import { DashboardShell } from "@/components/customer/DashboardWorkspaceNav";
+import {
+  keepDashboardSectionClick,
+  useDashboardSection,
+} from "@/components/customer/dashboard-section-context";
 import {
   dashboardRoutesForPathname,
   dashboardSectionHref,
@@ -62,7 +77,7 @@ import {
   DashboardSecondaryButton,
   DashboardSelect,
 } from "@/components/customer/dashboard-controls";
-import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
+import { isLightDashboardTheme, type LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import { getOperationsListDensity } from "@/lib/operations-list-density";
 import {
   OVERVIEW_KPI_LABELS,
@@ -189,15 +204,65 @@ const REVENUE_WIDGETS: DashboardWidgetId[] = [
   "metrics",
   "collections_chart",
   "invoices",
-  "needs_attention",
 ];
+
+const OVERVIEW_CHART_HEIGHT = 196;
+
+function openInvoiceGroups(invoices: BusinessInvoice[]): { currency: string; amount: number; count: number }[] {
+  const groups = new Map<string, { amount: number; count: number }>();
+  for (const invoice of invoices) {
+    if (invoice.balanceDue <= 0 || invoice.status === "Paid") continue;
+    const currency = invoice.currency?.trim() || "USD";
+    const current = groups.get(currency) ?? { amount: 0, count: 0 };
+    current.amount += invoice.balanceDue;
+    current.count += 1;
+    groups.set(currency, current);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === "USD" ? -1 : b === "USD" ? 1 : a.localeCompare(b)))
+    .map(([currency, value]) => ({ currency, ...value }));
+}
+
+function formatGroupedAmount(amount: number, currency: string, colorClass: string) {
+  return (
+    <CountUpMoney
+      amount={amount}
+      currency={currency}
+      colorClass={colorClass}
+      className="text-2xl font-semibold tabular-nums leading-none"
+    />
+  );
+}
+
+function largestOpenInvoices(invoices: BusinessInvoice[], limit: number) {
+  return invoices
+    .filter((invoice) => invoice.balanceDue > 0 && invoice.status !== "Paid")
+    .sort(
+      (a, b) => b.balanceDue - a.balanceDue || a.customer.localeCompare(b.customer)
+    )
+    .slice(0, limit);
+}
+
+function completedJobAmount(
+  jobs: BusinessJob[],
+  range: { start: string; end: string; preset: ReportingPeriodPreset }
+): number {
+  return jobs.reduce((sum, job) => {
+    if (job.status !== "completed" || !job.completedDate) return sum;
+    if (!isDateInRange(job.completedDate, range)) return sum;
+    return sum + job.amount;
+  }, 0);
+}
 
 export function WorkspaceSampleDashboard({
   changesRequestedNote,
   mode = "overview",
+  liveSnapshot = null,
 }: {
   changesRequestedNote?: string;
   mode?: "overview" | "revenue";
+  /** Signed-in company read. Demo routes leave this null and use sample records. */
+  liveSnapshot?: DailyDashboardSnapshot | null;
 }) {
   const {
     workspaceId,
@@ -206,16 +271,16 @@ export function WorkspaceSampleDashboard({
     workspaceSessionKey,
     navigationBase,
     liveSamplePreview,
-    businessName,
   } = useCustomerPortal();
   const pathname = usePathname();
+  const selectSection = useDashboardSection()?.selectSection;
   const portalRoutes = dashboardRoutesForPathname(pathname);
   const sectionLinkBase = navigationBase ?? portalRoutes.home;
-  const data = getWorkspaceBusinessData(workspaceId);
-
   const [preset, setPreset] = useState<ReportingPeriodPreset>("custom");
-  const [customStart, setCustomStart] = useState("2026-03-01");
-  const [customEnd, setCustomEnd] = useState(DEMO_AS_OF_DATE);
+  const [customStart, setCustomStart] = useState(
+    liveSnapshot ? defaultLiveRangeStart(liveSnapshot.asOfDate) : "2026-03-01"
+  );
+  const [customEnd, setCustomEnd] = useState(liveSnapshot?.asOfDate ?? DEMO_AS_OF_DATE);
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const [invoiceSearch, setInvoiceSearch] = useState("");
@@ -223,6 +288,8 @@ export function WorkspaceSampleDashboard({
   const [invoiceSort, setInvoiceSort] = useState<"dueDate" | "balance">("dueDate");
   const [invoiceLimit, setInvoiceLimit] = useState(INVOICE_PAGE_SIZE);
   const [insightFocus, setInsightFocus] = useState<"none" | "overdue">("none");
+  const [showInvoiceList, setShowInvoiceList] = useState(false);
+  const [showJobList, setShowJobList] = useState(false);
   const [appliedInvoiceStatusKey, setAppliedInvoiceStatusKey] =
     useState<InvoiceStatusFilter>("all");
   const appliedInvoiceStatusRef = useRef<InvoiceStatusFilter>("all");
@@ -290,22 +357,41 @@ export function WorkspaceSampleDashboard({
   const jobFilterPendingRaw = jobFilterSignature !== deferredJobFilterSignature;
   const jobFilterPending = useMinFilterPending(jobFilterPendingRaw);
 
+  const sampleWorkspaceId = isValidWorkspaceId(workspaceId)
+    ? workspaceId
+    : WORKSPACE_ALPINE_HVAC;
+  const data = useMemo(
+    () =>
+      liveSnapshot
+        ? liveBusinessData(liveSnapshot)
+        : getWorkspaceBusinessData(sampleWorkspaceId),
+    [liveSnapshot, sampleWorkspaceId]
+  );
+
   const analyticsCore = useMemo(() => {
     if (!data || !rangeResult.range) return null;
     const range = rangeResult.range;
     const compareRange = getComparisonRange(range);
+    const live = liveSnapshot ? describeLiveFigures(liveSnapshot, range) : null;
 
-    const paymentsCollected = sumPaymentsInRange(data.payments, range);
+    const paymentsCollected =
+      live?.paymentsAmount ?? sumPaymentsInRange(data.payments, range);
     const paymentsPrior = sumPaymentsInRange(data.payments, compareRange);
     const jobsCompleted = countCompletedJobsInRange(data.jobs, range);
     const jobsPrior = countCompletedJobsInRange(data.jobs, compareRange);
-    const outstanding = sumOutstandingInvoices(data.invoices);
-    const overdue = sumOverdueInvoices(data.invoices);
-    const overdueCount = countOverdueInvoices(data.invoices);
-    const oldestDays = oldestUnpaidInvoiceDaysOverdue(data.invoices);
-    const trend = buildCollectionsTrend(data.payments, range);
+    const outstanding = liveSnapshot?.receivables.showBalances
+      ? (liveSnapshot.receivables.openBalance ?? 0)
+      : sumOutstandingInvoices(data.invoices);
+    const overdue = liveSnapshot?.receivables.showBalances
+      ? (liveSnapshot.receivables.overdueBalance ?? 0)
+      : sumOverdueInvoices(data.invoices, data.demoAsOf);
+    const overdueCount = liveSnapshot?.receivables.showBalances
+      ? liveSnapshot.receivables.overdueCount
+      : countOverdueInvoices(data.invoices, data.demoAsOf);
+    const oldestDays = oldestUnpaidInvoiceDaysOverdue(data.invoices, data.demoAsOf);
+    const trend = live?.trend ?? buildCollectionsTrend(data.payments, range);
     const trendTotal = trend.reduce((s, b) => s + b.amount, 0);
-    const aging = invoiceAgingBuckets(data.invoices);
+    const aging = invoiceAgingBuckets(data.invoices, data.demoAsOf);
     const categories = serviceCategoryBreakdown(data.jobs, range);
     const jobCategories = [...new Set(data.jobs.map((j) => j.category))].sort();
 
@@ -331,11 +417,13 @@ export function WorkspaceSampleDashboard({
       categories,
       invoiceTotal: data.invoices.length,
       jobCategories,
-      upcoming: countUpcomingAppointments(data.appointments),
-      upcomingList: listUpcomingAppointments(data.appointments),
+      upcoming: countUpcomingAppointments(data.appointments, 7, data.demoAsOf),
+      upcomingList: listUpcomingAppointments(data.appointments, 7, data.demoAsOf),
+      asOfDate: data.demoAsOf,
+      live,
       ...revenueOverview,
     };
-  }, [data, rangeResult.range]);
+  }, [data, liveSnapshot, rangeResult.range]);
 
   const invoiceList = useMemo(() => {
     if (!data || !analyticsCore) return null;
@@ -350,8 +438,7 @@ export function WorkspaceSampleDashboard({
       invoiceSort,
       invoiceSort === "balance" ? "desc" : "asc"
     );
-    const filteredBalance = invoices.reduce((s, i) => s + i.balanceDue, 0);
-    return { invoices, filteredBalance };
+    return { invoices };
   }, [
     data,
     analyticsCore,
@@ -376,7 +463,6 @@ export function WorkspaceSampleDashboard({
       ? {
           ...analyticsCore,
           invoices: invoiceList.invoices,
-          filteredBalance: invoiceList.filteredBalance,
           jobs: jobsInRange,
         }
       : null;
@@ -400,8 +486,6 @@ export function WorkspaceSampleDashboard({
     mode === "revenue"
       ? REVENUE_WIDGETS.filter((id) => !settings.hiddenWidgets.includes(id))
       : settings.widgetOrder.filter((id) => !settings.hiddenWidgets.includes(id));
-
-  const isHvac = workspaceId.includes("hvac");
 
   const visibleInvoices = computed.invoices.slice(0, invoiceLimit);
   const invoicePadRowCount = Math.max(0, invoiceLimit - visibleInvoices.length);
@@ -480,6 +564,18 @@ export function WorkspaceSampleDashboard({
     </DashboardControlBar>
   );
 
+  const invoiceGroups = liveSnapshot?.receivables.showBalances
+    ? [
+        {
+          currency: "USD",
+          amount: liveSnapshot.receivables.openBalance ?? 0,
+          count: liveSnapshot.receivables.invoiceCount,
+        },
+      ]
+    : openInvoiceGroups(data.invoices);
+  const openInvoiceCount = invoiceGroups.reduce((sum, group) => sum + group.count, 0);
+  const summaryActionClass = `text-xs font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`;
+
   const widgetBlocks: Record<DashboardWidgetId, ReactNode> = {
     metrics: (
       <MetricsKpiGrid
@@ -493,43 +589,55 @@ export function WorkspaceSampleDashboard({
         settingsHref={portalRoutes.settings}
       />
     ),
-    collections_chart: <CollectionsTrendChart trend={computed.trend} theme={theme} />,
-    needs_attention: (
-      <NeedsAttentionPanel
+    collections_chart:
+      computed.live?.chartMessage && !computed.live.trend ? (
+        <p className={`px-1 text-sm text-ink-muted ${mode === "overview" ? "py-4 text-left" : "py-8 text-center"}`}>
+          {computed.live.chartMessage}
+        </p>
+      ) : (
+        <CollectionsTrendChart
+          trend={computed.trend}
+          theme={theme}
+          height={mode === "overview" ? OVERVIEW_CHART_HEIGHT : undefined}
+          yTickCount={mode === "overview" ? 3 : 2}
+        />
+      ),
+    job_activity: computed.live ? (
+      <p className={`px-1 text-sm text-ink-muted ${mode === "overview" ? "py-1 text-left" : "py-8 text-center"}`}>
+        {computed.live.jobsMessage}
+      </p>
+    ) : mode === "overview" && !showJobList ? (
+      <JobActivitySummary
         theme={theme}
-        overdueCount={computed.overdueCount}
-        overdueTotal={computed.overdue}
-        oldestDays={computed.oldestDays}
-        aging={computed.aging}
-        onViewOverdueInvoices={() => {
-          setInsightFocus("overdue");
-          setInvoiceStatus("Past due");
-          setSelectedInvoiceId(null);
-        }}
-      />
-    ),
-    job_activity: (
-      <OperationsJobsPanel
-        compact={compact}
-        theme={theme}
-        rangeLabel={formatRangeForDisplay(computed.range)}
-        jobStatus={jobStatus}
-        setJobStatus={setJobStatus}
-        jobCategory={jobCategory}
-        setJobCategory={setJobCategory}
-        jobCategories={computed.jobCategories}
+        completed={computed.jobsCompleted}
+        completedValue={completedJobAmount(data.jobs, computed.range)}
         categories={computed.categories}
-        jobs={computed.jobs}
-        selectedJobId={selectedJobId}
-        onSelectJob={(id) => {
-          setSelectedJobId(id);
-          setSelectedInvoiceId(null);
-          setSelectedAppointmentId(null);
-        }}
-        embedded
-        bare
-        filterPending={jobFilterPending}
       />
+    ) : (
+      <>
+        {mode === "overview" ? <div className="mb-3">{jobActivityToolbar}</div> : null}
+        <OperationsJobsPanel
+          compact={compact}
+          theme={theme}
+          rangeLabel={formatRangeForDisplay(computed.range)}
+          jobStatus={jobStatus}
+          setJobStatus={setJobStatus}
+          jobCategory={jobCategory}
+          setJobCategory={setJobCategory}
+          jobCategories={computed.jobCategories}
+          categories={computed.categories}
+          jobs={computed.jobs}
+          selectedJobId={selectedJobId}
+          onSelectJob={(id) => {
+            setSelectedJobId(id);
+            setSelectedInvoiceId(null);
+            setSelectedAppointmentId(null);
+          }}
+          embedded
+          bare
+          filterPending={jobFilterPending}
+        />
+      </>
     ),
     appointments: (
       <OperationsSchedulePanel
@@ -544,13 +652,35 @@ export function WorkspaceSampleDashboard({
           setSelectedJobId(null);
         }}
         formatDateTime={formatAppointmentDateTime}
+        asOf={computed.asOfDate}
         scheduleHref={dashboardSectionHref(workspaceId, "schedule", sectionLinkBase)}
         embedded
         bare
+        summary={mode === "overview"}
       />
     ),
-    invoices: (
+    invoices: computed.live?.receivablesMessage ? (
+      <p
+        className={`text-sm text-ink-muted ${
+          mode === "overview" ? "px-1 py-1 text-left" : `px-4 py-8 text-center ${theme.widgetListShell}`
+        }`}
+      >
+        {computed.live.receivablesMessage}
+      </p>
+    ) : (
       <div key="invoices">
+        {mode === "overview" ? (
+          <InvoiceSummary
+            theme={theme}
+            openCount={openInvoiceCount}
+            groups={invoiceGroups}
+            largest={showInvoiceList ? [] : largestOpenInvoices(data.invoices, 4)}
+            className={showInvoiceList ? "mb-4" : ""}
+          />
+        ) : null}
+        {mode === "overview" && !showInvoiceList ? null : (
+        <>
+        {mode === "overview" ? <div className="mb-3">{invoiceToolbar}</div> : null}
         <div
           aria-busy={invoiceTablePending}
           aria-label="Filtered invoices"
@@ -602,7 +732,19 @@ export function WorkspaceSampleDashboard({
                       }}
                     >
                       <td className={`truncate px-3 py-2.5 font-mono font-semibold ${selectedInvoiceId === inv.id ? "text-sm" : "text-xs"} ${theme.metricValueA}`}>
-                        {inv.invoiceNumber}
+                        {inv.href ? (
+                          <a
+                            href={inv.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(event) => event.stopPropagation()}
+                            className="underline decoration-current/40 underline-offset-2"
+                          >
+                            {inv.invoiceNumber}
+                          </a>
+                        ) : (
+                          inv.invoiceNumber
+                        )}
                       </td>
                       <td className="truncate px-3 py-2.5 font-medium text-ink">{inv.customer}</td>
                       <td className="px-3 py-2.5 text-ink-muted">{formatShortDate(inv.dueDate)}</td>
@@ -610,7 +752,7 @@ export function WorkspaceSampleDashboard({
                         <CurrencyAmount amount={inv.balanceDue} colorClass={theme.metricValueA} />
                       </td>
                       <td className="px-3 py-2.5">
-                        <StatusPill status={inv.status} />
+                        <StatusPill status={inv.status} theme={theme} />
                       </td>
                     </tr>
                   ))}
@@ -646,118 +788,161 @@ export function WorkspaceSampleDashboard({
             </DashboardSecondaryButton>
           )}
         </div>
+        </>
+        )}
       </div>
     ),
   };
 
   return (
-    <div
+    <DashboardShell
       key={`${workspaceId}-${workspaceSessionKey}`}
-      className="flex min-h-full w-full flex-1 flex-col border-0 bg-white shadow-none"
+      title={mode === "revenue" ? "Revenue" : "Overview"}
+      trailing={
+        <>
+          <DashboardRangeCalendar
+            start={customStart}
+            end={customEnd}
+            theme={theme}
+            onChange={(start, end) => {
+              setPreset("custom");
+              setCustomStart(start);
+              setCustomEnd(end);
+            }}
+          />
+        </>
+      }
     >
-      <div className={`relative overflow-visible ${theme.header} ${theme.headerText}`}>
-        <DashboardTopBar
-          title={mode === "revenue" ? "Revenue & collections" : businessName}
-          trailing={
-            <>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
-                Sample data
-              </span>
-              <DashboardRangeCalendar
-                start={customStart}
-                end={customEnd}
-                theme={theme}
-                onChange={(start, end) => {
-                  setPreset("custom");
-                  setCustomStart(start);
-                  setCustomEnd(end);
-                }}
-              />
-            </>
-          }
-        />
-        {rangeError && (
-          <p className="absolute bottom-1 left-4 rounded bg-white/20 px-2 py-1 text-xs sm:left-5" role="alert">
-            {rangeError}
-          </p>
-        )}
-      </div>
+      {rangeError && (
+        <p className="bg-amber-100 px-4 py-2 text-xs text-amber-950" role="alert">
+          {rangeError}
+        </p>
+      )}
+      {computed?.live?.freshnessNote ? (
+        <p className="px-4 pt-3 text-sm text-ink" role="status">
+          {computed.live.freshnessNote}
+        </p>
+      ) : null}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col">
         {changesRequestedNote && (
           <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-ink">
             {changesRequestedNote}
           </p>
         )}
 
-        {renderWidgetRows(visibleWidgets, widgetBlocks, theme, compact, (id) => {
+        {(mode === "overview" ? renderOverviewRows : renderWidgetRows)(
+          visibleWidgets,
+          widgetBlocks,
+          theme,
+          compact,
+          mode === "overview" && !showInvoiceList && !showJobList,
+          (id) => {
           const rangeLabel = formatRangeForDisplay(computed.range);
+          const summaryAlign = mode === "overview" ? ("left" as const) : ("center" as const);
           switch (id) {
             case "metrics":
               return {
-                title: mode === "revenue" ? "Revenue Overview" : "General Overview",
+                title: "Revenue Overview",
                 subtitle: rangeLabel,
                 subtitleAlign: "center" as const,
               };
             case "collections_chart":
               return {
                 title: "Collections trend",
-                subtitle: (
-                  <>
-                    {rangeLabel} · Total{" "}
-                    <CurrencyAmount
-                      amount={computed.trendTotal}
-                      colorClass={theme.metricValueA}
-                      className="inline font-semibold"
-                    />
-                  </>
-                ),
-                subtitleAlign: "center" as const,
+                subtitle:
+                  computed.live?.chartMessage && !computed.live.trend
+                    ? computed.live.chartMessage
+                    : computed.live?.trend
+                      ? `${rangeLabel} · Square net before fees`
+                      : (
+                        <>
+                          {rangeLabel} · Total{" "}
+                          <CountUpMoney
+                            amount={computed.trendTotal}
+                            colorClass={theme.metricValueA}
+                            className="inline font-semibold tabular-nums"
+                          />
+                        </>
+                      ),
+                subtitleAlign: summaryAlign,
+                titleAlign: summaryAlign,
                 tightToolbar: true,
               };
             case "job_activity":
               return {
                 title: "Job activity",
                 subtitle: rangeLabel,
-                subtitleAlign: "center" as const,
-                headerAside: jobActivityToolbar,
+                subtitleAlign: summaryAlign,
+                titleAlign: summaryAlign,
+                headerAside:
+                  mode === "overview" && !computed.live ? (
+                    <button
+                      type="button"
+                      className={summaryActionClass}
+                      onClick={() => setShowJobList((open) => !open)}
+                    >
+                      {showJobList ? "Hide jobs" : "View jobs"}
+                    </button>
+                  ) : computed.live
+                    ? undefined
+                    : jobActivityToolbar,
                 tightToolbar: true,
               };
             case "appointments":
               return {
                 title: "Next 7 days",
-                subtitle: `${computed.upcoming} upcoming · from ${formatShortDate(DEMO_AS_OF_DATE)}`,
-                subtitleAlign: "center" as const,
+                subtitle: computed.live?.scheduleBlocked
+                  ? computed.live.scheduleBlocked
+                  : `${computed.upcoming} upcoming · from ${formatShortDate(computed.asOfDate)}${
+                      computed.live?.scheduleNote ? ` · ${computed.live.scheduleNote}` : ""
+                    }`,
+                subtitleAlign: summaryAlign,
+                titleAlign: summaryAlign,
                 headerAside: (
                   <Link
                     href={dashboardSectionHref(workspaceId, "schedule", sectionLinkBase)}
-                    className={`inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${theme.filterSecondaryButton}`}
+                    onClick={(event) => keepDashboardSectionClick(event, selectSection, "schedule")}
+                    className={
+                      mode === "overview"
+                        ? summaryActionClass
+                        : `inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${theme.filterSecondaryButton}`
+                    }
                   >
-                    Open schedule
+                    Schedule
                   </Link>
                 ),
               };
             case "invoices":
               return {
                 title: "Invoices",
-                subtitle: (
-                  <>
-                    {computed.invoices.length} shown · filtered balance{" "}
-                    <CurrencyAmount
-                      amount={computed.filteredBalance}
-                      colorClass={theme.metricValueA}
-                      className="inline font-semibold"
-                    />
-                  </>
-                ),
-                headerAside: invoiceToolbar,
+                subtitle:
+                  mode === "overview" ? (
+                    computed.live?.receivablesMessage ? (
+                      computed.live.receivablesMessage
+                    ) : (
+                      `As of ${formatShortDate(computed.asOfDate)}`
+                    )
+                  ) : (
+                    computed.live?.receivablesMessage ?? undefined
+                  ),
+                subtitleAlign: summaryAlign,
+                titleAlign: summaryAlign,
+                headerAside:
+                  mode === "overview" ? (
+                    computed.live?.receivablesMessage ? undefined : (
+                      <button
+                        type="button"
+                        className={summaryActionClass}
+                        onClick={() => setShowInvoiceList((open) => !open)}
+                      >
+                        {showInvoiceList ? "Hide invoices" : "View invoices"}
+                      </button>
+                    )
+                  ) : computed.live?.receivablesMessage ? undefined : (
+                    invoiceToolbar
+                  ),
                 tightToolbar: true,
-              };
-            case "needs_attention":
-              return {
-                title: "Needs attention",
-                subtitle: "Open receivables & aging",
-                subtitleAlign: "center" as const,
               };
             default:
               return { title: id };
@@ -773,6 +958,16 @@ export function WorkspaceSampleDashboard({
                 {selectedInvoice.invoiceNumber} — {selectedInvoice.customer}
               </p>
               <p className="text-sm text-ink-muted">{selectedInvoice.lineSummary}</p>
+              {selectedInvoice.href ? (
+                <a
+                  href={selectedInvoice.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`mt-1 inline-flex text-xs font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
+                >
+                  Open in QuickBooks
+                </a>
+              ) : null}
               <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
                 <div>
                   <dt className="text-ink-muted">Amount</dt>
@@ -825,7 +1020,7 @@ export function WorkspaceSampleDashboard({
         </div>
       )}
       </div>
-    </div>
+    </DashboardShell>
   );
 }
 
@@ -845,6 +1040,8 @@ type MetricsKpiComputed = {
   monthlyRangeLabel: string;
   monthPipeline: number;
   monthPipelineLabel: string;
+  asOfDate: string;
+  live: LiveFigures | null;
 };
 
 function MetricsKpiGrid({
@@ -894,15 +1091,17 @@ function MetricsKpiGrid({
 
   const lgCols =
     ids.length <= 1
-      ? "lg:grid-cols-1"
+      ? "xl:grid-cols-1"
       : ids.length === 2
-        ? "lg:grid-cols-2"
+        ? "xl:grid-cols-2"
         : ids.length === 3
-          ? "lg:grid-cols-3"
-          : "lg:grid-cols-4";
+          ? "xl:grid-cols-3"
+          : "xl:grid-cols-4";
+  const columns =
+    mode === "overview" ? `grid-cols-1 ${lgCols}` : `grid-cols-1 sm:grid-cols-2 ${lgCols.replaceAll("xl:", "lg:")}`;
 
   return (
-    <div key="metrics" className={`grid gap-2 sm:grid-cols-2 ${lgCols}`}>
+    <div key="metrics" className={`grid gap-3 ${columns}`}>
       {mode === "revenue"
         ? revenueKpiIds.map((id, index) => (
             <KpiStatCard
@@ -926,6 +1125,14 @@ function MetricsKpiGrid({
   );
 }
 
+function unavailableCard(message: string, className: string) {
+  return {
+    sub: "No figure is shown for this metric.",
+    value: <span className="block text-sm font-semibold leading-snug">{message}</span>,
+    className,
+  };
+}
+
 function revenueKpiCardProps(
   id: RevenueKpiId,
   computed: MetricsKpiComputed,
@@ -935,56 +1142,62 @@ function revenueKpiCardProps(
   const className = index % 2 === 0 ? theme.metricA : theme.metricB;
   switch (id) {
     case "weekly_revenue":
+      if (computed.live) return unavailableCard(computed.live.revenueMessage, className);
       return {
         higherIsBetter: true,
         sub: computed.weeklyRangeLabel,
         compare: computed.weeklyRevenueCompare.text,
         compareTone: computed.weeklyRevenueCompare.tone,
         value: (
-          <CurrencyAmount
+          <CountUpMoney
             amount={computed.weeklyRevenue}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "monthly_revenue":
+      if (computed.live) return unavailableCard(computed.live.revenueMessage, className);
       return {
         higherIsBetter: true,
         sub: computed.monthlyRangeLabel,
         compare: computed.monthlyRevenueCompare.text,
         compareTone: computed.monthlyRevenueCompare.tone,
         value: (
-          <CurrencyAmount
+          <CountUpMoney
             amount={computed.monthlyRevenue}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "month_pipeline":
+      if (computed.live) return unavailableCard(computed.live.pipelineMessage, className);
       return {
         sub: computed.monthPipelineLabel,
         value: (
-          <CurrencyAmount
+          <CountUpMoney
             amount={computed.monthPipeline}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "overdue_ar":
+      if (computed.live?.receivablesMessage) {
+        return unavailableCard(computed.live.receivablesMessage, className);
+      }
       return {
         higherIsBetter: false,
-        sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
+        sub: `As of ${formatShortDate(computed.asOfDate)}`,
         value: (
-          <CurrencyAmount
+          <CountUpMoney
             amount={computed.overdue}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
@@ -996,26 +1209,47 @@ function overviewKpiCardProps(
   id: OverviewKpiId,
   computed: MetricsKpiComputed,
   theme: LayoutCustomizeTheme,
-  index: number
+  _index: number
 ) {
-  const className = index % 2 === 0 ? theme.metricA : theme.metricB;
+  const className = theme.metricA;
   switch (id) {
     case "payments_collected":
+      if (computed.live?.paymentsMessage) {
+        return unavailableCard(computed.live.paymentsMessage, className);
+      }
+      if (computed.live) {
+        return {
+          higherIsBetter: true,
+          sub: `${formatRangeForDisplay(computed.range)}${
+            computed.live.paymentsCurrency ? ` · ${computed.live.paymentsCurrency}` : ""
+          }${computed.live.paymentsAreNet ? " · net of refunds" : ""}`,
+          value: (
+            <CountUpMoney
+              amount={computed.live.paymentsAmount ?? 0}
+              currency={computed.live.paymentsCurrency || "USD"}
+              colorClass={theme.metricValueA}
+              className="text-xl font-bold tabular-nums sm:text-2xl"
+            />
+          ),
+          className,
+        };
+      }
       return {
         higherIsBetter: true,
         sub: formatRangeForDisplay(computed.range),
         compare: computed.paymentsCompare.text,
         compareTone: computed.paymentsCompare.tone,
         value: (
-          <CurrencyAmount
+          <CountUpMoney
             amount={computed.paymentsCollected}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "jobs_completed":
+      if (computed.live) return unavailableCard(computed.live.jobsMessage, className);
       return {
         higherIsBetter: true,
         sub: formatRangeForDisplay(computed.range),
@@ -1029,156 +1263,39 @@ function overviewKpiCardProps(
         className,
       };
     case "outstanding_balance":
+      if (computed.live?.receivablesMessage) {
+        return unavailableCard(computed.live.receivablesMessage, className);
+      }
       return {
         higherIsBetter: false,
-        sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
+        sub: `As of ${formatShortDate(computed.asOfDate)}`,
         value: (
-          <CurrencyAmount
+          <CountUpMoney
             amount={computed.outstanding}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
     case "overdue_balance":
+      if (computed.live?.receivablesMessage) {
+        return unavailableCard(computed.live.receivablesMessage, className);
+      }
       return {
         higherIsBetter: false,
-        sub: `As of ${formatShortDate(DEMO_AS_OF_DATE)}`,
+        sub: `As of ${formatShortDate(computed.asOfDate)}`,
         value: (
-          <CurrencyAmount
+          <CountUpMoney
             amount={computed.overdue}
             colorClass={theme.metricValueA}
-            className="text-xl font-bold sm:text-2xl"
+            className="text-xl font-bold tabular-nums sm:text-2xl"
           />
         ),
         className,
       };
   }
 }
-
-const AGING_BUCKET_KEYS = [
-  ["Not due", "not_due"],
-  ["1–30", "1_30"],
-  ["31–60", "31_60"],
-  ["61–90", "61_90"],
-  ["90+", "90_plus"],
-] as const;
-
-type AgingBuckets = ReturnType<typeof invoiceAgingBuckets>;
-
-function NeedsAttentionPanel({
-  theme,
-  overdueCount,
-  overdueTotal,
-  oldestDays,
-  aging,
-  onViewOverdueInvoices,
-}: {
-  theme: LayoutCustomizeTheme;
-  overdueCount: number;
-  overdueTotal: number;
-  oldestDays: number | null;
-  aging: AgingBuckets;
-  onViewOverdueInvoices: () => void;
-}) {
-  const critical = aging["90_plus"];
-
-  return (
-    <div key="needs_attention" className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-3">
-        <button
-          type="button"
-          onClick={onViewOverdueInvoices}
-          className={`rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md ${overdueCount > 0 ? "ring-1 ring-amber-200/60" : ""}`}
-        >
-          <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">
-            Past due
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-ink">
-            {overdueCount}{" "}
-            <span className="text-sm font-semibold text-ink-muted">invoices</span>
-          </p>
-          <p className={`mt-0.5 text-sm font-semibold ${theme.metricValueA}`}>
-            <CurrencyAmount amount={overdueTotal} colorClass={theme.metricValueA} />
-          </p>
-          <p className={`mt-1 text-[10px] font-semibold ${theme.linkAccent}`}>
-            View in invoice list →
-          </p>
-        </button>
-
-        <div className={`rounded-lg border p-3 shadow-sm ${theme.attentionMetricTile}`}>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-            Oldest overdue
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-ink">
-            {oldestDays != null && oldestDays > 0 ? (
-              <>
-                {oldestDays}{" "}
-                <span className="text-sm font-semibold text-ink-muted">days</span>
-              </>
-            ) : (
-              <span className="text-sm font-semibold text-ink-muted">None</span>
-            )}
-          </p>
-          <p className="mt-2 text-[10px] leading-snug text-ink-muted">
-            Longest-running unpaid balance past due date
-          </p>
-        </div>
-
-        <div
-          className={`rounded-lg border p-3 shadow-sm ${
-            critical.count > 0
-              ? "border-amber-200/90 bg-amber-50/70 ring-1 ring-amber-200/50"
-              : theme.attentionMetricTileIdle
-          }`}
-        >
-          <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-            90+ days overdue
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-ink">{critical.count}</p>
-          <p className={`mt-0.5 text-sm font-semibold ${theme.metricValueA}`}>
-            <CurrencyAmount amount={critical.total} colorClass={theme.metricValueA} />
-          </p>
-        </div>
-      </div>
-
-      <div className={`overflow-hidden ${theme.widgetListShell}`}>
-        <p
-          className={`px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-ink-muted ${theme.widgetListHeader}`}
-        >
-          Open balance by aging bucket
-        </p>
-        <table className="w-full table-fixed text-center text-xs">
-          <thead>
-            <tr
-              className={`${theme.widgetListHeader} text-[10px] font-bold uppercase tracking-wide text-ink-muted`}
-            >
-              {AGING_BUCKET_KEYS.map(([label]) => (
-                <th key={label} className="px-2 py-2.5 font-bold">
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr className={`divide-x text-ink ${theme.widgetListRow} ${theme.widgetListColDivide}`}>
-              {AGING_BUCKET_KEYS.map(([label, key]) => (
-                <td key={key} className="px-2 py-2.5 tabular-nums">
-                  <span className="block font-semibold text-ink">{aging[key].count}</span>
-                  <span className={`mt-0.5 block text-[11px] font-medium ${theme.metricValueA}`}>
-                    <CurrencyAmount amount={aging[key].total} colorClass={theme.metricValueA} className="inline" />
-                  </span>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 const OPERATIONS_PAIR: DashboardWidgetId[] = ["job_activity", "appointments"];
 
 type WidgetSectionMeta = {
@@ -1188,13 +1305,248 @@ type WidgetSectionMeta = {
   accent?: "default" | "alert";
   tightToolbar?: boolean;
   subtitleAlign?: "left" | "center" | "right";
+  titleAlign?: "left" | "center";
+  fill?: boolean;
 };
+
+function SummaryFigure({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-2xl font-semibold leading-none tracking-tight">{value}</div>
+      <p className="mt-1 text-xs text-ink-muted">{label}</p>
+    </div>
+  );
+}
+
+function InvoiceSummary({
+  theme,
+  openCount,
+  groups,
+  largest,
+  className = "",
+}: {
+  theme: LayoutCustomizeTheme;
+  openCount: number;
+  groups: { currency: string; amount: number; count: number }[];
+  largest: BusinessInvoice[];
+  className?: string;
+}) {
+  return (
+    <div className={`flex h-full flex-col gap-2 ${className}`}>
+      <div className="flex flex-wrap gap-x-8 gap-y-3">
+        <SummaryFigure
+          label="Open invoices"
+          value={
+            <span className={`text-2xl font-semibold tabular-nums leading-none ${theme.metricValueA}`}>
+              {openCount}
+            </span>
+          }
+        />
+        {groups.map((group) => (
+          <SummaryFigure
+            key={group.currency}
+            label={groups.length > 1 ? `Outstanding · ${group.currency}` : "Outstanding"}
+            value={formatGroupedAmount(group.amount, group.currency, theme.metricValueA)}
+          />
+        ))}
+      </div>
+      {largest.length > 0 ? (
+        <div className={`border-t pt-2 ${isLightDashboardTheme(theme.id) ? theme.detailPanelBorder : "border-white/10"}`}>
+          <ol className="flex flex-col gap-1.5">
+            {largest.map((invoice) => (
+              <li key={invoice.id} className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate text-sm font-semibold text-ink">
+                  {invoice.customer}
+                </span>
+                <span className="flex shrink-0 items-baseline gap-2">
+                  {invoice.status === "Past due" ? (
+                    <span className={`text-[11px] font-semibold ${theme.pastDue}`}>Past due</span>
+                  ) : null}
+                  <InvoiceBalance amount={invoice.balanceDue} currency={invoice.currency} colorClass={theme.metricValueA} />
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function InvoiceBalance({
+  amount,
+  currency,
+  colorClass,
+}: {
+  amount: number;
+  currency?: string | null;
+  colorClass: string;
+}) {
+  const code = currency?.trim() || "USD";
+  return (
+    <CountUpMoney
+      amount={amount}
+      currency={code}
+      colorClass={colorClass}
+      className="text-sm font-semibold tabular-nums"
+    />
+  );
+}
+
+function JobActivitySummary({
+  theme,
+  completed,
+  completedValue,
+  categories,
+}: {
+  theme: LayoutCustomizeTheme;
+  completed: number;
+  completedValue: number;
+  categories: { category: string; completed: number }[];
+}) {
+  const shown = categories.slice(0, 4);
+  const max = shown[0]?.completed || 1;
+  const track = isLightDashboardTheme(theme.id)
+    ? theme.id === "harbor"
+      ? "bg-[#d5dee8]"
+      : theme.id === "ash"
+        ? "bg-zinc-200"
+        : "bg-stone-200"
+    : "bg-white/10";
+
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex flex-wrap gap-x-8 gap-y-3">
+        <SummaryFigure
+          label="Completed"
+          value={
+            <span className={`text-2xl font-semibold tabular-nums leading-none ${theme.metricValueA}`}>
+              {completed}
+            </span>
+          }
+        />
+        <SummaryFigure
+          label="Completed value"
+          value={formatGroupedAmount(completedValue, "USD", theme.metricValueA)}
+        />
+      </div>
+      {shown.length > 0 ? (
+        <div className={`border-t pt-2 ${isLightDashboardTheme(theme.id) ? theme.detailPanelBorder : "border-white/10"}`}>
+          <ul className="flex flex-col gap-1.5">
+            {shown.map((item) => (
+              <li
+                key={item.category}
+                className="grid grid-cols-[6.75rem_1fr_1.5rem] items-center gap-2"
+              >
+                <span className="truncate text-sm font-semibold text-ink">{item.category}</span>
+                <div className={`h-1 overflow-hidden rounded-full ${track}`}>
+                  <div
+                    className={`h-full rounded-full ${theme.chartBar}`}
+                    style={{ width: `${Math.max(8, Math.round((item.completed / max) * 100))}%` }}
+                  />
+                </div>
+                <span className="text-right text-sm tabular-nums text-ink">{item.completed}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function renderOverviewRows(
+  visibleWidgets: DashboardWidgetId[],
+  widgetBlocks: Record<DashboardWidgetId, ReactNode>,
+  theme: LayoutCustomizeTheme,
+  compact: boolean,
+  matchSummaryHeight: boolean,
+  sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta
+) {
+  const rows: ReactNode[] = [];
+  const skip = new Set<DashboardWidgetId>();
+  const visible = (id: DashboardWidgetId) => visibleWidgets.includes(id);
+
+  const wrapSection = (id: DashboardWidgetId, fill = false) => {
+    const meta = sectionFor(id);
+    return (
+      <DashboardSection
+        key={id}
+        theme={theme}
+        compact={compact}
+        title={meta.title}
+        subtitle={meta.subtitle}
+        headerAside={meta.headerAside}
+        accent={meta.accent}
+        tightToolbar={meta.tightToolbar}
+        subtitleAlign={meta.subtitleAlign ?? "left"}
+        titleAlign={meta.titleAlign ?? "left"}
+        fill={fill || meta.fill}
+      >
+        {widgetBlocks[id]}
+      </DashboardSection>
+    );
+  };
+
+  for (const id of visibleWidgets) {
+    if (skip.has(id)) continue;
+
+    if (id === "metrics") {
+      rows.push(
+        <div key="metrics">{widgetBlocks.metrics}</div>
+      );
+      continue;
+    }
+
+    if (id === "collections_chart" || id === "appointments") {
+      const showChart = visible("collections_chart");
+      const showAppointments = visible("appointments");
+      if (showChart) skip.add("collections_chart");
+      if (showAppointments) skip.add("appointments");
+      rows.push(
+        <div key="focus-row" className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-3">
+          {showChart ? (
+            <div className={showAppointments ? "min-w-0 xl:col-span-2" : "min-w-0 xl:col-span-3"}>
+              {wrapSection("collections_chart")}
+            </div>
+          ) : null}
+          {showAppointments ? (
+            <div className={showChart ? "flex min-w-0 xl:col-span-1" : "min-w-0 xl:col-span-3"}>
+              {wrapSection("appointments", true)}
+            </div>
+          ) : null}
+        </div>
+      );
+      continue;
+    }
+
+    if (id === "invoices" || id === "job_activity") {
+      const ordered = (["invoices", "job_activity"] as const).filter((widget) => visible(widget));
+      ordered.forEach((widget) => skip.add(widget));
+      rows.push(
+        <div
+          key="summary-row"
+          className={`grid grid-cols-1 items-stretch gap-3 ${ordered.length > 1 ? "xl:grid-cols-2" : ""}`}
+        >
+          {ordered.map((widget) => (
+            <div key={widget} className={matchSummaryHeight ? "flex min-w-0" : "min-w-0"}>
+              {wrapSection(widget, matchSummaryHeight)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+  }
+
+  return <div className="flex flex-col gap-3 p-3 sm:p-4">{rows}</div>;
+}
 
 function renderWidgetRows(
   visibleWidgets: DashboardWidgetId[],
   widgetBlocks: Record<DashboardWidgetId, ReactNode>,
   theme: LayoutCustomizeTheme,
   compact: boolean,
+  _matchSummaryHeight: boolean,
   sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta
 ) {
   const rows: ReactNode[] = [];
@@ -1215,6 +1567,7 @@ function renderWidgetRows(
         accent={meta.accent}
         tightToolbar={meta.tightToolbar}
         subtitleAlign={meta.subtitleAlign}
+        titleAlign={meta.titleAlign}
       >
         {widgetBlocks[id]}
       </DashboardSection>
@@ -1224,6 +1577,11 @@ function renderWidgetRows(
   for (let i = 0; i < visibleWidgets.length; i++) {
     const id = visibleWidgets[i]!;
     if (skip.has(id)) continue;
+
+    if (id === "metrics") {
+      rows.push(<div key="metrics">{widgetBlocks.metrics}</div>);
+      continue;
+    }
 
     if (hasJobs && hasAppts && OPERATIONS_PAIR.includes(id)) {
       const ordered = OPERATIONS_PAIR.filter((w) => visibleWidgets.includes(w)).sort(
@@ -1243,7 +1601,7 @@ function renderWidgetRows(
   }
 
   return (
-    <div className={`flex flex-col gap-4 p-4 sm:p-5 ${theme.dashboardCanvas}`}>{rows}</div>
+    <div className="flex flex-col gap-4 p-4 sm:p-5">{rows}</div>
   );
 }
 
@@ -1410,9 +1768,11 @@ function OperationsSchedulePanel({
   selectedAppointmentId,
   onSelectAppointment,
   formatDateTime,
+  asOf = DEMO_AS_OF_DATE,
   scheduleHref,
   embedded = false,
   bare = false,
+  summary = false,
 }: {
   compact: boolean;
   theme: ReturnType<typeof useCustomerPortal>["theme"];
@@ -1421,13 +1781,16 @@ function OperationsSchedulePanel({
   selectedAppointmentId: string | null;
   onSelectAppointment: (id: string) => void;
   formatDateTime: (iso: string) => { date: string; time: string };
+  asOf?: string;
   scheduleHref: string;
   embedded?: boolean;
   bare?: boolean;
+  summary?: boolean;
 }) {
+  const selectSection = useDashboardSection()?.selectSection;
   const pad = compact ? "p-2.5 sm:p-3" : "p-3 sm:p-4";
   const density = getOperationsListDensity(upcomingList.length);
-  const visible = upcomingList.slice(0, density.maxVisible);
+  const visible = upcomingList.slice(0, summary ? 3 : density.maxVisible);
   const hiddenCount = upcomingList.length - visible.length;
   const assigneeBreakdown = appointmentAssigneeBreakdown(upcomingList);
 
@@ -1441,11 +1804,11 @@ function OperationsSchedulePanel({
         <div className={`border-b pb-2 ${theme.toolbarDivider}`}>
           <h3 className="text-sm font-semibold text-ink">Next 7 days</h3>
           <p className="text-[11px] text-ink-muted">
-            From {formatShortDate(DEMO_AS_OF_DATE)} · {upcoming} scheduled
+            From {formatShortDate(asOf)} · {upcoming} scheduled
           </p>
         </div>
       )}
-      {assigneeBreakdown.length > 0 && (
+      {!summary && assigneeBreakdown.length > 0 && (
         <div className={operationsSummaryStripClass}>
           {assigneeBreakdown.map(({ assignee, count }) => (
             <span key={assignee} className={theme.operationsSummaryChip}>
@@ -1455,7 +1818,7 @@ function OperationsSchedulePanel({
         </div>
       )}
       {visible.length === 0 ? (
-        <p className={`mt-3 text-center ${density.meta} text-ink-muted`}>
+        <p className={`${summary ? "text-left" : "mt-3 text-center"} ${density.meta} text-ink-muted`}>
           No upcoming appointments in this window.
         </p>
       ) : (
@@ -1467,20 +1830,21 @@ function OperationsSchedulePanel({
                 <button
                   type="button"
                   onClick={() => onSelectAppointment(appt.id)}
-                  className={`flex w-full flex-col gap-0.5 px-3 text-left sm:flex-row sm:items-center sm:justify-between ${density.rowPy} ${
+                  className={`flex w-full flex-col items-start gap-0.5 px-3 text-left ${density.rowPy} ${
                     selectedAppointmentId === appt.id
-                      ? `text-sm font-medium ${theme.operationsListSelected} ${theme.metricValueA}`
+                      ? `text-sm font-medium ${theme.operationsListSelected}`
                       : `${density.text} ${operationsListRowBase} ${theme.widgetListRow} ${theme.operationsListHover}`
                   }`}
                 >
-                  <p className={`min-w-0 flex-1 truncate font-semibold ${selectedAppointmentId === appt.id ? "" : "text-ink"}`}>
-                    {appt.title}
-                  </p>
-                  <div className={`shrink-0 ${density.meta}`}>
+                  <p className="font-semibold text-ink">{appt.title}</p>
+                  <p className={density.meta}>
                     <span className={`font-semibold ${theme.listAccent}`}>{date}</span>
-                    <span className="text-ink-muted"> · {time}</span>
-                    <span className="hidden sm:inline text-ink-muted"> · {appt.assignee}</span>
-                  </div>
+                    <span className="text-ink-muted">
+                      {" · "}
+                      {time}
+                      {appt.assignee ? ` · ${appt.assignee}` : ""}
+                    </span>
+                  </p>
                 </button>
               </li>
             );
@@ -1492,6 +1856,7 @@ function OperationsSchedulePanel({
           + {hiddenCount} more —{" "}
           <Link
             href={scheduleHref}
+            onClick={(event) => keepDashboardSectionClick(event, selectSection, "schedule")}
             className={`font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
           >
             open Schedule
@@ -1502,10 +1867,10 @@ function OperationsSchedulePanel({
   );
 }
 
-function StatusPill({ status }: { status: string }) {
+function StatusPill({ status, theme }: { status: string; theme: LayoutCustomizeTheme }) {
   const cls =
     status === "Past due"
-      ? "border-amber-200/80 bg-gradient-to-b from-amber-50 to-amber-100/90 text-amber-950 ring-1 ring-amber-200/50"
+      ? theme.pastDuePill
       : status === "Open"
         ? "border-slate-200 bg-gradient-to-b from-slate-50 to-white text-slate-800 ring-1 ring-slate-200/60"
         : "border-emerald-200/80 bg-gradient-to-b from-emerald-50 to-emerald-100/70 text-emerald-900 ring-1 ring-emerald-200/50";

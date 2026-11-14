@@ -15,3 +15,67 @@
     @apply outline-2 outline-offset-2 outline-purple;
   }
 }
+
+/* Dark dashboard themes keep the restored layout and retint shared ink text. */
+.rv-theme-indigo,
+.rv-theme-evergreen,
+.rv-theme-carbon {
+  color-scheme: dark;
+}
+
+.rv-theme-indigo .text-ink,
+.rv-theme-evergreen .text-ink,
+.rv-theme-carbon .text-ink {
+  color: #f4f4f5;
+}
+
+.rv-theme-indigo .text-ink-light,
+.rv-theme-evergreen .text-ink-light,
+.rv-theme-carbon .text-ink-light {
+  color: #e4e4e7;
+}
+
+.rv-theme-indigo .text-ink-muted,
+.rv-theme-evergreen .text-ink-muted,
+.rv-theme-carbon .text-ink-muted,
+.rv-theme-indigo .fill-ink-muted,
+.rv-theme-evergreen .fill-ink-muted,
+.rv-theme-carbon .fill-ink-muted {
+  color: #a1a1aa;
+  fill: #a1a1aa;
+}
+
+.rv-theme-indigo .text-ink-subtle,
+.rv-theme-evergreen .text-ink-subtle,
+.rv-theme-carbon .text-ink-subtle {
+  color: #71717a;
+}
+
+.rv-theme-indigo .bg-white,
+.rv-theme-evergreen .bg-white,
+.rv-theme-carbon .bg-white {
+  background-color: #1c1f2a;
+}
+
+.rv-theme-evergreen .bg-white {
+  background-color: #1c2422;
+}
+
+.rv-theme-carbon .bg-white {
+  background-color: #1c1c1c;
+}
+
+.rv-theme-indigo .bg-white\/80,
+.rv-theme-indigo .bg-white\/70,
+.rv-theme-evergreen .bg-white\/80,
+.rv-theme-evergreen .bg-white\/70,
+.rv-theme-carbon .bg-white\/80,
+.rv-theme-carbon .bg-white\/70 {
+  background-color: rgb(255 255 255 / 0.06);
+}
+
+.rv-theme-porcelain,
+.rv-theme-harbor,
+.rv-theme-ash {
+  color-scheme: light;
+}

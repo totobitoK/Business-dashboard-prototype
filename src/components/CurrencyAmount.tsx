@@ -1,4 +1,5 @@
-import { formatCurrency, formatCurrencyDetailed } from "@/lib/metrics";
+import { formatDashboardMoney } from "@/lib/format-chart-currency";
+import { formatCurrencyDetailed } from "@/lib/metrics";
 
 export const currencyAmountClass = "font-medium text-purple";
 

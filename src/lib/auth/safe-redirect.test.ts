@@ -5,6 +5,10 @@ describe("sanitizeAuthRedirectPath", () => {
   it("allows live dashboard and admin paths", () => {
     expect(sanitizeAuthRedirectPath("/dashboard")).toBe("/dashboard");
     expect(sanitizeAuthRedirectPath("/admin/clients")).toBe("/admin/clients");
+    expect(sanitizeAuthRedirectPath("/onboarding/project-1")).toBe("/onboarding/project-1");
+    expect(sanitizeAuthRedirectPath("/onboarding/project-1/preview")).toBe(
+      "/onboarding/project-1/preview"
+    );
   });
 
   it("rejects external and demo open redirects", () => {

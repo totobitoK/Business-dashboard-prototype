@@ -1,7 +1,59 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePopupPresence } from "@/components/customer/dashboard-controls";
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
+
+type AccentCalendar = {
+  button: string;
+  panel: string;
+  muted: string;
+  control: string;
+  range: string;
+  endpoint: string;
+  idle: string;
+  disabled: string;
+};
+
+function accentCalendar(id: string): AccentCalendar | null {
+  if (id === "ocean") {
+    return {
+      button: "border-[#3c2a1e] bg-[#3c2a1e] text-[#f7f3ee] hover:bg-[#4a3428] focus:ring-[#6b4f3a]/40",
+      panel: "rounded-xl border border-[#5a4334] bg-[#3c2a1e] py-1 text-[#f7f3ee] shadow-[0_12px_32px_-12px_rgba(60,42,30,0.45)]",
+      muted: "text-[#f7f3ee]/75",
+      control: "text-[#f7f3ee] hover:bg-[#4a3428]",
+      range: "bg-[#5a4334] text-xs text-[#f7f3ee]",
+      endpoint: "bg-[#f7f3ee] text-sm text-[#3c2a1e]",
+      idle: "text-xs text-[#f7f3ee] hover:bg-[#4a3428]",
+      disabled: "cursor-not-allowed text-xs text-[#f7f3ee]/30",
+    };
+  }
+  if (id === "harbor") {
+    return {
+      button: "border-[#1e3a5f] bg-[#1e3a5f] text-[#f4f7fb] hover:bg-[#2a4d73] focus:ring-[#8aa4c0]/40",
+      panel: "rounded-xl border border-[#2a4d73] bg-[#1e3a5f] py-1 text-[#f4f7fb] shadow-[0_12px_32px_-12px_rgba(30,58,95,0.45)]",
+      muted: "text-[#f4f7fb]/75",
+      control: "text-[#f4f7fb] hover:bg-[#2a4d73]",
+      range: "bg-[#2a4d73] text-xs text-[#f4f7fb]",
+      endpoint: "bg-[#f4f7fb] text-sm text-[#1e3a5f]",
+      idle: "text-xs text-[#f4f7fb] hover:bg-[#2a4d73]",
+      disabled: "cursor-not-allowed text-xs text-[#f4f7fb]/30",
+    };
+  }
+  if (id === "ash") {
+    return {
+      button: "border-[#2c2c2c] bg-[#2c2c2c] text-[#f4f4f5] hover:bg-[#3f3f3f] focus:ring-zinc-400/40",
+      panel: "rounded-xl border border-[#3f3f3f] bg-[#2c2c2c] py-1 text-[#f4f4f5] shadow-[0_12px_32px_-12px_rgba(44,44,44,0.45)]",
+      muted: "text-[#f4f4f5]/75",
+      control: "text-[#f4f4f5] hover:bg-[#3f3f3f]",
+      range: "bg-[#3f3f3f] text-xs text-[#f4f4f5]",
+      endpoint: "bg-[#f4f4f5] text-sm text-[#2c2c2c]",
+      idle: "text-xs text-[#f4f4f5] hover:bg-[#3f3f3f]",
+      disabled: "cursor-not-allowed text-xs text-[#f4f4f5]/30",
+    };
+  }
+  return null;
+}
 import {
   BUSINESS_TIMEZONE,
   compareIsoDates,
@@ -75,6 +127,7 @@ export function DashboardDatePicker({
 }) {
   const parsed = parseIsoDate(value);
   const [open, setOpen] = useState(false);
+  const popup = usePopupPresence(open);
   const [viewY, setViewY] = useState(parsed.y);
   const [viewM, setViewM] = useState(parsed.m);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -130,11 +183,12 @@ export function DashboardDatePicker({
         <CalendarIcon className={`shrink-0 ${theme.metricValueB}`} />
       </button>
 
-      {open && (
+      {popup.present && (
         <div
           role="dialog"
           aria-label={`Choose ${label} date`}
-          className={`absolute right-0 top-full z-[100] mt-1.5 w-[16.75rem] origin-top-right overflow-hidden p-2 ${theme.filterMenuPanel}`}
+          ref={popup.panelRef}
+          className={`absolute right-0 top-full z-[100] mt-1.5 w-[16.75rem] origin-top overflow-hidden p-2 ${theme.filterMenuPanel}`}
         >
           <div className="mb-1 flex items-center justify-between gap-1">
             <button
@@ -245,6 +299,7 @@ export function DashboardRangeCalendar({
 }) {
   const parsed = parseIsoDate(start);
   const [open, setOpen] = useState(false);
+  const popup = usePopupPresence(open);
   const [picking, setPicking] = useState<string | null>(null);
   const [viewY, setViewY] = useState(parsed.y);
   const [viewM, setViewM] = useState(parsed.m);
@@ -292,28 +347,38 @@ export function DashboardRangeCalendar({
   }
 
   const label = `${formatCalendarDateDisplay(start)} – ${formatCalendarDateDisplay(end)}`;
+  const accent = accentCalendar(theme.id);
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative max-w-full">
       <button
         type="button"
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={`Reporting period ${label}. Choose a start day, then an end day.`}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/15 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-white/25 focus:outline-none focus:ring-2 focus:ring-white/50"
+        className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 ${
+          accent
+            ? accent.button
+            : "border-white/30 bg-white/15 text-white hover:bg-white/25 focus:ring-white/50"
+        }`}
       >
         <CalendarIcon className="shrink-0" />
-        <span className="whitespace-nowrap">{label}</span>
+        <span className="min-w-0 truncate">{label}</span>
       </button>
 
-      {open && (
+      {popup.present && (
         <div
           role="dialog"
           aria-label="Choose reporting period"
-          className={`absolute right-0 top-full z-[100] mt-1.5 w-[16.75rem] origin-top-right overflow-hidden p-2 ${theme.filterMenuPanel}`}
+          ref={popup.panelRef}
+          className={`absolute right-0 top-full z-[100] mt-1.5 w-[16.75rem] origin-top overflow-hidden p-2 ${
+            accent ? accent.panel : theme.filterMenuPanel
+          }`}
         >
-          <p className={`px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${theme.detailSectionLabel}`}>
+          <p className={`px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${
+            accent ? accent.muted : theme.detailSectionLabel
+          }`}>
             {picking ? "Choose the end day" : "Choose the start day"}
           </p>
           <div className="mb-1 flex items-center justify-between gap-1">
@@ -325,12 +390,14 @@ export function DashboardRangeCalendar({
                 setViewY(next.y);
                 setViewM(next.m);
               }}
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-sm transition disabled:opacity-30 ${theme.metricValueA} ${theme.filterMenuItemIdle}`}
+              className={`flex h-7 w-7 items-center justify-center rounded-full text-sm transition disabled:opacity-30 ${
+                accent ? accent.control : `${theme.metricValueA} ${theme.filterMenuItemIdle}`
+              }`}
               aria-label="Previous month"
             >
               ‹
             </button>
-            <p className={`text-xs font-semibold ${theme.metricValueA}`}>{monthYearLabel(viewY, viewM)}</p>
+            <p className={`text-xs font-semibold ${accent ? accent.control : theme.metricValueA}`}>{monthYearLabel(viewY, viewM)}</p>
             <button
               type="button"
               disabled={!canGoNext}
@@ -339,7 +406,9 @@ export function DashboardRangeCalendar({
                 setViewY(next.y);
                 setViewM(next.m);
               }}
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-sm transition disabled:opacity-30 ${theme.metricValueA} ${theme.filterMenuItemIdle}`}
+              className={`flex h-7 w-7 items-center justify-center rounded-full text-sm transition disabled:opacity-30 ${
+                accent ? accent.control : `${theme.metricValueA} ${theme.filterMenuItemIdle}`
+              }`}
               aria-label="Next month"
             >
               ›
@@ -349,7 +418,9 @@ export function DashboardRangeCalendar({
             {WEEKDAYS.map((d) => (
               <span
                 key={d}
-                className={`pb-0.5 text-[9px] font-bold uppercase tracking-wide ${theme.detailSectionLabel}`}
+                className={`pb-0.5 text-[9px] font-bold uppercase tracking-wide ${
+                  accent ? accent.muted : theme.detailSectionLabel
+                }`}
               >
                 {d}
               </span>
@@ -370,13 +441,21 @@ export function DashboardRangeCalendar({
                   disabled={disabled}
                   onClick={() => choose(cell.iso)}
                   className={`flex h-8 items-center justify-center rounded-lg font-semibold transition ${
-                    isEndpoint
-                      ? `text-sm ${theme.navActive}`
-                      : inRange
-                        ? `text-xs ${theme.filterMenuItemActive}`
-                        : disabled
-                          ? "cursor-not-allowed text-xs text-ink-muted/35"
-                          : `text-xs ${theme.filterMenuItemIdle}`
+                    accent
+                      ? isEndpoint
+                        ? accent.endpoint
+                        : inRange
+                          ? accent.range
+                          : disabled
+                            ? accent.disabled
+                            : accent.idle
+                      : isEndpoint
+                        ? `text-sm ${theme.navActive}`
+                        : inRange
+                          ? `text-xs ${theme.filterMenuItemActive}`
+                          : disabled
+                            ? "cursor-not-allowed text-xs text-ink-muted/35"
+                            : `text-xs ${theme.filterMenuItemIdle}`
                   }`}
                 >
                   {cell.day}
