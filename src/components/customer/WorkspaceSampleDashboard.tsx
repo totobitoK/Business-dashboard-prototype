@@ -42,13 +42,11 @@ import {
   computeRevenueOverviewMetrics,
   countCompletedJobsInRange,
   countOverdueInvoices,
-  countUpcomingAppointments,
   filterInvoices,
   filterJobsInRange,
   formatComparisonDelta,
   getComparisonRange,
   invoiceAgingBuckets,
-  listUpcomingAppointments,
   oldestUnpaidInvoiceDaysOverdue,
   paymentsForInvoice,
   resolveReportingRange,
@@ -76,6 +74,17 @@ import { buildPipelineView } from "@/lib/hubspot-pipeline";
 import { livePipelineRead } from "@/lib/hubspot-crm";
 import { demoPipelineRead } from "@/lib/hubspot-pipeline-sample";
 import { summarizeSalesInsight } from "@/lib/sales-insight";
+import {
+  appointmentAsScheduleVisit,
+  jobberStatusMessage,
+  liveJobberRead,
+  scheduleSources,
+  sourceLabel,
+  upcomingVisits,
+  visitClockLabel,
+  type ScheduleVisit,
+} from "@/lib/jobber-visits";
+import { demoJobberRead } from "@/lib/jobber-visits-sample";
 import { currencyExponent } from "@/lib/square/collections-presentation";
 import { DashboardSection } from "@/components/customer/DashboardSection";
 import { KpiStatCard } from "@/components/customer/KpiStatCard";
@@ -209,10 +218,6 @@ function formatJobRowWhen(job: BusinessJob): { date: string; time: string | null
   }
   const { time } = formatNaiveBusinessDateTime(job.scheduledAt);
   return { date, time: time || null };
-}
-
-function formatAppointmentDateTime(iso: string): { date: string; time: string } {
-  return formatNaiveBusinessDateTime(iso);
 }
 
 const REVENUE_WIDGETS: DashboardWidgetId[] = [
@@ -457,6 +462,21 @@ export function WorkspaceSampleDashboard({
       data.invoices,
       range
     );
+    const jobberRead = liveSnapshot
+      ? composition?.service
+        ? liveJobberRead({
+            payload: null,
+            timeZone: liveSnapshot.timeZone ?? BUSINESS_TIMEZONE,
+            state: "pending_first_sync",
+            lastSuccessfulSyncAt: null,
+            message: null,
+          })
+        : null
+      : demoJobberRead(BUSINESS_TIMEZONE);
+    const scheduleVisits = [
+      ...data.appointments.map(appointmentAsScheduleVisit),
+      ...(jobberRead?.visits ?? []),
+    ];
     const salesPayments: BusinessPayment[] = liveSnapshot
       ? liveSnapshot.collections.transactions
           .filter((row) => row.kind === "payment" && row.amountMinor > 0)
@@ -486,8 +506,10 @@ export function WorkspaceSampleDashboard({
       categories,
       invoiceTotal: data.invoices.length,
       jobCategories,
-      upcoming: countUpcomingAppointments(data.appointments, 7, data.demoAsOf),
-      upcomingList: listUpcomingAppointments(data.appointments, 7, data.demoAsOf),
+      upcoming: upcomingVisits(scheduleVisits, data.demoAsOf, 7, BUSINESS_TIMEZONE).length,
+      upcomingList: upcomingVisits(scheduleVisits, data.demoAsOf, 7, BUSINESS_TIMEZONE),
+      showVisitSource: scheduleSources(scheduleVisits).length > 1,
+      jobberScheduleNote: jobberStatusMessage(jobberRead),
       asOfDate: data.demoAsOf,
       live,
       salesInsight: summarizeSalesInsight({
@@ -499,7 +521,7 @@ export function WorkspaceSampleDashboard({
       }),
       ...revenueOverview,
     };
-  }, [data, liveSnapshot, rangeResult.range]);
+  }, [composition?.service, data, liveSnapshot, rangeResult.range]);
 
   const invoiceList = useMemo(() => {
     if (!data || !analyticsCore) return null;
@@ -761,13 +783,14 @@ export function WorkspaceSampleDashboard({
         theme={theme}
         upcoming={computed.upcoming}
         upcomingList={computed.upcomingList}
+        showSource={computed.showVisitSource}
+        statusNote={computed.jobberScheduleNote}
         selectedAppointmentId={selectedAppointmentId}
         onSelectAppointment={(id) => {
           setSelectedAppointmentId(id);
           setSelectedInvoiceId(null);
           setSelectedJobId(null);
         }}
-        formatDateTime={formatAppointmentDateTime}
         asOf={computed.asOfDate}
         scheduleHref={dashboardSectionHref(workspaceId, "schedule", sectionLinkBase)}
         embedded
@@ -1958,9 +1981,10 @@ function OperationsSchedulePanel({
   theme,
   upcoming,
   upcomingList,
+  showSource = false,
+  statusNote = null,
   selectedAppointmentId,
   onSelectAppointment,
-  formatDateTime,
   asOf = DEMO_AS_OF_DATE,
   scheduleHref,
   embedded = false,
@@ -1970,10 +1994,11 @@ function OperationsSchedulePanel({
   compact: boolean;
   theme: ReturnType<typeof useCustomerPortal>["theme"];
   upcoming: number;
-  upcomingList: ReturnType<typeof listUpcomingAppointments>;
+  upcomingList: ScheduleVisit[];
+  showSource?: boolean;
+  statusNote?: string | null;
   selectedAppointmentId: string | null;
   onSelectAppointment: (id: string) => void;
-  formatDateTime: (iso: string) => { date: string; time: string };
   asOf?: string;
   scheduleHref: string;
   embedded?: boolean;
@@ -1985,7 +2010,17 @@ function OperationsSchedulePanel({
   const density = getOperationsListDensity(upcomingList.length);
   const visible = upcomingList.slice(0, summary ? 3 : density.maxVisible);
   const hiddenCount = upcomingList.length - visible.length;
-  const assigneeBreakdown = appointmentAssigneeBreakdown(upcomingList);
+  const assigneeBreakdown = appointmentAssigneeBreakdown(
+    upcomingList.map((visit) => ({
+      id: visit.id,
+      startAt: visit.startsAt ?? `${visit.day ?? asOf}T12:00:00`,
+      title: visit.title,
+      location: "",
+      assignee: visit.assignees[0] ?? "",
+      status: "scheduled" as const,
+      sourceLabel: sourceLabel(visit.source),
+    }))
+  );
 
   const shellClass = bare
     ? "min-w-0"
@@ -2010,32 +2045,35 @@ function OperationsSchedulePanel({
           ))}
         </div>
       )}
+      {statusNote ? <p className={`mt-2 ${density.meta} text-ink`}>{statusNote}</p> : null}
       {visible.length === 0 ? (
         <p className={`${summary ? "text-left" : "mt-3 text-center"} ${density.meta} text-ink-muted`}>
           No upcoming appointments in this window.
         </p>
       ) : (
         <ul className={`mt-3 divide-y ${theme.widgetListDivide} ${theme.widgetListShell} ${density.text}`}>
-          {visible.map((appt) => {
-            const { date, time } = formatDateTime(appt.startAt);
+          {visible.map((visit) => {
+            const when = visit.day ? formatCalendarDateDisplay(visit.day, "withWeekday") : "Unscheduled";
+            const people = visit.assignees.join(", ");
             return (
-              <li key={appt.id}>
+              <li key={visit.id}>
                 <button
                   type="button"
-                  onClick={() => onSelectAppointment(appt.id)}
+                  onClick={() => onSelectAppointment(visit.id)}
                   className={`flex w-full flex-col items-start gap-0.5 px-3 text-left ${density.rowPy} ${
-                    selectedAppointmentId === appt.id
+                    selectedAppointmentId === visit.id
                       ? `text-sm font-medium ${theme.operationsListSelected}`
                       : `${density.text} ${operationsListRowBase} ${theme.widgetListRow} ${theme.operationsListHover}`
                   }`}
                 >
-                  <p className="font-semibold text-ink">{appt.title}</p>
+                  <p className="font-semibold text-ink">{visit.title}</p>
                   <p className={density.meta}>
-                    <span className={`font-semibold ${theme.listAccent}`}>{date}</span>
+                    <span className={`font-semibold ${theme.listAccent}`}>{when}</span>
                     <span className="text-ink-muted">
                       {" · "}
-                      {time}
-                      {appt.assignee ? ` · ${appt.assignee}` : ""}
+                      {visitClockLabel(visit, BUSINESS_TIMEZONE)}
+                      {people ? ` · ${people}` : ""}
+                      {showSource ? ` · ${sourceLabel(visit.source)}` : ""}
                     </span>
                   </p>
                 </button>

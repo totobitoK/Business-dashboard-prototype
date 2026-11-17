@@ -2,34 +2,43 @@
 
 import { useMemo, useState } from "react";
 import { DashboardShell } from "@/components/customer/DashboardWorkspaceNav";
+import { DashboardChipGroup } from "@/components/customer/dashboard-controls";
+import { useDashboardComposition } from "@/components/customer/use-dashboard-composition";
 import { liveAppointments } from "@/lib/daily-dashboard/live-figures";
 import type { DailyDashboardSnapshot } from "@/lib/daily-dashboard/types";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import { isLightDashboardTheme } from "@/lib/layout-customize-themes";
 import { WORKSPACE_ALPINE_HVAC, isValidWorkspaceId } from "@/lib/customer-workspaces";
-import {
-  DEMO_AS_OF_DATE,
-  getWorkspaceBusinessData,
-  type BusinessAppointment,
-} from "@/lib/workspace-business-data";
-import { listUpcomingAppointments } from "@/lib/workspace-analytics";
+import { DEMO_AS_OF_DATE, getWorkspaceBusinessData } from "@/lib/workspace-business-data";
 import {
   BUSINESS_TIMEZONE,
+  formatCalendarDateDisplay,
   formatIsoDate,
   parseIsoDate,
 } from "@/lib/workspace-reporting-period";
+import {
+  appointmentAsScheduleVisit,
+  filterVisitsBySource,
+  jobberStatusMessage,
+  liveJobberRead,
+  scheduleSources,
+  sourceLabel,
+  unscheduledVisits,
+  upcomingVisits,
+  visitClockLabel,
+  visitsOnDay,
+  type ScheduleSource,
+  type ScheduleVisit,
+} from "@/lib/jobber-visits";
+import { demoJobberRead } from "@/lib/jobber-visits-sample";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-function chipTime(iso: string): string {
-  return formatDateTime(iso).time.toLowerCase();
-}
-
 /** Time plus the first word of the visit title, for a calendar chip. */
-function chipLabel(appt: BusinessAppointment, timeOnly: boolean): string {
-  const time = chipTime(appt.startAt);
+function chipLabel(visit: ScheduleVisit, timeOnly: boolean, timeZone: string): string {
+  const time = visitClockLabel(visit, timeZone);
   if (timeOnly) return time;
-  const word = (appt.title.trim().split(/\s+/)[0] ?? "").replace(/-/g, " ");
+  const word = (visit.title.trim().split(/\s+/)[0] ?? "").replace(/-/g, " ");
   return word ? `${time} ${word}` : time;
 }
 
@@ -108,52 +117,63 @@ export function WorkspaceScheduleDashboard({
   liveSnapshot?: DailyDashboardSnapshot | null;
 }) {
   const { workspaceId, theme, workspaceSessionKey } = useCustomerPortal();
+  const composition = useDashboardComposition(liveSnapshot);
   const sampleWorkspaceId = isValidWorkspaceId(workspaceId)
     ? workspaceId
     : WORKSPACE_ALPINE_HVAC;
   const sample = liveSnapshot ? undefined : getWorkspaceBusinessData(sampleWorkspaceId);
   const asOfDate = liveSnapshot?.asOfDate ?? DEMO_AS_OF_DATE;
+  const timeZone = liveSnapshot?.timeZone ?? BUSINESS_TIMEZONE;
   const appointments = useMemo(
     () => (liveSnapshot ? liveAppointments(liveSnapshot) : sample?.appointments ?? []),
     [liveSnapshot, sample]
   );
+  const jobberRead = useMemo(() => {
+    if (liveSnapshot) {
+      if (!composition?.service) return null;
+      return liveJobberRead({
+        payload: null,
+        timeZone,
+        state: "pending_first_sync",
+        lastSuccessfulSyncAt: null,
+        message: null,
+      });
+    }
+    return demoJobberRead(timeZone);
+  }, [composition?.service, liveSnapshot, timeZone]);
+  const visits = useMemo(
+    () => [...appointments.map(appointmentAsScheduleVisit), ...(jobberRead?.visits ?? [])],
+    [appointments, jobberRead]
+  );
+  const sources = scheduleSources(visits);
   const asOf = parseIsoDate(asOfDate);
   const [viewYear, setViewYear] = useState(asOf.y);
   const [viewMonth, setViewMonth] = useState(asOf.m);
   const [selectedIso, setSelectedIso] = useState(asOfDate);
   const [selectedUpcomingId, setSelectedUpcomingId] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<ScheduleSource | "all">("all");
   const isHvac = !liveSnapshot && workspaceId.includes("hvac");
-
-  const appointmentsByIso = useMemo(() => {
-    const byIso = new Map<string, BusinessAppointment[]>();
-    if (!liveSnapshot && !sample) return byIso;
-    for (const appt of appointments) {
-      if (appt.status === "canceled") continue;
-      const iso = appt.startAt.slice(0, 10);
-      const list = byIso.get(iso) ?? [];
-      list.push(appt);
-      byIso.set(iso, list);
-    }
-    return byIso;
-  }, [appointments, liveSnapshot, sample]);
+  const filtered = filterVisitsBySource(visits, sources.length > 1 ? sourceFilter : "all");
 
   const cells = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const upcoming = useMemo(
-    () => listUpcomingAppointments(appointments, 14, asOfDate),
-    [appointments, asOfDate]
+    () => upcomingVisits(filtered, asOfDate, 14, timeZone),
+    [filtered, asOfDate, timeZone]
   );
+  const unscheduled = useMemo(() => unscheduledVisits(filtered), [filtered]);
 
   if (!liveSnapshot && !sample) {
     return <p className="text-sm text-ink-muted">No schedule data for this workspace.</p>;
   }
 
   const selected = parseIsoDate(selectedIso);
-  const selectedList = appointmentsByIso.get(selectedIso) ?? [];
+  const selectedList = visitsOnDay(filtered, selectedIso, timeZone);
   const selectedUpcoming = upcoming.find((appt) => appt.id === selectedUpcomingId) ?? null;
   const monthCount = cells.reduce(
-    (sum, cell) => (cell.inMonth ? sum + (appointmentsByIso.get(cell.iso)?.length ?? 0) : sum),
+    (sum, cell) => (cell.inMonth ? sum + visitsOnDay(filtered, cell.iso, timeZone).length : sum),
     0
   );
+  const jobberNote = jobberStatusMessage(jobberRead);
   const viewingAsOfMonth = viewYear === asOf.y && viewMonth === asOf.m;
   const scheduleNotice =
     liveSnapshot && !["ready", "verified_empty", "stale"].includes(liveSnapshot.schedule.state)
@@ -183,6 +203,28 @@ export function WorkspaceScheduleDashboard({
       key={`schedule-${workspaceId}-${workspaceSessionKey}`}
       title="Schedule"
     >
+      {sources.length > 1 || jobberNote || scheduleNotice || jobberRead?.sampleLabel ? (
+        <div className="flex flex-col gap-2 px-4 pt-4 lg:px-5">
+          {jobberRead?.sampleLabel ? (
+            <p className="text-sm text-ink">Jobber · {jobberRead.sampleLabel}</p>
+          ) : null}
+          {sources.length > 1 ? (
+            <DashboardChipGroup
+              theme={theme}
+              aria-label="Schedule source"
+              value={sourceFilter}
+              options={[
+                { value: "all", label: "All" },
+                ...sources.map((source) => ({ value: source, label: sourceLabel(source) })),
+              ]}
+              onChange={setSourceFilter}
+            />
+          ) : null}
+          {jobberNote || scheduleNotice ? (
+            <p className="text-sm text-ink">{[jobberNote, scheduleNotice].filter(Boolean).join(" ")}</p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-4 lg:grid-cols-5 lg:p-5">
         <div className="contents">
           <section
@@ -247,7 +289,7 @@ export function WorkspaceScheduleDashboard({
 
             <div className="grid grid-cols-7">
               {cells.map((cell) => {
-                const visits = appointmentsByIso.get(cell.iso) ?? [];
+                const visits = visitsOnDay(filtered, cell.iso, timeZone);
                 const selectedDay = cell.iso === selectedIso;
                 const splitDay = visits.length > 4;
                 return (
@@ -285,7 +327,7 @@ export function WorkspaceScheduleDashboard({
                             key={appt.id}
                             className={`truncate rounded px-1 py-0.5 text-[9px] font-medium leading-tight text-white ${theme.chartBarHi}`}
                           >
-                            {chipLabel(appt, splitDay)}
+                            {chipLabel(appt, splitDay, timeZone)}
                           </span>
                         ))}
                       </span>
@@ -307,37 +349,57 @@ export function WorkspaceScheduleDashboard({
                 </p>
             </div>
             <ul className="space-y-2 p-3">
+              {unscheduled.length > 0 ? (
+                <li className="px-1 pb-2">
+                  <p className="text-xs font-semibold text-ink">Unscheduled</p>
+                  <ul className="mt-1 space-y-1">
+                    {unscheduled.map((visit) => (
+                      <li key={visit.id} className="text-sm text-ink">
+                        {visit.title}
+                        {visit.assignees.length ? ` · ${visit.assignees.join(", ")}` : ""}
+                        {sources.length > 1 ? ` · ${sourceLabel(visit.source)}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ) : null}
               {upcoming.length === 0 ? (
-                scheduleNotice ? null : (
-                  <li className="px-1 py-2 text-sm text-ink-muted">No upcoming visits.</li>
-                )
+                <li className="px-1 py-2 text-sm text-ink-muted">No upcoming visits.</li>
               ) : (
-                upcoming.map((appt) => {
-                  const { date, time } = formatDateTime(appt.startAt);
-                  const iso = appt.startAt.slice(0, 10);
-                  const active = appt.id === selectedUpcoming?.id;
+                upcoming.map((visit) => {
+                  const active = visit.id === selectedUpcoming?.id;
+                  const people = visit.assignees.join(", ");
                   return (
-                    <li key={appt.id}>
+                    <li key={visit.id}>
                       <button
                         type="button"
                         onClick={() => {
-                          const parsed = parseIsoDate(iso);
+                          if (!visit.day) return;
+                          const parsed = parseIsoDate(visit.day);
                           showMonth(parsed.y, parsed.m, parsed.d);
-                          setSelectedUpcomingId(appt.id);
+                          setSelectedUpcomingId(visit.id);
                         }}
                         className={`flex w-full items-start gap-3 rounded-lg border px-3 py-2 text-left text-sm transition ${theme.listRow} ${
                           active ? theme.operationsListSelected : theme.operationsListHover
                         }`}
                       >
                         <span className="w-28 shrink-0">
-                          <span className={`block text-xs font-bold ${theme.listAccent}`}>{date}</span>
-                          <span className={`text-[11px] ${theme.metricValueA}`}>{time}</span>
+                          <span className={`block text-xs font-bold ${theme.listAccent}`}>
+                            {visit.day ? formatCalendarDateDisplay(visit.day, "withWeekday") : "Unscheduled"}
+                          </span>
+                          <span className={`text-[11px] ${theme.metricValueA}`}>
+                            {visitClockLabel(visit, timeZone)}
+                          </span>
                         </span>
                         <span className="min-w-0">
                           <span className={`block truncate font-medium ${active ? theme.metricValueA : "text-ink"}`}>
-                            {appt.title}
+                            {visit.title}
                           </span>
-                          <span className="block truncate text-xs text-ink-muted">{appt.location}</span>
+                          <span className="block truncate text-xs text-ink-muted">
+                            {[people || null, sources.length > 1 ? sourceLabel(visit.source) : null]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
                         </span>
                       </button>
                     </li>
@@ -359,15 +421,27 @@ export function WorkspaceScheduleDashboard({
               <dl className="min-h-0 flex-1 space-y-2 overflow-auto p-3 text-sm">
                 <VisitDetailRow
                   label="When"
-                  value={`${formatDateTime(selectedUpcoming.startAt).date} · ${formatDateTime(selectedUpcoming.startAt).time}`}
+                  value={`${selectedUpcoming.day ? formatCalendarDateDisplay(selectedUpcoming.day, "withWeekday") : "Unscheduled"} · ${visitClockLabel(selectedUpcoming, timeZone)}`}
                 />
-                <VisitDetailRow label="Where" value={selectedUpcoming.location} />
-                <VisitDetailRow label="Assigned to" value={selectedUpcoming.assignee} />
+                <VisitDetailRow
+                  label="Assigned to"
+                  value={selectedUpcoming.assignees.join(", ") || "Not reported"}
+                />
                 <VisitDetailRow
                   label="Status"
-                  value={selectedUpcoming.status === "canceled" ? "Canceled" : "Scheduled"}
+                  value={selectedUpcoming.completed ? "Completed" : "Scheduled"}
                 />
-                <VisitDetailRow label="Source" value={selectedUpcoming.sourceLabel} />
+                <VisitDetailRow label="Source" value={sourceLabel(selectedUpcoming.source)} />
+                {selectedUpcoming.url ? (
+                  <a
+                    href={selectedUpcoming.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex text-xs font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
+                  >
+                    Open in Jobber
+                  </a>
+                ) : null}
               </dl>
             </aside>
           ) : null}
@@ -394,19 +468,32 @@ export function WorkspaceScheduleDashboard({
             {selectedList.length === 0 ? (
               <li className="px-1 py-2 text-sm text-ink-muted">No appointments this day.</li>
             ) : (
-              selectedList.map((appt) => {
-                const { time } = formatDateTime(appt.startAt);
-                return (
-                  <li key={appt.id} className={`rounded-lg border p-3 text-sm ${theme.listRow}`}>
-                    <p className={`text-xs font-bold ${theme.listAccent}`}>{time}</p>
-                    <p className="mt-0.5 font-medium text-ink">{appt.title}</p>
-                    <p className="text-xs text-ink-muted">{appt.location}</p>
-                    {appt.assignee ? (
-                      <p className={`mt-1 text-[11px] font-medium ${theme.metricValueA}`}>{appt.assignee}</p>
+              selectedList.map((visit) => (
+                  <li key={visit.id} className={`rounded-lg border p-3 text-sm ${theme.listRow}`}>
+                    <p className={`text-xs font-bold ${theme.listAccent}`}>{visitClockLabel(visit, timeZone)}</p>
+                    <p className="mt-0.5 font-medium text-ink">{visit.title}</p>
+                    {visit.clientName ? <p className="text-xs text-ink-muted">{visit.clientName}</p> : null}
+                    {visit.assignees.length ? (
+                      <p className={`mt-1 text-[11px] font-medium ${theme.metricValueA}`}>
+                        {visit.assignees.join(", ")}
+                      </p>
+                    ) : null}
+                    {visit.completed ? <p className="mt-1 text-[11px] text-ink-muted">Completed</p> : null}
+                    {sources.length > 1 ? (
+                      <p className="mt-1 text-[11px] text-ink-muted">{sourceLabel(visit.source)}</p>
+                    ) : null}
+                    {visit.url ? (
+                      <a
+                        href={visit.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`mt-1 inline-flex text-[11px] font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
+                      >
+                        Open in Jobber
+                      </a>
                     ) : null}
                   </li>
-                );
-              })
+                ))
             )}
           </ul>
         </aside>
