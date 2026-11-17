@@ -2,12 +2,14 @@
 
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
 import { SalesInsightCards } from "@/components/customer/SalesInsightCards";
+import { SalesPipelineCard } from "@/components/customer/PipelinePanel";
+import { buildPipelineView } from "@/lib/hubspot-pipeline";
+import { SAMPLE_PIPELINE_READ } from "@/lib/hubspot-pipeline-sample";
 import type { SalesInsight } from "@/lib/sales-insight";
 import { DASHBOARD_SECTIONS } from "@/lib/dashboard-section-routes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import {
   CONNECT_SOURCE_PROMPT,
-  HUBSPOT_DEALS_PENDING,
   type CustomerDashboardComposition,
 } from "@/lib/dashboard-composition";
 import { DashboardSection } from "@/components/customer/DashboardSection";
@@ -22,6 +24,7 @@ import {
   type RevenueKpiId,
 } from "@/lib/workspace-kpi-layout";
 import {
+  BUSINESS_TIMEZONE,
   addCalendarDays,
   formatCalendarDateDisplay,
   formatRangeForDisplay,
@@ -81,6 +84,11 @@ const previewOtherAccounts = PREVIEW_TREND_TOTAL - previewPlaza - previewOak - p
 const previewWholesale = Math.round(PREVIEW_TREND_TOTAL * 0.45);
 const previewInstore = Math.round(PREVIEW_TREND_TOTAL * 0.33);
 const previewEvents = PREVIEW_TREND_TOTAL - previewWholesale - previewInstore;
+const PREVIEW_PIPELINE = buildPipelineView({
+  read: SAMPLE_PIPELINE_READ,
+  range: { start: "2026-03-01", end: "2026-03-12", preset: "mtd" },
+  timeZone: BUSINESS_TIMEZONE,
+});
 const previewLargest = Math.round(PREVIEW_TREND_TOTAL * 0.12);
 const PREVIEW_SALES: SalesInsight = {
   total: PREVIEW_TREND_TOTAL,
@@ -479,11 +487,7 @@ export function DashboardAppearancePreview({
                   rangeLabel={rangeLabel}
                 />
               ) : composition?.sales ? (
-                <p
-                  className={`rounded-lg px-4 py-6 text-center text-sm text-ink ${theme.sectionPanel}`}
-                >
-                  {HUBSPOT_DEALS_PENDING}
-                </p>
+                <SalesPipelineCard view={PREVIEW_PIPELINE} theme={theme} />
               ) : (
                 <PreviewMetricsGrid
                   kpiTab={kpiTab}
@@ -565,12 +569,8 @@ export function DashboardAppearancePreview({
                 </DashboardSection>
               ) : null}
 
-              {composition?.sales && visibleKpis.length > 0 ? (
-                <p
-                  className={`rounded-lg px-4 py-6 text-center text-sm text-ink ${theme.sectionPanel}`}
-                >
-                  {HUBSPOT_DEALS_PENDING}
-                </p>
+              {kpiTab === "overview" && (!composition || (composition.sales && visibleKpis.length > 0)) ? (
+                <SalesPipelineCard view={PREVIEW_PIPELINE} theme={theme} />
               ) : null}
             </>
           )}

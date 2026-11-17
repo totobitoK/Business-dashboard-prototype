@@ -36,7 +36,7 @@ describe("composeCustomerDashboard", () => {
     ]);
     expect(layout.revenueKpis).toEqual(["overdue_ar"]);
     expect(layout.widgets).toEqual(["metrics", "collections_chart", "invoices"]);
-    expect(layout.sections).toEqual(["overview"]);
+    expect(layout.sections).toEqual(["overview", "revenue"]);
     expect(layout.salesBlocks).toEqual([]);
     expect(layout.promptToConnect).toBe(false);
   });
@@ -45,7 +45,7 @@ describe("composeCustomerDashboard", () => {
     const layout = composeCustomerDashboard({ connected: ["stripe"] });
     expect(layout.overviewKpis).toEqual(["payments_collected"]);
     expect(layout.widgets).toEqual(["metrics", "collections_chart"]);
-    expect(layout.sections).toEqual(["overview"]);
+    expect(layout.sections).toEqual(["overview", "revenue"]);
   });
 
   it("adds weekly and monthly revenue only when paid invoices count as revenue", () => {
@@ -88,12 +88,7 @@ describe("composeCustomerDashboard", () => {
     const layout = composeCustomerDashboard({ connected: ["hubspot"] });
     expect(layout.sales).toBe(true);
     expect(layout.service).toBe(false);
-    expect(layout.salesBlocks).toEqual([
-      "month_pipeline",
-      "open_pipeline",
-      "deals_won_this_month",
-      "weighted_pipeline",
-    ]);
+    expect(layout.salesBlocks).toEqual([]);
     expect(layout.overviewKpis).toEqual([]);
     expect(layout.widgets).toEqual([]);
     expect(layout.sections).toEqual(["overview", "revenue"]);
@@ -184,7 +179,7 @@ describe("connected sources", () => {
 describe("visible dashboard section", () => {
   it("sends a missing Revenue or Schedule request back to Overview", () => {
     const layout = composeCustomerDashboard({ connected: ["quickbooks", "square"] });
-    expect(visibleDashboardSection("revenue", layout)).toBe("overview");
+    expect(visibleDashboardSection("revenue", layout)).toBe("revenue");
     expect(visibleDashboardSection("schedule", layout)).toBe("overview");
     expect(visibleDashboardSection("overview", layout)).toBe("overview");
     expect(visibleDashboardSection("schedule", null)).toBe("schedule");

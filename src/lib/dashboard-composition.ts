@@ -11,29 +11,19 @@ import {
 } from "./workspace-kpi-layout";
 
 /**
- * HubSpot deal figures. Kept off the saved revenue KPI list so a missing
- * HubSpot connection cannot append empty cards to every layout.
+ * Pipeline is a Revenue view, not a saved KPI card. Weighted pipeline and the
+ * invoice "Month pipeline" card stay out of this release.
  */
-export const SALES_BLOCK_IDS = [
-  "month_pipeline",
-  "open_pipeline",
-  "deals_won_this_month",
-  "weighted_pipeline",
-] as const;
+export const SALES_BLOCK_IDS = [] as const;
 
 export type SalesBlockId = (typeof SALES_BLOCK_IDS)[number];
 
-export const SALES_BLOCK_LABELS: Record<SalesBlockId, string> = {
-  month_pipeline: "Month pipeline",
-  open_pipeline: "Open pipeline",
-  deals_won_this_month: "Deals won this month",
-  weighted_pipeline: "Weighted pipeline",
-};
+export const SALES_BLOCK_LABELS: Record<string, string> = {};
 
 export const CONNECT_SOURCE_PROMPT = "Connect a source to see this dashboard.";
 
 export const HUBSPOT_DEALS_PENDING =
-  "HubSpot is connected. Open pipeline, deals won this month, and weighted pipeline appear after sync.";
+  "Sales pipeline is on Overview and under Revenue. It is not one of these cards.";
 
 export const JOBBER_JOBS_PENDING =
   "Jobber is connected. Completed jobs appear after sync.";
@@ -111,7 +101,7 @@ export function composeCustomerDashboard(input: {
   if (schedule) widgets.push("appointments");
   if (books) widgets.push("invoices");
 
-  const showRevenue = revenueFromInvoices || salesBlocks.length > 0;
+  const showRevenue = payments || sales || revenueFromInvoices;
   const sections: DashboardSectionId[] = ["overview"];
   if (showRevenue) sections.push("revenue");
   if (schedule) sections.push("schedule");
@@ -119,7 +109,7 @@ export function composeCustomerDashboard(input: {
   const promptToConnect =
     overviewKpis.length === 0 &&
     revenueKpis.length === 0 &&
-    salesBlocks.length === 0 &&
+    !sales &&
     widgets.length === 0;
 
   return {

@@ -183,37 +183,8 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
                   strokeLinejoin="round"
                   strokeLinecap="round"
                 />
-                {points.map((p, i) => (
-                  <circle
-                    key={p.start}
-                    cx={p.x}
-                    cy={p.y}
-                    r={hoverIndex === i ? 4 : 2.5}
-                    className={`pointer-events-none ${
-                      hoverIndex === i ? theme.chartPointHover : theme.chartPoint
-                    }`}
-                  />
-                ))}
               </>
             )}
-
-            {points.map((p, i) => {
-              const text = periodLabel(p);
-              const anchor =
-                i === 0 ? "start" : i === lastIdx ? "end" : "middle";
-              const sizeClass = trend.length > 20 ? "text-[7px]" : "text-[9px]";
-              return (
-                <text
-                  key={`lbl-${p.start}`}
-                  x={p.x}
-                  y={labelY}
-                  textAnchor={anchor}
-                  className={`fill-ink-muted font-medium tabular-nums ${sizeClass}`}
-                >
-                  {text}
-                </text>
-              );
-            })}
 
             {hoverBands.map((band) => (
               <rect
@@ -226,6 +197,28 @@ export const CollectionsTrendChart = memo(function CollectionsTrendChart({
                 onMouseEnter={() => setHoverIndex(band.i)}
               />
             ))}
+
+            {points.map((p, i) => {
+              const resting = trend.length > 20 ? 7 : 9;
+              const hovered = hoverIndex === i;
+              const anchor = i === 0 ? "start" : i === lastIdx ? "end" : "middle";
+              return (
+                <text
+                  key={`lbl-${p.start}`}
+                  x={p.x}
+                  y={labelY}
+                  textAnchor={anchor}
+                  className="pointer-events-none fill-ink-muted tabular-nums"
+                  style={{
+                    fontSize: hovered ? resting + 2 : resting,
+                    fontWeight: hovered ? 600 : 500,
+                    transition: "font-size 180ms ease, font-weight 180ms ease",
+                  }}
+                >
+                  {periodLabel(p)}
+                </text>
+              );
+            })}
           </svg>
         )}
       </div>

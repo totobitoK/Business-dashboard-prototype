@@ -15,6 +15,7 @@ import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { CountUpMoney } from "@/components/customer/CountUpFigure";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
 import {
+  BUSINESS_TIMEZONE,
   formatCalendarDateDisplay,
   formatNaiveBusinessDateTime,
   formatRangeForDisplay,
@@ -70,6 +71,10 @@ import {
 } from "@/lib/dashboard-section-routes";
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
 import { SalesInsightCards } from "@/components/customer/SalesInsightCards";
+import { PipelineView, SalesPipelineCard } from "@/components/customer/PipelinePanel";
+import { buildPipelineView } from "@/lib/hubspot-pipeline";
+import { livePipelineRead } from "@/lib/hubspot-crm";
+import { demoPipelineRead } from "@/lib/hubspot-pipeline-sample";
 import { summarizeSalesInsight } from "@/lib/sales-insight";
 import { currencyExponent } from "@/lib/square/collections-presentation";
 import { DashboardSection } from "@/components/customer/DashboardSection";
@@ -325,6 +330,37 @@ export function WorkspaceSampleDashboard({
 
   const compact = settings.showCompactMetrics;
   const composition = useDashboardComposition(liveSnapshot);
+  const collectionsAvailable = !composition || composition.widgets.includes("collections_chart");
+  const pipelineAvailable = liveSnapshot ? Boolean(composition?.sales) : !composition || composition.sales;
+  const [revenueView, setRevenueView] = useState<"collections" | "pipeline">("collections");
+  const [pipelineId, setPipelineId] = useState<string | null>(null);
+
+  useEffect(() => {
+    function syncRevenueView() {
+      const param = new URLSearchParams(window.location.search).get("view");
+      if (param === "pipeline" && pipelineAvailable) setRevenueView("pipeline");
+      else if (param === "collections" && collectionsAvailable) setRevenueView("collections");
+      else setRevenueView(collectionsAvailable ? "collections" : "pipeline");
+    }
+    syncRevenueView();
+    window.addEventListener("popstate", syncRevenueView);
+    return () => window.removeEventListener("popstate", syncRevenueView);
+  }, [collectionsAvailable, pipelineAvailable, mode]);
+
+  const pipelineRead = useMemo(() => {
+    if (!pipelineAvailable) return null;
+    const timeZone = liveSnapshot?.timeZone ?? BUSINESS_TIMEZONE;
+    if (liveSnapshot) {
+      return livePipelineRead({
+        payload: null,
+        timeZone,
+        state: "pending_first_sync",
+        lastSuccessfulSyncAt: null,
+        message: null,
+      });
+    }
+    return demoPipelineRead(timeZone);
+  }, [pipelineAvailable, liveSnapshot]);
 
   const rangeResult = useMemo(() => {
     const r = resolveReportingRange(preset, customStart, customEnd);
@@ -333,6 +369,16 @@ export function WorkspaceSampleDashboard({
     }
     return { error: null as null, range: r.range };
   }, [preset, customStart, customEnd]);
+
+  const pipelineView = useMemo(() => {
+    if (!pipelineRead || !rangeResult.range) return null;
+    return buildPipelineView({
+      read: pipelineRead,
+      range: rangeResult.range,
+      timeZone: liveSnapshot?.timeZone ?? BUSINESS_TIMEZONE,
+      pipelineId,
+    });
+  }, [pipelineRead, rangeResult.range, liveSnapshot?.timeZone, pipelineId]);
 
   useEffect(() => {
     setRangeError(rangeResult.error);
@@ -519,9 +565,40 @@ export function WorkspaceSampleDashboard({
   );
   const salesCards =
     mode === "revenue" &&
+    revenueView === "collections" &&
     computed.salesInsight &&
     visibleWidgets.includes("collections_chart") ? (
       <SalesInsightCards insight={computed.salesInsight} theme={theme} />
+    ) : null;
+  const showRevenueToggle = mode === "revenue" && collectionsAvailable && pipelineAvailable;
+  const showPipelinePage = mode === "revenue" && revenueView === "pipeline" && pipelineView != null;
+
+  function openRevenue(next: "collections" | "pipeline") {
+    setRevenueView(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", "revenue");
+    url.searchParams.set("view", next);
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== current) window.history.pushState(window.history.state, "", nextUrl);
+    selectSection?.("revenue");
+  }
+
+  const pipelineCard =
+    mode === "overview" && pipelineView ? (
+      <SalesPipelineCard
+        view={pipelineView}
+        theme={theme}
+        action={
+          <button
+            type="button"
+            className={`text-xs font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
+            onClick={() => openRevenue("pipeline")}
+          >
+            View pipeline
+          </button>
+        }
+      />
     ) : null;
 
   const visibleInvoices = computed.invoices.slice(0, invoiceLimit);
@@ -889,7 +966,29 @@ export function WorkspaceSampleDashboard({
           </p>
         ) : (
           <>
-        {(mode === "overview" ? renderOverviewRows : renderWidgetRows)(
+        {showRevenueToggle ? (
+          <div className="px-3 pt-3 sm:px-4">
+            <DashboardChipGroup
+              theme={theme}
+              aria-label="Revenue view"
+              value={revenueView}
+              options={[
+                { value: "collections", label: "Collections" },
+                { value: "pipeline", label: "Pipeline" },
+              ]}
+              onChange={openRevenue}
+            />
+          </div>
+        ) : null}
+        {showPipelinePage && pipelineView ? (
+          <PipelineView
+            view={pipelineView}
+            theme={theme}
+            rangeLabel={formatRangeForDisplay(computed.range)}
+            onPipelineChange={setPipelineId}
+          />
+        ) : (
+        (mode === "overview" ? renderOverviewRows : renderWidgetRows)(
           visibleWidgets,
           widgetBlocks,
           theme,
@@ -1006,14 +1105,9 @@ export function WorkspaceSampleDashboard({
               return { title: id };
           }
         },
-        salesCards)}
-        {composition?.sales ? (
-          <p
-            className={`mx-3 mb-3 px-4 py-6 text-center text-sm text-ink sm:mx-4 ${theme.sectionPanel}`}
-          >
-            {HUBSPOT_DEALS_PENDING}
-          </p>
-        ) : null}
+        salesCards,
+        pipelineCard)
+        )}
           </>
         )}
 
@@ -1546,11 +1640,18 @@ function renderOverviewRows(
   compact: boolean,
   matchSummaryHeight: boolean,
   sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta,
-  _salesInsight: ReactNode | null
+  _salesInsight: ReactNode | null,
+  pipelineCard: ReactNode | null
 ) {
   const rows: ReactNode[] = [];
   const skip = new Set<DashboardWidgetId>();
   const visible = (id: DashboardWidgetId) => visibleWidgets.includes(id);
+  let placedPipeline = false;
+  const placePipeline = () => {
+    if (placedPipeline || !pipelineCard) return;
+    placedPipeline = true;
+    rows.push(<div key="sales-pipeline">{pipelineCard}</div>);
+  };
 
   const wrapSection = (id: DashboardWidgetId, fill = false) => {
     const meta = sectionFor(id);
@@ -1580,6 +1681,7 @@ function renderOverviewRows(
       rows.push(
         <div key="metrics">{widgetBlocks.metrics}</div>
       );
+      placePipeline();
       continue;
     }
 
@@ -1623,6 +1725,7 @@ function renderOverviewRows(
     }
   }
 
+  placePipeline();
   return <div className="flex flex-col gap-3 p-3 sm:p-4">{rows}</div>;
 }
 
@@ -1633,7 +1736,8 @@ function renderWidgetRows(
   compact: boolean,
   _matchSummaryHeight: boolean,
   sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta,
-  salesInsight: ReactNode | null
+  salesInsight: ReactNode | null,
+  _pipelineCard: ReactNode | null
 ) {
   const rows: ReactNode[] = [];
   const skip = new Set<DashboardWidgetId>();
@@ -1690,7 +1794,7 @@ function renderWidgetRows(
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-5">{rows}</div>
+    <div className="flex flex-col gap-3 p-3 sm:p-4">{rows}</div>
   );
 }
 
