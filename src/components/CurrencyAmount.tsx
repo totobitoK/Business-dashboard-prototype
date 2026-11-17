@@ -19,7 +19,7 @@ export function CurrencyAmount({
 }) {
   const text = detailed
     ? formatCurrencyDetailed(amount)
-    : formatCurrency(amount);
+    : formatDashboardMoney(amount);
 
   return (
     <span className={`font-medium ${colorClass}${className ? ` ${className}` : ""}`}>

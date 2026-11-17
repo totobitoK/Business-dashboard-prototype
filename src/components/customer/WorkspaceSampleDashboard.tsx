@@ -26,6 +26,7 @@ import {
   getWorkspaceBusinessData,
   type BusinessInvoice,
   type BusinessJob,
+  type BusinessPayment,
 } from "@/lib/workspace-business-data";
 import {
   defaultLiveRangeStart,
@@ -68,8 +69,12 @@ import {
   dashboardSectionHref,
 } from "@/lib/dashboard-section-routes";
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
+import { SalesInsightCards } from "@/components/customer/SalesInsightCards";
+import { summarizeSalesInsight } from "@/lib/sales-insight";
+import { currencyExponent } from "@/lib/square/collections-presentation";
 import { DashboardSection } from "@/components/customer/DashboardSection";
 import { KpiStatCard } from "@/components/customer/KpiStatCard";
+import { useDashboardComposition } from "@/components/customer/use-dashboard-composition";
 import {
   DashboardChipGroup,
   DashboardControlBar,
@@ -80,9 +85,14 @@ import {
 import { isLightDashboardTheme, type LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import { getOperationsListDensity } from "@/lib/operations-list-density";
 import {
+  CONNECT_SOURCE_PROMPT,
+  HUBSPOT_DEALS_PENDING,
+  JOBBER_JOBS_PENDING,
+  visibleAllowedIds,
+} from "@/lib/dashboard-composition";
+import {
   OVERVIEW_KPI_LABELS,
   REVENUE_KPI_LABELS,
-  visibleKpiIds,
   type OverviewKpiId,
   type RevenueKpiId,
 } from "@/lib/workspace-kpi-layout";
@@ -314,6 +324,7 @@ export function WorkspaceSampleDashboard({
   }, [workspaceSessionKey]);
 
   const compact = settings.showCompactMetrics;
+  const composition = useDashboardComposition(liveSnapshot);
 
   const rangeResult = useMemo(() => {
     const r = resolveReportingRange(preset, customStart, customEnd);
@@ -400,6 +411,18 @@ export function WorkspaceSampleDashboard({
       data.invoices,
       range
     );
+    const salesPayments: BusinessPayment[] = liveSnapshot
+      ? liveSnapshot.collections.transactions
+          .filter((row) => row.kind === "payment" && row.amountMinor > 0)
+          .map((row) => ({
+            id: row.id,
+            date: row.reportingDate,
+            amount: row.amountMinor / 10 ** currencyExponent(row.currency),
+            customerId: row.locationName ?? "square",
+            customer: row.locationName ?? "Square",
+            sourceLabel: row.sourceType ?? "Square",
+          }))
+      : data.payments;
 
     return {
       range,
@@ -421,6 +444,13 @@ export function WorkspaceSampleDashboard({
       upcomingList: listUpcomingAppointments(data.appointments, 7, data.demoAsOf),
       asOfDate: data.demoAsOf,
       live,
+      salesInsight: summarizeSalesInsight({
+        payments: salesPayments,
+        jobs: liveSnapshot ? [] : data.jobs,
+        invoices: liveSnapshot ? [] : data.invoices,
+        range,
+        prior: compareRange,
+      }),
       ...revenueOverview,
     };
   }, [data, liveSnapshot, rangeResult.range]);
@@ -482,21 +512,30 @@ export function WorkspaceSampleDashboard({
     ? paymentsForInvoice(data, selectedInvoice.id)
     : [];
 
-  const visibleWidgets =
-    mode === "revenue"
-      ? REVENUE_WIDGETS.filter((id) => !settings.hiddenWidgets.includes(id))
-      : settings.widgetOrder.filter((id) => !settings.hiddenWidgets.includes(id));
+  const visibleWidgets = visibleAllowedIds(
+    mode === "revenue" ? REVENUE_WIDGETS : settings.widgetOrder,
+    settings.hiddenWidgets,
+    composition?.widgets ?? null
+  );
+  const salesCards =
+    mode === "revenue" &&
+    computed.salesInsight &&
+    visibleWidgets.includes("collections_chart") ? (
+      <SalesInsightCards insight={computed.salesInsight} theme={theme} />
+    ) : null;
 
   const visibleInvoices = computed.invoices.slice(0, invoiceLimit);
   const invoicePadRowCount = Math.max(0, invoiceLimit - visibleInvoices.length);
 
-  const visibleOverviewKpis = visibleKpiIds(
+  const visibleOverviewKpis = visibleAllowedIds(
     settings.overviewKpiOrder,
-    settings.overviewHiddenKpis
+    settings.overviewHiddenKpis,
+    composition?.overviewKpis ?? null
   );
-  const visibleRevenueKpis = visibleKpiIds(
+  const visibleRevenueKpis = visibleAllowedIds(
     settings.revenueKpiOrder,
-    settings.revenueHiddenKpis
+    settings.revenueHiddenKpis,
+    composition?.revenueKpis ?? null
   );
 
   const invoiceToolbar = (
@@ -604,7 +643,7 @@ export function WorkspaceSampleDashboard({
       ),
     job_activity: computed.live ? (
       <p className={`px-1 text-sm text-ink-muted ${mode === "overview" ? "py-1 text-left" : "py-8 text-center"}`}>
-        {computed.live.jobsMessage}
+        {computed.live.jobsMessage ?? JOBBER_JOBS_PENDING}
       </p>
     ) : mode === "overview" && !showJobList ? (
       <JobActivitySummary
@@ -831,6 +870,25 @@ export function WorkspaceSampleDashboard({
           </p>
         )}
 
+        {composition?.promptToConnect ? (
+          <p
+            className={`m-4 px-4 py-10 text-center text-sm text-ink ${theme.sectionPanel}`}
+          >
+            {CONNECT_SOURCE_PROMPT}
+            {liveSamplePreview ? null : (
+              <>
+                {" "}
+                <Link
+                  href={portalRoutes.connections}
+                  className={`font-semibold ${theme.metricValueA} ${theme.linkAccentHover}`}
+                >
+                  Open Connections.
+                </Link>
+              </>
+            )}
+          </p>
+        ) : (
+          <>
         {(mode === "overview" ? renderOverviewRows : renderWidgetRows)(
           visibleWidgets,
           widgetBlocks,
@@ -947,7 +1005,17 @@ export function WorkspaceSampleDashboard({
             default:
               return { title: id };
           }
-        })}
+        },
+        salesCards)}
+        {composition?.sales ? (
+          <p
+            className={`mx-3 mb-3 px-4 py-6 text-center text-sm text-ink sm:mx-4 ${theme.sectionPanel}`}
+          >
+            {HUBSPOT_DEALS_PENDING}
+          </p>
+        ) : null}
+          </>
+        )}
 
       {(selectedInvoice || selectedJob || selectedAppointment) && (
         <div className={`border-t ${theme.detailPanelBorder} bg-white/90 px-4 py-4 sm:px-5`}>
@@ -1068,7 +1136,7 @@ function MetricsKpiGrid({
   if (ids.length === 0) {
     return (
       <p
-        className={`rounded-lg border border-dashed px-4 py-6 text-center text-sm text-ink-muted ${theme.kpiEmptyState}`}
+        className={`rounded-lg px-4 py-6 text-center text-sm text-ink ${theme.sectionPanel}`}
       >
         No KPI cards selected.
         {liveSamplePreview ? (
@@ -1142,7 +1210,13 @@ function revenueKpiCardProps(
   const className = index % 2 === 0 ? theme.metricA : theme.metricB;
   switch (id) {
     case "weekly_revenue":
-      if (computed.live) return unavailableCard(computed.live.revenueMessage, className);
+      if (computed.live?.revenueMessage) return unavailableCard(computed.live.revenueMessage, className);
+      if (computed.live) {
+        return unavailableCard(
+          "Weekly revenue appears when paid invoices are counted as revenue.",
+          className
+        );
+      }
       return {
         higherIsBetter: true,
         sub: computed.weeklyRangeLabel,
@@ -1158,7 +1232,13 @@ function revenueKpiCardProps(
         className,
       };
     case "monthly_revenue":
-      if (computed.live) return unavailableCard(computed.live.revenueMessage, className);
+      if (computed.live?.revenueMessage) return unavailableCard(computed.live.revenueMessage, className);
+      if (computed.live) {
+        return unavailableCard(
+          "Monthly revenue appears when paid invoices are counted as revenue.",
+          className
+        );
+      }
       return {
         higherIsBetter: true,
         sub: computed.monthlyRangeLabel,
@@ -1174,7 +1254,10 @@ function revenueKpiCardProps(
         className,
       };
     case "month_pipeline":
-      if (computed.live) return unavailableCard(computed.live.pipelineMessage, className);
+      if (computed.live?.pipelineMessage) return unavailableCard(computed.live.pipelineMessage, className);
+      if (computed.live) {
+        return unavailableCard(HUBSPOT_DEALS_PENDING, className);
+      }
       return {
         sub: computed.monthPipelineLabel,
         value: (
@@ -1249,7 +1332,8 @@ function overviewKpiCardProps(
         className,
       };
     case "jobs_completed":
-      if (computed.live) return unavailableCard(computed.live.jobsMessage, className);
+      if (computed.live?.jobsMessage) return unavailableCard(computed.live.jobsMessage, className);
+      if (computed.live) return unavailableCard(JOBBER_JOBS_PENDING, className);
       return {
         higherIsBetter: true,
         sub: formatRangeForDisplay(computed.range),
@@ -1461,7 +1545,8 @@ function renderOverviewRows(
   theme: LayoutCustomizeTheme,
   compact: boolean,
   matchSummaryHeight: boolean,
-  sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta
+  sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta,
+  _salesInsight: ReactNode | null
 ) {
   const rows: ReactNode[] = [];
   const skip = new Set<DashboardWidgetId>();
@@ -1547,7 +1632,8 @@ function renderWidgetRows(
   theme: LayoutCustomizeTheme,
   compact: boolean,
   _matchSummaryHeight: boolean,
-  sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta
+  sectionFor: (id: DashboardWidgetId) => WidgetSectionMeta,
+  salesInsight: ReactNode | null
 ) {
   const rows: ReactNode[] = [];
   const skip = new Set<DashboardWidgetId>();
@@ -1598,6 +1684,9 @@ function renderWidgetRows(
     }
 
     rows.push(wrapSection(id));
+    if (id === "collections_chart" && salesInsight) {
+      rows.push(<div key="sales-insight">{salesInsight}</div>);
+    }
   }
 
   return (

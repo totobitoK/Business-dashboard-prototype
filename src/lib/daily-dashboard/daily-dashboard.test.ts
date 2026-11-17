@@ -171,9 +171,9 @@ describe("live figures in the restored sections", () => {
 
     expect(figures.paymentsAmount).toBeNull();
     expect(figures.paymentsMessage).toBeTruthy();
-    expect(figures.revenueMessage).toMatch(/revenue/i);
-    expect(figures.pipelineMessage).toMatch(/pipeline/i);
-    expect(figures.jobsMessage).toMatch(/job/i);
+    expect(figures.revenueMessage).toBeNull();
+    expect(figures.pipelineMessage).toBeNull();
+    expect(figures.jobsMessage).toBeNull();
     expect(figures.receivablesMessage).toBeTruthy();
     expect(data.jobs).toEqual([]);
     expect(data.payments).toEqual([]);
@@ -203,7 +203,7 @@ describe("live figures in the restored sections", () => {
     expect(figures.paymentsAmount).toBe(0);
     expect(figures.paymentsAreNet).toBe(false);
     expect(figures.freshnessNote).toBeNull();
-    expect(figures.revenueMessage).toMatch(/revenue/i);
+    expect(figures.revenueMessage).toBeNull();
   });
 
   it("matches the payments figure to net collections and names a stale sync", () => {

@@ -16,6 +16,7 @@ import {
   keepDashboardSectionClick,
   useDashboardSection,
 } from "@/components/customer/dashboard-section-context";
+import { useDashboardComposition } from "@/components/customer/use-dashboard-composition";
 import { useSignedInNav } from "@/components/customer/signed-in-nav-context";
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 
@@ -217,6 +218,14 @@ function DashboardNav({
   const sectionState = useDashboardSection();
   const signedInNav = useSignedInNav();
   const { workspaceId, navigationBase, liveSamplePreview } = useCustomerPortal();
+  const composition = useDashboardComposition();
+  const sections = composition
+    ? DASHBOARD_SECTIONS.filter((section) => composition.sections.includes(section.id))
+    : DASHBOARD_SECTIONS;
+  const highlighted =
+    activeSection && sections.some((section) => section.id === activeSection)
+      ? activeSection
+      : null;
   const routes = dashboardRoutesForPathname(pathname);
   const linkBase = navigationBase ?? routes.home;
   const onConnections = pathname.startsWith(routes.connections);
@@ -237,8 +246,8 @@ function DashboardNav({
     <nav aria-label="Dashboard" className="flex flex-col gap-1 p-3">
       <p className="px-2.5 py-2 text-sm font-semibold leading-none">Dashboard</p>
       <div className="flex flex-col gap-1 pl-3">
-        {DASHBOARD_SECTIONS.map((section) => {
-          const isActive = section.id === activeSection;
+        {sections.map((section) => {
+          const isActive = section.id === highlighted;
           return (
             <Link
               key={section.id}
@@ -318,12 +327,19 @@ function DashboardNav({
 function PreviewSectionLinks({ activeSection }: { activeSection: DashboardSectionId }) {
   const sectionState = useDashboardSection();
   const { workspaceId, theme, navigationBase } = useCustomerPortal();
+  const composition = useDashboardComposition();
+  const sections = composition
+    ? DASHBOARD_SECTIONS.filter((section) => composition.sections.includes(section.id))
+    : DASHBOARD_SECTIONS;
+  const highlighted = sections.some((section) => section.id === activeSection)
+    ? activeSection
+    : "overview";
   const linkBase = navigationBase ?? dashboardRoutesForPathname(usePathname()).home;
   if (!workspaceId || !linkBase) return null;
   return (
     <nav aria-label="Preview sections" className="relative z-10 flex flex-wrap gap-1 px-4 pb-3 sm:px-5">
-      {DASHBOARD_SECTIONS.map((section) => {
-        const isActive = section.id === activeSection;
+      {sections.map((section) => {
+        const isActive = section.id === highlighted;
         return (
           <Link
             key={section.id}

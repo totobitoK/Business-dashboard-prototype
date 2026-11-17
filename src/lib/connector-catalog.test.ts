@@ -6,15 +6,21 @@ import {
 import { getOnboardingConnectorChoices } from "./connector-presentation";
 
 describe("connector catalog (internal)", () => {
-  it("tracks seven researched providers as internal candidates", () => {
+  it("tracks researched providers as internal candidates", () => {
     const ids = CONNECTOR_DEFINITIONS.map((c) => c.id);
     expect(ids).toContain("google-calendar");
     expect(ids).toContain("quickbooks");
     expect(ids).toContain("google-sheets");
     expect(ids).toContain("square");
+    expect(ids).toContain("jobber");
     expect(ids).toContain("hubspot");
     expect(ids).toContain("google-ads");
     expect(ids).toContain("meta-ads");
+    const jobber = CONNECTOR_DEFINITIONS.find((c) => c.id === "jobber");
+    expect(jobber?.implementationStatus).toBe("candidate");
+    expect(jobber?.includeInOnboarding).toBe(true);
+    const hubspot = CONNECTOR_DEFINITIONS.find((c) => c.id === "hubspot");
+    expect(hubspot?.implementationStatus).toBe("candidate");
   });
 
   it("prioritizes Google Calendar first internally", () => {

@@ -9,13 +9,6 @@ import type {
 import { summarizeCollectionsPeriod } from "./collections-period";
 import type { DailyDashboardSnapshot } from "./types";
 
-export const LIVE_REVENUE_UNAVAILABLE =
-  "Unavailable. No connected source defines revenue.";
-export const LIVE_PIPELINE_UNAVAILABLE =
-  "Unavailable. No connected source defines pipeline.";
-export const LIVE_JOBS_UNAVAILABLE =
-  "Unavailable. No connected source lists completed jobs.";
-
 const SCHEDULE_WITH_ROWS = new Set(["ready", "verified_empty", "stale"]);
 
 export function defaultLiveRangeStart(asOf: string): string {
@@ -30,10 +23,11 @@ export type LiveFigures = {
   paymentsAreNet: boolean;
   /** Shown with the figures when a connector sync is more than a day old. */
   freshnessNote: string | null;
-  jobsMessage: string;
+  /** Set only when a connected source failed to provide the figure. A missing source omits the block. */
+  jobsMessage: string | null;
   receivablesMessage: string | null;
-  revenueMessage: string;
-  pipelineMessage: string;
+  revenueMessage: string | null;
+  pipelineMessage: string | null;
   chartMessage: string | null;
   trend: TrendBucket[] | null;
   scheduleBlocked: string | null;
@@ -52,12 +46,12 @@ export function describeLiveFigures(
   return {
     ...collections,
     freshnessNote: freshnessNote(snapshot),
-    jobsMessage: LIVE_JOBS_UNAVAILABLE,
+    jobsMessage: null,
     receivablesMessage: snapshot.receivables.showBalances
       ? null
       : snapshot.receivables.messages[0] ?? "QuickBooks receivables are unavailable.",
-    revenueMessage: LIVE_REVENUE_UNAVAILABLE,
-    pipelineMessage: LIVE_PIPELINE_UNAVAILABLE,
+    revenueMessage: null,
+    pipelineMessage: null,
     scheduleBlocked,
     scheduleNote:
       snapshot.schedule.state === "stale"

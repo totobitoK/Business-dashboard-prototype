@@ -28,6 +28,7 @@ export type DataSourceTool =
   | "excel-csv"
   | "quickbooks"
   | "hubspot"
+  | "jobber"
   | "stripe"
   | "square"
   | "google-calendar"

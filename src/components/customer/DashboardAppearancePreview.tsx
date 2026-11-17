@@ -1,8 +1,15 @@
 "use client";
 
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
+import { SalesInsightCards } from "@/components/customer/SalesInsightCards";
+import type { SalesInsight } from "@/lib/sales-insight";
 import { DASHBOARD_SECTIONS } from "@/lib/dashboard-section-routes";
 import { useCustomerPortal } from "@/lib/customer-portal-context";
+import {
+  CONNECT_SOURCE_PROMPT,
+  HUBSPOT_DEALS_PENDING,
+  type CustomerDashboardComposition,
+} from "@/lib/dashboard-composition";
 import { DashboardSection } from "@/components/customer/DashboardSection";
 import { KpiStatCard } from "@/components/customer/KpiStatCard";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
@@ -67,6 +74,43 @@ function buildPreviewTrend(): TrendBucket[] {
 
 const PREVIEW_TREND = buildPreviewTrend();
 const PREVIEW_TREND_TOTAL = PREVIEW_TREND.reduce((sum, b) => sum + b.amount, 0);
+const previewPlaza = Math.round(PREVIEW_TREND_TOTAL * 0.28);
+const previewOak = Math.round(PREVIEW_TREND_TOTAL * 0.19);
+const previewHarbor = Math.round(PREVIEW_TREND_TOTAL * 0.11);
+const previewOtherAccounts = PREVIEW_TREND_TOTAL - previewPlaza - previewOak - previewHarbor;
+const previewWholesale = Math.round(PREVIEW_TREND_TOTAL * 0.45);
+const previewInstore = Math.round(PREVIEW_TREND_TOTAL * 0.33);
+const previewEvents = PREVIEW_TREND_TOTAL - previewWholesale - previewInstore;
+const previewLargest = Math.round(PREVIEW_TREND_TOTAL * 0.12);
+const PREVIEW_SALES: SalesInsight = {
+  total: PREVIEW_TREND_TOTAL,
+  count: 18,
+  average: Math.round(PREVIEW_TREND_TOTAL / 18),
+  median: 1800,
+  largest: {
+    label: "Plaza Office Park",
+    amount: previewLargest,
+    count: 1,
+    share: PREVIEW_TREND_TOTAL > 0 ? previewLargest / PREVIEW_TREND_TOTAL : 0,
+  },
+  compare: { text: "+12% vs comparison window", tone: "up" },
+  accountCount: 11,
+  repeatAccountCount: 4,
+  topAccountShare: previewPlaza / PREVIEW_TREND_TOTAL,
+  topAccounts: [
+    { label: "Plaza Office Park", amount: previewPlaza, count: 4, share: previewPlaza / PREVIEW_TREND_TOTAL },
+    { label: "Oak Street Residence", amount: previewOak, count: 3, share: previewOak / PREVIEW_TREND_TOTAL },
+    { label: "Harbor Market", amount: previewHarbor, count: 2, share: previewHarbor / PREVIEW_TREND_TOTAL },
+    { label: "Other", amount: previewOtherAccounts, count: 9, share: previewOtherAccounts / PREVIEW_TREND_TOTAL },
+  ],
+  mixLabel: "Invoice lines",
+  mixTotal: PREVIEW_TREND_TOTAL,
+  mix: [
+    { label: "Wholesale restock", amount: previewWholesale, count: 6, share: previewWholesale / PREVIEW_TREND_TOTAL },
+    { label: "In-store POS", amount: previewInstore, count: 8, share: previewInstore / PREVIEW_TREND_TOTAL },
+    { label: "Pop-up market", amount: previewEvents, count: 4, share: previewEvents / PREVIEW_TREND_TOTAL },
+  ],
+};
 
 function overviewPreviewProps(
   id: OverviewKpiId,
@@ -222,7 +266,7 @@ function PreviewMetricsGrid({
   if (ids.length === 0) {
     return (
       <p
-        className={`rounded-lg border border-dashed px-4 py-6 text-center text-sm text-ink-muted ${theme.kpiEmptyState}`}
+        className={`rounded-lg px-4 py-6 text-center text-sm text-ink ${theme.sectionPanel}`}
       >
         Turn on at least one KPI below.
       </p>
@@ -358,17 +402,27 @@ export function DashboardAppearancePreview({
   visibleOverviewKpis,
   visibleRevenueKpis,
   compact,
+  composition = null,
 }: {
   theme: LayoutCustomizeTheme;
   kpiTab: "overview" | "revenue";
   visibleOverviewKpis: OverviewKpiId[];
   visibleRevenueKpis: RevenueKpiId[];
   compact?: boolean;
+  composition?: CustomerDashboardComposition | null;
 }) {
   const { businessName } = useCustomerPortal();
   const resolved = resolveReportingRange("last7");
   const rangeLabel = resolved.ok ? formatRangeForDisplay(resolved.range) : "Last 7 days";
   const headerTitle = kpiTab === "revenue" ? "Revenue & collections" : businessName;
+  const sections = composition
+    ? DASHBOARD_SECTIONS.filter((section) => composition.sections.includes(section.id))
+    : DASHBOARD_SECTIONS;
+  const showChart = !composition || composition.widgets.includes("collections_chart");
+  const showJobs = !composition || composition.widgets.includes("job_activity");
+  const showSchedule = !composition || composition.widgets.includes("appointments");
+  const showInvoices = !composition || composition.widgets.includes("invoices");
+  const visibleKpis = kpiTab === "revenue" ? visibleRevenueKpis : visibleOverviewKpis;
 
   return (
     <div className={`rounded-2xl shadow-card ${theme.card}`} aria-label="Sample dashboard preview">
@@ -377,7 +431,7 @@ export function DashboardAppearancePreview({
       >
         <p className="min-w-0 truncate text-lg font-semibold leading-none sm:text-xl">{headerTitle}</p>
         <div className="flex flex-wrap items-center gap-1" aria-hidden>
-          {DASHBOARD_SECTIONS.map((section) => {
+          {sections.map((section) => {
             const active =
               (section.id === "revenue" && kpiTab === "revenue") ||
               (section.id === "overview" && kpiTab === "overview");
@@ -407,69 +461,118 @@ export function DashboardAppearancePreview({
 
       <div className={`overflow-hidden rounded-b-2xl ${theme.dashboardAtmosphere}`}>
         <div className={`flex flex-col gap-4 p-4 sm:p-5 ${theme.dashboardCanvas}`}>
-          <PreviewMetricsGrid
-            kpiTab={kpiTab}
-            visibleOverviewKpis={visibleOverviewKpis}
-            visibleRevenueKpis={visibleRevenueKpis}
-            theme={theme}
-            compact={compact}
-            rangeLabel={rangeLabel}
-          />
-
-          <DashboardSection
-            theme={theme}
-            compact={compact}
-            title="Collections trend"
-            subtitle={
-              <>
-                {rangeLabel} · Total{" "}
-                <CurrencyAmount
-                  amount={PREVIEW_TREND_TOTAL}
-                  colorClass={theme.metricValueA}
-                  className="inline font-semibold"
-                />
-              </>
-            }
-            subtitleAlign="center"
-            tightToolbar
-          >
-            <CollectionsTrendChart trend={PREVIEW_TREND} theme={theme} />
-          </DashboardSection>
-
-          {kpiTab === "overview" ? (
-            <div className="grid items-start gap-4 lg:grid-cols-2">
-              <DashboardSection
-                theme={theme}
-                compact={compact}
-                title="Job activity"
-                subtitle={rangeLabel}
-                subtitleAlign="center"
-                tightToolbar
-              >
-                <PreviewJobList theme={theme} compact={compact} />
-              </DashboardSection>
-              <DashboardSection
-                theme={theme}
-                compact={compact}
-                title="Next 7 days"
-                subtitle={`2 upcoming · from ${formatCalendarDateDisplay(DEMO_AS_OF_DATE)}`}
-                subtitleAlign="center"
-                tightToolbar
-              >
-                <PreviewScheduleList theme={theme} compact={compact} />
-              </DashboardSection>
-            </div>
-          ) : (
-            <DashboardSection
-              theme={theme}
-              compact={compact}
-              title="Open invoices"
-              subtitle={rangeLabel}
-              subtitleAlign="center"
-              tightToolbar
+          {composition?.promptToConnect ? (
+            <p
+              className={`px-4 py-10 text-center text-sm text-ink ${theme.sectionPanel}`}
             >
-              <PreviewInvoiceTable theme={theme} compact={compact} />
-            </DashboardSection>
+              {CONNECT_SOURCE_PROMPT}
+            </p>
+          ) : (
+            <>
+              {visibleKpis.length > 0 ? (
+                <PreviewMetricsGrid
+                  kpiTab={kpiTab}
+                  visibleOverviewKpis={visibleOverviewKpis}
+                  visibleRevenueKpis={visibleRevenueKpis}
+                  theme={theme}
+                  compact={compact}
+                  rangeLabel={rangeLabel}
+                />
+              ) : composition?.sales ? (
+                <p
+                  className={`rounded-lg px-4 py-6 text-center text-sm text-ink ${theme.sectionPanel}`}
+                >
+                  {HUBSPOT_DEALS_PENDING}
+                </p>
+              ) : (
+                <PreviewMetricsGrid
+                  kpiTab={kpiTab}
+                  visibleOverviewKpis={visibleOverviewKpis}
+                  visibleRevenueKpis={visibleRevenueKpis}
+                  theme={theme}
+                  compact={compact}
+                  rangeLabel={rangeLabel}
+                />
+              )}
+
+              {showChart ? (
+                <DashboardSection
+                  theme={theme}
+                  compact={compact}
+                  title="Collections trend"
+                  subtitle={
+                    <>
+                      {rangeLabel} · Total{" "}
+                      <CurrencyAmount
+                        amount={PREVIEW_TREND_TOTAL}
+                        colorClass={theme.metricValueA}
+                        className="inline font-semibold"
+                      />
+                    </>
+                  }
+                  subtitleAlign="center"
+                  tightToolbar
+                >
+                  <CollectionsTrendChart trend={PREVIEW_TREND} theme={theme} />
+                </DashboardSection>
+              ) : null}
+
+              {kpiTab === "revenue" && showChart ? (
+                <SalesInsightCards insight={PREVIEW_SALES} theme={theme} />
+              ) : null}
+
+              {kpiTab === "overview" && (showJobs || showSchedule) ? (
+                <div
+                  className={`grid items-start gap-4 ${showJobs && showSchedule ? "lg:grid-cols-2" : ""}`}
+                >
+                  {showJobs ? (
+                    <DashboardSection
+                      theme={theme}
+                      compact={compact}
+                      title="Job activity"
+                      subtitle={rangeLabel}
+                      subtitleAlign="center"
+                      tightToolbar
+                    >
+                      <PreviewJobList theme={theme} compact={compact} />
+                    </DashboardSection>
+                  ) : null}
+                  {showSchedule ? (
+                    <DashboardSection
+                      theme={theme}
+                      compact={compact}
+                      title="Next 7 days"
+                      subtitle={`2 upcoming · from ${formatCalendarDateDisplay(DEMO_AS_OF_DATE)}`}
+                      subtitleAlign="center"
+                      tightToolbar
+                    >
+                      <PreviewScheduleList theme={theme} compact={compact} />
+                    </DashboardSection>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {showInvoices && (kpiTab === "revenue" || composition) ? (
+                <DashboardSection
+                  theme={theme}
+                  compact={compact}
+                  title="Open invoices"
+                  subtitle={rangeLabel}
+                  subtitleAlign="center"
+                  tightToolbar
+                >
+                  <PreviewInvoiceTable theme={theme} compact={compact} />
+                </DashboardSection>
+              ) : null}
+
+              {composition?.sales && visibleKpis.length > 0 ? (
+                <p
+                  className={`rounded-lg px-4 py-6 text-center text-sm text-ink ${theme.sectionPanel}`}
+                >
+                  {HUBSPOT_DEALS_PENDING}
+                </p>
+              ) : null}
+            </>
           )}
         </div>
       </div>

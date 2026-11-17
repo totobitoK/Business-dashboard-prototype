@@ -30,7 +30,7 @@ export interface ConnectorDefinition {
   earlyExternalApproval?: boolean;
 }
 
-/** Seven researched data providers (+ file fallback and other). None are operational yet. */
+/** Researched data providers (+ file fallback and other). None are operational yet. */
 export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
   {
     id: "google-calendar",
@@ -70,11 +70,20 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     includeInOnboarding: true,
   },
   {
-    id: "hubspot",
-    label: "HubSpot",
-    shortDescription: "CRM, pipeline, and marketing contacts.",
+    id: "jobber",
+    label: "Jobber",
+    shortDescription: "Completed jobs and the service schedule.",
     implementationStatus: "candidate",
     implementationPriority: 5,
+    publicTeaser: "hidden",
+    includeInOnboarding: true,
+  },
+  {
+    id: "hubspot",
+    label: "HubSpot",
+    shortDescription: "Open pipeline, deals won this month, and weighted pipeline.",
+    implementationStatus: "candidate",
+    implementationPriority: 6,
     publicTeaser: "hidden",
     includeInOnboarding: true,
   },
@@ -83,7 +92,7 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     label: "Google Ads",
     shortDescription: "Paid search and campaign performance.",
     implementationStatus: "candidate",
-    implementationPriority: 6,
+    implementationPriority: 7,
     publicTeaser: "hidden",
     includeInOnboarding: true,
     earlyExternalApproval: true,
@@ -93,7 +102,7 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     label: "Meta Ads",
     shortDescription: "Facebook and Instagram advertising metrics.",
     implementationStatus: "candidate",
-    implementationPriority: 7,
+    implementationPriority: 8,
     publicTeaser: "hidden",
     includeInOnboarding: true,
     earlyExternalApproval: true,
@@ -103,7 +112,7 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     label: "Excel / CSV",
     shortDescription: "File-based imports when a direct API is not the right fit.",
     implementationStatus: "candidate",
-    implementationPriority: 8,
+    implementationPriority: 9,
     publicTeaser: "hidden",
     includeInOnboarding: true,
   },
