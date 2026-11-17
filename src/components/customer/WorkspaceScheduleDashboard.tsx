@@ -357,7 +357,7 @@ export function WorkspaceScheduleDashboard({
                       <li key={visit.id} className="text-sm text-ink">
                         {visit.title}
                         {visit.assignees.length ? ` · ${visit.assignees.join(", ")}` : ""}
-                        {sources.length > 1 ? ` · ${sourceLabel(visit.source)}` : ""}
+                        {sources.length > 1 ? ` · ${visit.sourceName}` : ""}
                       </li>
                     ))}
                   </ul>
@@ -396,7 +396,7 @@ export function WorkspaceScheduleDashboard({
                             {visit.title}
                           </span>
                           <span className="block truncate text-xs text-ink-muted">
-                            {[people || null, sources.length > 1 ? sourceLabel(visit.source) : null]
+                            {[people || null, sources.length > 1 ? visit.sourceName : null]
                               .filter(Boolean)
                               .join(" · ")}
                           </span>
@@ -431,7 +431,7 @@ export function WorkspaceScheduleDashboard({
                   label="Status"
                   value={selectedUpcoming.completed ? "Completed" : "Scheduled"}
                 />
-                <VisitDetailRow label="Source" value={sourceLabel(selectedUpcoming.source)} />
+                <VisitDetailRow label="Source" value={selectedUpcoming.sourceName} />
                 {selectedUpcoming.url ? (
                   <a
                     href={selectedUpcoming.url}
@@ -480,7 +480,7 @@ export function WorkspaceScheduleDashboard({
                     ) : null}
                     {visit.completed ? <p className="mt-1 text-[11px] text-ink-muted">Completed</p> : null}
                     {sources.length > 1 ? (
-                      <p className="mt-1 text-[11px] text-ink-muted">{sourceLabel(visit.source)}</p>
+                      <p className="mt-1 text-[11px] text-ink-muted">{visit.sourceName}</p>
                     ) : null}
                     {visit.url ? (
                       <a

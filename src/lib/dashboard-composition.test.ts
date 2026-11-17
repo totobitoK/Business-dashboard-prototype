@@ -95,6 +95,29 @@ describe("composeCustomerDashboard", () => {
     expect(layout.promptToConnect).toBe(false);
   });
 
+  it("keeps Revenue when Jobber is connected beside collections or HubSpot", () => {
+    const withSquare = composeCustomerDashboard({ connected: ["jobber", "square"] });
+    expect(withSquare.sections).toEqual(["overview", "revenue", "schedule"]);
+    expect(withSquare.widgets).toContain("collections_chart");
+    expect(withSquare.sales).toBe(false);
+
+    const withHubSpot = composeCustomerDashboard({ connected: ["jobber", "hubspot"] });
+    expect(withHubSpot.sections).toEqual(["overview", "revenue", "schedule"]);
+    expect(withHubSpot.sales).toBe(true);
+    expect(withHubSpot.widgets).not.toContain("collections_chart");
+
+    const withPaidInvoices = composeCustomerDashboard({
+      connected: ["jobber", "quickbooks"],
+      quickBooksCountsPaidInvoicesAsRevenue: true,
+    });
+    expect(withPaidInvoices.sections).toEqual(["overview", "revenue", "schedule"]);
+    expect(withPaidInvoices.revenueKpis).toEqual([
+      "weekly_revenue",
+      "monthly_revenue",
+      "overdue_ar",
+    ]);
+  });
+
   it("puts QuickBooks money and HubSpot pipeline on one screen", () => {
     const layout = composeCustomerDashboard({ connected: ["quickbooks", "hubspot"] });
     expect(layout.overviewKpis).toEqual(["outstanding_balance", "overdue_balance"]);

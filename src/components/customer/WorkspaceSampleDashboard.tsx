@@ -79,7 +79,6 @@ import {
   jobberStatusMessage,
   liveJobberRead,
   scheduleSources,
-  sourceLabel,
   upcomingVisits,
   visitClockLabel,
   type ScheduleVisit,
@@ -2018,7 +2017,7 @@ function OperationsSchedulePanel({
       location: "",
       assignee: visit.assignees[0] ?? "",
       status: "scheduled" as const,
-      sourceLabel: sourceLabel(visit.source),
+      sourceLabel: visit.sourceName,
     }))
   );
 
@@ -2045,10 +2044,10 @@ function OperationsSchedulePanel({
           ))}
         </div>
       )}
-      {statusNote ? <p className={`mt-2 ${density.meta} text-ink`}>{statusNote}</p> : null}
+      {!summary && statusNote ? <p className={`mt-2 ${density.meta} text-ink`}>{statusNote}</p> : null}
       {visible.length === 0 ? (
         <p className={`${summary ? "text-left" : "mt-3 text-center"} ${density.meta} text-ink-muted`}>
-          No upcoming appointments in this window.
+          {statusNote ?? "No upcoming appointments in this window."}
         </p>
       ) : (
         <ul className={`mt-3 divide-y ${theme.widgetListDivide} ${theme.widgetListShell} ${density.text}`}>
@@ -2060,20 +2059,20 @@ function OperationsSchedulePanel({
                 <button
                   type="button"
                   onClick={() => onSelectAppointment(visit.id)}
-                  className={`flex w-full flex-col items-start gap-0.5 px-3 text-left ${density.rowPy} ${
+                  className={`flex w-full min-w-0 flex-col items-start gap-0.5 px-3 text-left ${density.rowPy} ${
                     selectedAppointmentId === visit.id
                       ? `text-sm font-medium ${theme.operationsListSelected}`
                       : `${density.text} ${operationsListRowBase} ${theme.widgetListRow} ${theme.operationsListHover}`
                   }`}
                 >
-                  <p className="font-semibold text-ink">{visit.title}</p>
-                  <p className={density.meta}>
+                  <p className="w-full truncate font-semibold text-ink">{visit.title}</p>
+                  <p className={`w-full truncate ${density.meta}`}>
                     <span className={`font-semibold ${theme.listAccent}`}>{when}</span>
                     <span className="text-ink-muted">
                       {" · "}
                       {visitClockLabel(visit, BUSINESS_TIMEZONE)}
                       {people ? ` · ${people}` : ""}
-                      {showSource ? ` · ${sourceLabel(visit.source)}` : ""}
+                      {showSource ? ` · ${visit.sourceName}` : ""}
                     </span>
                   </p>
                 </button>

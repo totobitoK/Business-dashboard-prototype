@@ -34,7 +34,10 @@ export type ScheduleSource = "jobber" | "google-calendar";
 
 export type ScheduleVisit = {
   id: string;
-  source: ScheduleSource;
+  /** Null when the row is not a Jobber or Google Calendar feed. */
+  source: ScheduleSource | null;
+  /** Name shown on the row. Sample appointments keep their own source. */
+  sourceName: string;
   title: string;
   /** Company-local day. Null when the visit has no date. */
   day: string | null;
@@ -115,6 +118,7 @@ export function normalizeJobberVisit(
   return {
     id: `jobber:${accountId}:${record.id}`,
     source: "jobber",
+    sourceName: "Jobber",
     title: visitTitle(record),
     day: unscheduled ? null : day,
     startsAt: anytime || unscheduled ? null : start,
@@ -211,10 +215,13 @@ export function reconcileVisitWindow(input: {
 
 export function appointmentAsScheduleVisit(appt: BusinessAppointment): ScheduleVisit {
   const day = /^\d{4}-\d{2}-\d{2}/.test(appt.startAt) ? appt.startAt.slice(0, 10) : null;
-  const source: ScheduleSource = /jobber/i.test(appt.sourceLabel) ? "jobber" : "google-calendar";
+  const jobber = /jobber/i.test(appt.sourceLabel);
+  const google = /google\s*calendar/i.test(appt.sourceLabel);
+  const source: ScheduleSource | null = jobber ? "jobber" : google ? "google-calendar" : null;
   return {
     id: appt.id,
     source,
+    sourceName: appt.sourceLabel.trim() || (source ? sourceLabel(source) : "Schedule"),
     title: appt.title,
     day,
     startsAt: appt.startAt,

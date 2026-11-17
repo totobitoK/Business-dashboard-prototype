@@ -118,11 +118,15 @@ describe("normalizeJobberVisits", () => {
     };
     expect(appointmentAsScheduleVisit(appt)).toMatchObject({
       source: "google-calendar",
+      sourceName: "Google Calendar",
       day: "2026-03-12",
       anytime: false,
       assignees: ["Tech team B"],
       url: null,
     });
+    expect(
+      appointmentAsScheduleVisit({ ...appt, id: "hs-1", sourceLabel: "HubSpot" }).source
+    ).toBeNull();
     const empty = normalizeJobberVisits({
       payload: { accountId: "acct", visits: [] },
       timeZone: zone,
