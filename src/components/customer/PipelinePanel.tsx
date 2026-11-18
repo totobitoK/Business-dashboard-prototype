@@ -47,7 +47,7 @@ export function SalesPipelineCard({
 }) {
   const rule = isLightDashboardTheme(theme.id) ? theme.detailPanelBorder : "border-white/10";
   return (
-    <article className={`flex flex-col gap-3 p-4 ${theme.metricA}`}>
+    <article className={`flex flex-col gap-3 p-4 ${theme.sectionPanel}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-xs font-semibold text-ink">Sales pipeline</p>
@@ -62,15 +62,7 @@ export function SalesPipelineCard({
       {view.message ? <p className="text-sm text-ink">{view.message}</p> : null}
       {view.showFigures ? (
         <>
-          <div className={`flex flex-wrap items-end justify-between gap-3 border-t pt-3 ${rule}`}>
-            <div>
-              <p className={`text-2xl font-semibold tabular-nums leading-none ${theme.metricValueA}`}>
-                {view.openCount}
-              </p>
-              <p className="mt-1 text-sm text-ink">Open deals</p>
-            </div>
-            <p className={`text-sm font-semibold tabular-nums ${theme.metricValueA}`}>{valueLine(view.openValue)}</p>
-          </div>
+          <OpenPipelineFigures view={view} theme={theme} rule={rule} stackedCount />
           {missingLine(view.missingAmountCount, "open") ? (
             <p className="text-sm text-ink">{missingLine(view.missingAmountCount, "open")}</p>
           ) : null}
@@ -92,6 +84,99 @@ export function SalesPipelineCard({
         </>
       ) : null}
     </article>
+  );
+}
+
+function largestDeal(
+  deals: PipelineDealRow[],
+  dateLabel: PipelineDealRow["dateLabel"]
+): PipelineDealRow | null {
+  const matching = deals.filter(
+    (deal) => deal.dateLabel === dateLabel && deal.amount != null && deal.currency
+  );
+  return matching.reduce<PipelineDealRow | null>((best, deal) => {
+    if (!best || (deal.amount ?? 0) > (best.amount ?? 0)) return deal;
+    if ((deal.amount ?? 0) === (best.amount ?? 0) && deal.name.localeCompare(best.name) < 0) return deal;
+    return best;
+  }, null);
+}
+
+function OpenPipelineFigures({
+  view,
+  theme,
+  rule,
+  stackedCount = false,
+}: {
+  view: PipelineView;
+  theme: LayoutCustomizeTheme;
+  rule: string;
+  stackedCount?: boolean;
+}) {
+  const largest = largestDeal(view.deals, "Expected close");
+  return (
+    <div className={`flex flex-wrap items-end justify-between gap-3 border-t pt-3 ${rule}`}>
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
+        {stackedCount ? (
+          <div>
+            <p className={`text-2xl font-semibold tabular-nums leading-none ${theme.metricValueA}`}>
+              {view.openCount}
+            </p>
+            <p className="mt-1 text-sm text-ink">Open deals</p>
+          </div>
+        ) : (
+          <p className="text-sm text-ink">
+            <span className={`text-2xl font-semibold tabular-nums ${theme.metricValueA}`}>{view.openCount}</span>{" "}
+            open deals
+          </p>
+        )}
+        <p className={`text-sm font-semibold tabular-nums ${theme.metricValueA}`}>
+          Total in pipeline: {valueLine(view.openValue)}
+        </p>
+      </div>
+      {largest ? (
+        <p className="max-w-[14rem] text-right text-sm text-ink">
+          Largest open deal
+          <span className="mt-0.5 block font-semibold">{largest.name}</span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function WonPeriodSection({
+  view,
+  theme,
+  rangeLabel,
+}: {
+  view: PipelineView;
+  theme: LayoutCustomizeTheme;
+  rangeLabel: string;
+}) {
+  const largest = largestDeal(view.deals, "Close date");
+  const missing = missingLine(view.wonMissingAmountCount, "won");
+  return (
+    <section className={`p-4 ${theme.sectionPanel}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-ink">Won in selected period</h2>
+          <p className="text-sm text-ink">{rangeLabel}</p>
+          <p className="mt-2 text-sm text-ink">
+            <span className={`text-2xl font-semibold tabular-nums ${theme.metricValueA}`}>{view.wonCount}</span>{" "}
+            closed won
+          </p>
+          {missing ? <p className="mt-2 text-sm text-ink">{missing}</p> : null}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className={`text-sm font-semibold tabular-nums ${theme.metricValueA}`}>{valueLine(view.wonValue)}</p>
+          {largest ? (
+            <p className="mt-1 max-w-[14rem] text-sm text-ink">
+              Largest win
+              <span className="mt-0.5 block font-semibold">{largest.name}</span>
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -138,13 +223,7 @@ export function PipelineView({
         {view.message ? <p className="text-sm text-ink">{view.message}</p> : null}
         {view.showFigures ? (
           <>
-            <div className={`flex flex-wrap items-end justify-between gap-3 border-t pt-3 ${rule}`}>
-              <p className="text-sm text-ink">
-                <span className={`text-2xl font-semibold tabular-nums ${theme.metricValueA}`}>{view.openCount}</span>{" "}
-                open deals
-              </p>
-              <p className={`text-sm font-semibold tabular-nums ${theme.metricValueA}`}>{valueLine(view.openValue)}</p>
-            </div>
+            <OpenPipelineFigures view={view} theme={theme} rule={rule} />
             {missingLine(view.missingAmountCount, "open") ? (
               <p className="text-sm text-ink">{missingLine(view.missingAmountCount, "open")}</p>
             ) : null}
@@ -165,17 +244,7 @@ export function PipelineView({
       </section>
 
       {view.showFigures ? (
-        <section className={`p-4 ${theme.sectionPanel}`}>
-          <h2 className="text-sm font-semibold text-ink">Won in selected period</h2>
-          <p className="text-sm text-ink">{rangeLabel}</p>
-          <p className="mt-2 text-sm text-ink">
-            <span className={`text-2xl font-semibold tabular-nums ${theme.metricValueA}`}>{view.wonCount}</span>{" "}
-            closed won · {valueLine(view.wonValue)}
-          </p>
-          {missingLine(view.wonMissingAmountCount, "won") ? (
-            <p className="mt-2 text-sm text-ink">{missingLine(view.wonMissingAmountCount, "won")}</p>
-          ) : null}
-        </section>
+        <WonPeriodSection view={view} theme={theme} rangeLabel={rangeLabel} />
       ) : null}
 
       {view.showFigures ? (

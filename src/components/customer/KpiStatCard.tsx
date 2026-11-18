@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { DASHBOARD_GLASS_SURFACE } from "@/lib/layout-customize-themes";
 
 export type KpiIconName = "dollar" | "check" | "receipt" | "alert" | "layers";
 
@@ -100,11 +101,11 @@ export function KpiStatCard({
 }) {
   return (
     <div
-      className={`rounded-xl shadow-sm motion-safe:transition-transform motion-safe:duration-200 ${
+      className={`overflow-hidden rounded-xl border motion-safe:transition-transform motion-safe:duration-200 ${DASHBOARD_GLASS_SURFACE} ${
         compact ? "p-2.5" : "p-3 motion-safe:hover:-translate-y-0.5 sm:p-4"
       } ${className}`}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-ink-muted">{label}</p>
           <div className="mt-1">{value}</div>
@@ -122,7 +123,7 @@ export function KpiStatCard({
         </div>
         {icon ? (
           <span
-            className={`flex shrink-0 items-center justify-center rounded-xl bg-white/80 shadow-sm ${accentClass ?? ""} ${
+            className={`flex shrink-0 items-center justify-center rounded-xl border border-white/20 bg-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] ${accentClass ?? ""} ${
               compact ? "h-8 w-8" : "h-9 w-9"
             }`}
           >

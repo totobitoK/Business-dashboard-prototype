@@ -861,7 +861,7 @@ export function WorkspaceSampleDashboard({
                       className={`cursor-pointer ${widgetListRowClass} ${
                         selectedInvoiceId === inv.id
                           ? `h-12 text-base ${theme.tableRowSelected} ${theme.tableRowSelectedInset} ${theme.metricValueA}`
-                          : `h-10 text-sm ${idx % 2 === 1 ? theme.widgetListRowAlt : theme.widgetListRow} ${theme.operationsListHover}`
+                          : `h-10 text-sm ${idx % 2 === 0 ? theme.widgetListRowAlt : theme.widgetListRow} ${theme.operationsListHover}`
                       }`}
                       onClick={() => {
                         setSelectedInvoiceId(inv.id);
@@ -898,7 +898,7 @@ export function WorkspaceSampleDashboard({
                     <tr key={`invoice-pad-${i}`} className="h-10 pointer-events-none" aria-hidden>
                       <td
                         colSpan={5}
-                        className={`${i % 2 === 1 ? theme.widgetListRowAlt : theme.widgetListRow} border-transparent`}
+                        className={`${(visibleInvoices.length + i) % 2 === 0 ? theme.widgetListRowAlt : theme.widgetListRow} border-transparent`}
                       />
                     </tr>
                   ))}
@@ -1321,9 +1321,9 @@ function revenueKpiCardProps(
   id: RevenueKpiId,
   computed: MetricsKpiComputed,
   theme: LayoutCustomizeTheme,
-  index: number
+  _index: number
 ) {
-  const className = index % 2 === 0 ? theme.metricA : theme.metricB;
+  const className = theme.kpiCard;
   switch (id) {
     case "weekly_revenue":
       if (computed.live?.revenueMessage) return unavailableCard(computed.live.revenueMessage, className);
@@ -1410,7 +1410,7 @@ function overviewKpiCardProps(
   theme: LayoutCustomizeTheme,
   _index: number
 ) {
-  const className = theme.metricA;
+  const className = theme.kpiCard;
   switch (id) {
     case "payments_collected":
       if (computed.live?.paymentsMessage) {
@@ -1456,7 +1456,7 @@ function overviewKpiCardProps(
         compare: computed.jobsCompare.text,
         compareTone: computed.jobsCompare.tone,
         value: (
-          <span className={`text-xl font-bold sm:text-2xl ${theme.metricValueA}`}>
+          <span className={`text-xl font-medium tabular-nums sm:text-2xl ${theme.metricValueA}`}>
             {computed.jobsCompleted}
           </span>
         ),
@@ -2103,7 +2103,7 @@ function StatusPill({ status, theme }: { status: string; theme: LayoutCustomizeT
       ? theme.pastDuePill
       : status === "Open"
         ? "border-slate-200 bg-gradient-to-b from-slate-50 to-white text-slate-800 ring-1 ring-slate-200/60"
-        : "border-emerald-200/80 bg-gradient-to-b from-emerald-50 to-emerald-100/70 text-emerald-900 ring-1 ring-emerald-200/50";
+        : theme.paidPill;
   return (
     <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold shadow-sm ${cls}`}>
       {status}

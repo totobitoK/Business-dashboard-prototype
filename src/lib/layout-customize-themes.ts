@@ -1,3 +1,7 @@
+/** Quiet frost used by KPI tiles and the other dashboard cards. */
+export const DASHBOARD_GLASS_SURFACE =
+  "relative shadow-[0_8px_20px_rgba(0,0,0,0.1)]";
+
 export type LayoutCustomizeTheme = {
   id: string;
   /** Class on the dashboard root. Dark themes use it to retint shared text. */
@@ -17,6 +21,9 @@ export type LayoutCustomizeTheme = {
   navInactive: string;
   metricA: string;
   metricB: string;
+  /** Frosted KPI tile. Translucent so the atmosphere shows through. */
+  kpiCard: string;
+  kpiCardAlt: string;
   metricValueA: string;
   metricValueB: string;
   chartPanel: string;
@@ -81,8 +88,10 @@ export type LayoutCustomizeTheme = {
   formAccent: string;
   /** Past-due invoice label. Light on dark themes, deep on Espresso. */
   pastDue: string;
-  /** Past-due status chip in the invoice table. */
+  /** Past-due status chip. Indigo keeps its faint wash. Other themes swap Paid's fill and text. */
   pastDuePill: string;
+  /** Paid status chip in the invoice table. Lighter end of the theme. */
+  paidPill: string;
   /** Theme picker strip. Light themes need this because their header fades out. */
   pickerBar?: string;
 };
@@ -100,43 +109,45 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     header: "relative overflow-hidden bg-gradient-to-b from-[#221c38] to-transparent text-white before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(ellipse_at_top_left,rgba(167,139,250,0.55),transparent_58%)]",
     headerText: "text-white",
     headerLink: "text-white/90 hover:bg-white/15",
-    headerQuiet: "text-white/70 hover:bg-white/10 hover:text-white",
+    headerQuiet: "text-white/90 hover:bg-white/10 hover:text-white",
     badge: "bg-white/20",
     badgeText: "text-white",
     sidebar: "bg-purple-100/60",
-    navActive: "bg-purple text-white",
+    navActive: "bg-violet-300 text-[#312e81]",
     navInactive: "bg-white/70 text-ink",
     metricA: "border border-white/10 bg-[#232734]",
     metricB: "border border-violet-300/30 bg-[#2a2440]",
+    kpiCard: "border-white/20 bg-[#27263a]/[0.765]",
+    kpiCardAlt: "border-white/20 bg-[#27263a]/[0.765]",
     metricValueA: "text-violet-200",
     metricValueB: "text-violet-100",
     chartPanel: "border border-purple-300 bg-white/90",
     chartBar: "bg-purple-300",
-    chartBarHi: "bg-purple",
+    chartBarHi: "bg-violet-300",
     listPanel: "border border-purple-300 bg-purple-50/40",
     listRow: "border border-white/10 bg-[#232734]",
     listAccent: "text-violet-200",
     dashboardAtmosphere:
       "bg-[#1a1430] bg-[radial-gradient(ellipse_at_32%_12%,rgba(196,181,253,0.85),transparent_36%),radial-gradient(ellipse_at_82%_18%,rgba(129,140,248,0.7),transparent_34%),radial-gradient(ellipse_at_58%_78%,rgba(167,139,250,0.62),transparent_40%),radial-gradient(ellipse_at_12%_70%,rgba(139,92,246,0.45),transparent_36%)]",
     dashboardCanvas: "",
-    sectionPanel: "rounded-2xl border border-white/10 bg-[#1c1f2a]",
+    sectionPanel: `rounded-2xl border border-white/15 bg-[#1c1f2a]/75 ${DASHBOARD_GLASS_SURFACE}`,
     sectionHeader: "border-b border-white/10",
     filterTrack: "rounded-xl bg-transparent",
     filterControl:
       "border-transparent bg-transparent text-white shadow-none hover:bg-white/10 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-white/40",
-    filterChevron: "text-white/70",
+    filterChevron: "text-white/90",
     filterLabel: "text-ink-subtle",
     filterChipActive: "bg-white/15 text-white",
-    filterChipIdle: "text-zinc-300 hover:bg-white/10 hover:text-white",
+    filterChipIdle: "text-zinc-100 hover:bg-white/10 hover:text-white",
     filterSecondaryButton:
       "border-transparent bg-transparent text-white shadow-none hover:bg-white/10",
     filterMenuPanel: "rounded-xl bg-[#232734] py-1 shadow-lg",
     filterMenuItemActive: "bg-white/15 text-white",
-    filterMenuItemIdle: "text-zinc-200 hover:bg-white/10",
+    filterMenuItemIdle: "text-zinc-100 hover:bg-white/10",
     swatches: ["#12141A", "#2A2440", "#A78BFA"],
     swatchRing: "border-purple-200",
     embeddedNavActive: "bg-[#c7d2fe] text-[#312e81] shadow-sm",
-    embeddedPeriodActive: "bg-white text-purple-dark shadow-md ring-1 ring-white/90",
+    embeddedPeriodActive: "bg-white text-violet-300 shadow-md ring-1 ring-white/90",
     chartGridLine: "stroke-white/10",
     chartAxisLine: "stroke-white/20",
     chartLine: "stroke-violet-400",
@@ -151,23 +162,24 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     widgetListColDivide: "divide-white/10",
     widgetListRow: "bg-[#232734]",
     widgetListRowAlt: "bg-violet-400/10",
-    operationsListHover: "hover:bg-purple-50/65",
+    operationsListHover: "hover:bg-[#2a3040]",
     operationsListSelected: "bg-violet-400/20",
     tableRowSelected: "bg-violet-400/15",
     tableRowSelectedInset: "shadow-[inset_3px_0_0_0_rgb(167,139,250)]",
     detailPanelBorder: "border-purple-200",
-    detailSectionLabel: "text-purple",
-    linkAccent: "text-purple",
-    linkAccentHover: "hover:text-purple-dark",
+    detailSectionLabel: "text-violet-300",
+    linkAccent: "text-violet-300",
+    linkAccentHover: "hover:text-violet-100",
     kpiEmptyState: "border-purple-300 bg-purple-50/30",
     attentionMetricTile: "border-purple-300 bg-purple-50",
     attentionMetricTileIdle: "border-purple-300 bg-purple-50",
     operationsSummaryChip:
       "rounded-full border border-purple-100 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-ink-muted shadow-sm",
     toolbarDivider: "border-purple-100/80",
-    formAccent: "accent-purple",
+    formAccent: "accent-violet-300",
     pastDue: "text-violet-400",
     pastDuePill: "border-violet-300/40 bg-violet-400/15 text-violet-300",
+    paidPill: "border-violet-200 bg-violet-300 text-[#312e81]",
   },
   {
     id: "forest",
@@ -185,6 +197,8 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     navInactive: "bg-white/80 text-ink",
     metricA: "border border-white/10 bg-[#24302c]",
     metricB: "border border-emerald-300/25 bg-[#1b3a2f]",
+    kpiCard: "border-white/20 bg-[#20352e]/[0.765]",
+    kpiCardAlt: "border-white/20 bg-[#20352e]/[0.765]",
     metricValueA: "text-emerald-100",
     metricValueB: "text-emerald-200",
     chartPanel: "border border-emerald-300 bg-white/90",
@@ -196,7 +210,7 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     dashboardAtmosphere:
       "bg-[#10211a] bg-[radial-gradient(ellipse_at_30%_10%,rgba(110,231,183,0.8),transparent_36%),radial-gradient(ellipse_at_84%_16%,rgba(52,211,153,0.62),transparent_34%),radial-gradient(ellipse_at_60%_80%,rgba(16,185,129,0.55),transparent_40%),radial-gradient(ellipse_at_10%_72%,rgba(45,212,191,0.4),transparent_36%)]",
     dashboardCanvas: "",
-    sectionPanel: "rounded-2xl border border-white/10 bg-[#1c2422]",
+    sectionPanel: `rounded-2xl border border-white/15 bg-[#1c2422]/75 ${DASHBOARD_GLASS_SURFACE}`,
     sectionHeader: "border-b border-white/10",
     filterTrack: "rounded-xl bg-transparent",
     filterControl:
@@ -228,7 +242,7 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     widgetListColDivide: "divide-white/10",
     widgetListRow: "bg-[#24302c]",
     widgetListRowAlt: "bg-emerald-300/10",
-    operationsListHover: "hover:bg-emerald-50/65",
+    operationsListHover: "hover:bg-[#2e3a36]",
     operationsListSelected: "bg-emerald-300/20",
     tableRowSelected: "bg-emerald-300/15",
     tableRowSelectedInset: "shadow-[inset_3px_0_0_0_rgb(110,231,183)]",
@@ -243,8 +257,9 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
       "rounded-full border border-emerald-100 bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-ink-muted shadow-sm",
     toolbarDivider: "border-emerald-100/80",
     formAccent: "accent-emerald-600",
-    pastDue: "text-emerald-300",
-    pastDuePill: "border-emerald-300/40 bg-emerald-300/10 text-emerald-200",
+    pastDue: "text-emerald-400",
+    pastDuePill: "border-emerald-950 bg-emerald-950 text-emerald-200",
+    paidPill: "border-emerald-200 bg-emerald-200 text-emerald-950",
   },
   {
     id: "ocean",
@@ -262,6 +277,8 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     navInactive: "bg-white/80 text-ink",
     metricA: "border border-stone-200 bg-white",
     metricB: "border border-stone-200 bg-[#f7f3ee]",
+    kpiCard: "border-white/65 bg-[#fbf9f6]/[0.81]",
+    kpiCardAlt: "border-white/65 bg-[#fbf9f6]/[0.81]",
     metricValueA: "text-[#3c2a1e]",
     metricValueB: "text-[#3c2a1e]",
     chartPanel: "border border-stone-200 bg-white/90",
@@ -273,7 +290,7 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     dashboardAtmosphere:
       "bg-[#f3eee6] bg-[radial-gradient(ellipse_at_50%_0%,rgba(232,220,204,0.9),transparent_42%)]",
     dashboardCanvas: "",
-    sectionPanel: "rounded-2xl border border-stone-200 bg-white shadow-sm",
+    sectionPanel: `rounded-2xl border border-white/70 bg-white/80 ${DASHBOARD_GLASS_SURFACE}`,
     sectionHeader: "border-b border-stone-200",
     filterTrack:
       "rounded-xl bg-[#f7f3ee]/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ring-1 ring-stone-200/80",
@@ -323,7 +340,8 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     toolbarDivider: "border-stone-200",
     formAccent: "accent-[#6b4f3a]",
     pastDue: "text-[#a6846a]",
-    pastDuePill: "border-[#c4b2a0] bg-[#f3ece4] text-[#8b6b52]",
+    pastDuePill: "border-[#6b4f3a] bg-[#6b4f3a] text-[#f3ece4]",
+    paidPill: "border-[#e4d5c6] bg-[#f3ece4] text-[#6b4f3a]",
     pickerBar: "bg-gradient-to-r from-[#f7f3ee] via-[#cbbba8] to-[#3c2a1e]",
   },
   {
@@ -342,6 +360,8 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     navInactive: "bg-white/80 text-ink",
     metricA: "border border-[#d5dee8] bg-white",
     metricB: "border border-[#d5dee8] bg-[#f4f7fb]",
+    kpiCard: "border-white/65 bg-[#fafbfd]/[0.81]",
+    kpiCardAlt: "border-white/65 bg-[#fafbfd]/[0.81]",
     metricValueA: "text-[#1e3a5f]",
     metricValueB: "text-[#1e3a5f]",
     chartPanel: "border border-[#d5dee8] bg-white/90",
@@ -353,7 +373,7 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     dashboardAtmosphere:
       "bg-[#f4f7fb] bg-[radial-gradient(ellipse_at_50%_0%,rgba(214,224,236,0.95),transparent_42%)]",
     dashboardCanvas: "",
-    sectionPanel: "rounded-2xl border border-[#d5dee8] bg-white shadow-sm",
+    sectionPanel: `rounded-2xl border border-white/70 bg-white/80 ${DASHBOARD_GLASS_SURFACE}`,
     sectionHeader: "border-b border-[#d5dee8]",
     filterTrack:
       "rounded-xl bg-[#f4f7fb]/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ring-1 ring-[#d5dee8]",
@@ -402,7 +422,8 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     toolbarDivider: "border-[#d5dee8]",
     formAccent: "accent-[#1e3a5f]",
     pastDue: "text-[#5d7a96]",
-    pastDuePill: "border-[#b7c6d6] bg-[#e7eef5] text-[#3d5a80]",
+    pastDuePill: "border-[#1e3a5f] bg-[#1e3a5f] text-[#e7eef5]",
+    paidPill: "border-[#c5d4e4] bg-[#e7eef5] text-[#1e3a5f]",
     pickerBar: "bg-gradient-to-r from-[#f4f7fb] via-[#8aa4c0] to-[#1e3a5f]",
   },
   {
@@ -421,6 +442,8 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     navInactive: "bg-white/10 text-ink",
     metricA: "border border-white/10 bg-[#1e1e1e]",
     metricB: "border border-white/10 bg-[#26231f]",
+    kpiCard: "border-white/12 bg-[#22201e]/[0.79]",
+    kpiCardAlt: "border-white/12 bg-[#22201e]/[0.79]",
     metricValueA: "text-[#f4f1ea]",
     metricValueB: "text-[#e7e2d8]",
     chartPanel: "border border-white/10 bg-white/90",
@@ -432,7 +455,7 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     dashboardAtmosphere:
       "bg-[#141414] bg-[radial-gradient(ellipse_at_50%_0%,rgba(231,226,216,0.22),transparent_42%)]",
     dashboardCanvas: "",
-    sectionPanel: "rounded-2xl border border-white/10 bg-[#1c1c1c]",
+    sectionPanel: `rounded-2xl border border-white/12 bg-[#1c1c1c]/78 ${DASHBOARD_GLASS_SURFACE}`,
     sectionHeader: "border-b border-white/10",
     filterTrack: "rounded-xl bg-transparent",
     filterControl:
@@ -479,7 +502,8 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     toolbarDivider: "border-white/10",
     formAccent: "accent-[#e7e2d8]",
     pastDue: "text-[#b7aea3]",
-    pastDuePill: "border-[#b7aea3]/40 bg-[#b7aea3]/10 text-[#d6cfc4]",
+    pastDuePill: "border-[#6b6560] bg-[#1a1a1a] text-[#e7e2d8]",
+    paidPill: "border-[#f4f1ea] bg-[#e7e2d8] text-[#1a1a1a]",
     pickerBar: "bg-gradient-to-r from-[#141414] via-[#3a3835] to-[#e7e2d8]",
   },
   {
@@ -498,6 +522,8 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     navInactive: "bg-white/80 text-ink",
     metricA: "border border-zinc-200 bg-white",
     metricB: "border border-zinc-200 bg-[#f3f4f6]",
+    kpiCard: "border-white/65 bg-[#f9f9fb]/[0.83]",
+    kpiCardAlt: "border-white/65 bg-[#f9f9fb]/[0.83]",
     metricValueA: "text-[#2c2c2c]",
     metricValueB: "text-[#2c2c2c]",
     chartPanel: "border border-zinc-200 bg-white/90",
@@ -509,7 +535,7 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     dashboardAtmosphere:
       "bg-[#f3f4f6] bg-[radial-gradient(ellipse_at_50%_0%,rgba(220,222,226,0.95),transparent_42%)]",
     dashboardCanvas: "",
-    sectionPanel: "rounded-2xl border border-zinc-200 bg-white shadow-sm",
+    sectionPanel: `rounded-2xl border border-white/70 bg-white/82 ${DASHBOARD_GLASS_SURFACE}`,
     sectionHeader: "border-b border-zinc-200",
     filterTrack:
       "rounded-xl bg-[#f3f4f6]/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ring-1 ring-zinc-200",
@@ -558,7 +584,8 @@ export const LAYOUT_CUSTOMIZE_THEMES: LayoutCustomizeTheme[] = [
     toolbarDivider: "border-zinc-200",
     formAccent: "accent-[#2c2c2c]",
     pastDue: "text-[#6b7280]",
-    pastDuePill: "border-zinc-300 bg-zinc-100 text-[#4b5563]",
+    pastDuePill: "border-[#2c2c2c] bg-[#2c2c2c] text-zinc-200",
+    paidPill: "border-zinc-300 bg-zinc-200 text-[#2c2c2c]",
     pickerBar: "bg-gradient-to-r from-[#f3f4f6] via-[#9ca3af] to-[#2c2c2c]",
   },
 ];

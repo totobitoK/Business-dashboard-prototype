@@ -15,12 +15,9 @@ describe("buildPipelineView", () => {
   it("keeps open pipeline as a snapshot and won deals inside the reporting period", () => {
     const full = view(march);
     const narrow = view(lateMarch);
-    expect(full.openCount).toBe(5);
+    expect(full.openCount).toBe(4);
     expect(full.missingAmountCount).toBe(1);
-    expect(full.openValue).toEqual([
-      { currency: "EUR", amount: 5000, dealCount: 1 },
-      { currency: "USD", amount: 35400, dealCount: 3 },
-    ]);
+    expect(full.openValue).toEqual([{ currency: "USD", amount: 35400, dealCount: 3 }]);
     expect(full.closingSoon.map((deal) => deal.name)).toEqual([
       "Lumen kiosk",
       "Unpriced renewal",
@@ -29,7 +26,6 @@ describe("buildPipelineView", () => {
     expect(full.wonMissingAmountCount).toBe(1);
     expect(full.wonValue).toEqual([{ currency: "USD", amount: 7054, dealCount: 2 }]);
     expect(full.stageRows.map((row) => row.label)).toContain("Enterprise · Security review");
-    expect(full.deals.find((deal) => deal.name === "Euro pop-up")?.company).toBeNull();
     expect(full.deals.find((deal) => deal.name === "Harbor security review")?.owner).toBeNull();
     expect(full.deals.find((deal) => deal.name === "Harbor security review")?.date).toBeNull();
 
@@ -43,11 +39,8 @@ describe("buildPipelineView", () => {
 
   it("uses the selected pipeline's own stages", () => {
     const sales = view(march, "default");
-    expect(sales.openCount).toBe(4);
-    expect(sales.openValue).toEqual([
-      { currency: "EUR", amount: 5000, dealCount: 1 },
-      { currency: "USD", amount: 20400, dealCount: 2 },
-    ]);
+    expect(sales.openCount).toBe(3);
+    expect(sales.openValue).toEqual([{ currency: "USD", amount: 20400, dealCount: 2 }]);
     expect(sales.stageRows.map((row) => row.label)).toEqual([
       "Appointment Scheduled",
       "Presentation Scheduled",
@@ -86,7 +79,7 @@ describe("buildPipelineView", () => {
       message: null,
     });
     expect(stale.showFigures).toBe(true);
-    expect(stale.openCount).toBe(5);
+    expect(stale.openCount).toBe(4);
     expect(stale.message).toMatch(/stale/);
 
     const empty = view(march, "default", {

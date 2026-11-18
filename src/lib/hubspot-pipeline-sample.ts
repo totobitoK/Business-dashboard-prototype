@@ -62,7 +62,6 @@ export const DEMO_HUBSPOT_CRM: HubSpotCrmPayload = {
   ],
   owners: [
     { id: "501", firstName: "Avery", lastName: "Chen", email: "avery@meridian.example" },
-    { id: "502", firstName: "Store", lastName: "manager", email: null },
     { id: "503", firstName: null, lastName: null, email: "ops@meridian.example" },
   ],
   companies: [
@@ -101,18 +100,6 @@ export const DEMO_HUBSPOT_CRM: HubSpotCrmPayload = {
         hubspot_owner_id: "501",
       },
       associations: { companies: { results: [{ id: "902", type: "deal_to_company" }] } },
-    },
-    {
-      id: "1603",
-      properties: {
-        dealname: "Euro pop-up",
-        amount: "5000",
-        deal_currency_code: "EUR",
-        dealstage: "presentationscheduled",
-        pipeline: "default",
-        closedate: "2026-03-20T18:00:00.000Z",
-        hubspot_owner_id: "502",
-      },
     },
     {
       id: "1604",

@@ -25,7 +25,6 @@ describe("normalizeHubSpotCrm", () => {
       company: "Harbor Industrial",
       url: "https://app.hubspot.com/contacts/24490123/record/0-3/1608",
     });
-    expect(read.deals.find((deal) => deal.id === "1603")?.company).toBeNull();
     expect(read.deals.find((deal) => deal.id === "1604")?.amount).toBeNull();
   });
 

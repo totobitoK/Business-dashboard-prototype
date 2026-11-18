@@ -15,7 +15,7 @@ import {
 import { DashboardSection } from "@/components/customer/DashboardSection";
 import { KpiStatCard } from "@/components/customer/KpiStatCard";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
-import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
+import { isLightDashboardTheme, type LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 import { DEMO_AS_OF_DATE } from "@/lib/workspace-demo-date";
 import {
   OVERVIEW_KPI_LABELS,
@@ -31,21 +31,6 @@ import {
   resolveReportingRange,
 } from "@/lib/workspace-reporting-period";
 import type { TrendBucket } from "@/lib/workspace-analytics";
-
-const PREVIEW_JOBS = [
-  {
-    title: "Seasonal tune-up · $285",
-    meta: "Oak Street Residence · Maintenance",
-    when: "Mar 28 · 9:00 AM",
-    status: "Completed",
-  },
-  {
-    title: "No-cool diagnostic · $420",
-    meta: "Plaza Office Park · Service",
-    when: "Mar 27 · 1:30 PM",
-    status: "In progress",
-  },
-] as const;
 
 const PREVIEW_APPOINTMENTS = [
   { title: "Estimate — Plaza HVAC", when: "Mar 31 · 10:00 AM", assignee: "Tech team B" },
@@ -126,7 +111,7 @@ function overviewPreviewProps(
   theme: LayoutCustomizeTheme,
   _index: number
 ) {
-  const className = theme.metricA;
+  const className = theme.kpiCard;
   const asOf = formatCalendarDateDisplay(DEMO_AS_OF_DATE);
   switch (id) {
     case "payments_collected":
@@ -151,7 +136,7 @@ function overviewPreviewProps(
         compare: "+3 vs prior period",
         compareTone: "up" as const,
         value: (
-          <span className={`text-xl font-bold sm:text-2xl ${theme.metricValueA}`}>24</span>
+          <span className={`text-xl font-medium tabular-nums sm:text-2xl ${theme.metricValueA}`}>24</span>
         ),
         className,
       };
@@ -188,9 +173,9 @@ function revenuePreviewProps(
   id: RevenueKpiId,
   rangeLabel: string,
   theme: LayoutCustomizeTheme,
-  index: number
+  _index: number
 ) {
-  const className = index % 2 === 0 ? theme.metricA : theme.metricB;
+  const className = theme.kpiCard;
   const asOf = formatCalendarDateDisplay(DEMO_AS_OF_DATE);
   switch (id) {
     case "weekly_revenue":
@@ -290,8 +275,13 @@ function PreviewMetricsGrid({
           ? "lg:grid-cols-3"
           : "lg:grid-cols-4";
 
+  const columns =
+    kpiTab === "overview"
+      ? `grid-cols-1 ${lgCols.replaceAll("lg:", "xl:")}`
+      : `grid-cols-1 sm:grid-cols-2 ${lgCols}`;
+
   return (
-    <div className={`grid gap-2 sm:grid-cols-2 ${lgCols}`}>
+    <div className={`grid gap-3 ${columns}`}>
       {kpiTab === "revenue"
         ? visibleRevenueKpis.map((id, index) => (
             <KpiStatCard
@@ -315,28 +305,80 @@ function PreviewMetricsGrid({
   );
 }
 
-function PreviewJobList({ theme, compact }: { theme: LayoutCustomizeTheme; compact?: boolean }) {
-  const rowPy = compact ? "py-2" : "py-2.5";
-  const meta = compact ? "text-[10px]" : "text-xs";
+function PreviewAction({ theme, label }: { theme: LayoutCustomizeTheme; label: string }) {
+  return <span className={`text-xs font-semibold ${theme.linkAccent}`}>{label}</span>;
+}
+
+function PreviewInvoiceSummary({ theme }: { theme: LayoutCustomizeTheme }) {
+  const outstanding = PREVIEW_INVOICES.reduce((sum, invoice) => sum + invoice.balance, 0);
   return (
-    <div className={`${theme.widgetListShell} ${compact ? "text-xs" : "text-sm"}`}>
-      <ul className={`divide-y ${theme.widgetListDivide}`}>
-        {PREVIEW_JOBS.map((job, i) => (
-          <li key={job.title}>
-            <div
-              className={`flex w-full flex-col gap-0.5 px-3 text-left text-ink sm:flex-row sm:items-center sm:justify-between ${rowPy} ${
-                i === 0 ? theme.operationsListSelected : theme.widgetListRow
-              }`}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold">{job.title}</p>
-                <p className={`truncate ${meta} text-ink-muted`}>{job.meta}</p>
-              </div>
-              <div className={`flex shrink-0 flex-wrap items-center gap-x-2 ${meta}`}>
-                <span className={`font-semibold ${theme.listAccent}`}>{job.when}</span>
-                <span>{job.status}</span>
-              </div>
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex flex-wrap gap-x-8 gap-y-3">
+        <div className="min-w-0">
+          <div className={`text-2xl font-semibold tabular-nums leading-none ${theme.metricValueA}`}>
+            {PREVIEW_INVOICES.length}
+          </div>
+          <p className="mt-1 text-xs text-ink-muted">Open invoices</p>
+        </div>
+        <div className="min-w-0">
+          <CurrencyAmount
+            amount={outstanding}
+            colorClass={theme.metricValueA}
+            className="text-2xl font-semibold tabular-nums"
+          />
+          <p className="mt-1 text-xs text-ink-muted">Outstanding</p>
+        </div>
+      </div>
+      <ol className={`flex flex-col gap-1.5 border-t pt-2 ${isLightDashboardTheme(theme.id) ? theme.detailPanelBorder : "border-white/10"}`}>
+        {PREVIEW_INVOICES.map((invoice) => (
+          <li key={invoice.id} className="flex items-center justify-between gap-3">
+            <span className="min-w-0 truncate text-sm font-semibold text-ink">{invoice.customer}</span>
+            <CurrencyAmount
+              amount={invoice.balance}
+              colorClass={theme.metricValueA}
+              className="text-sm font-semibold tabular-nums"
+            />
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function PreviewJobSummary({ theme }: { theme: LayoutCustomizeTheme }) {
+  const categories = [
+    { category: "Maintenance", completed: 6 },
+    { category: "Service", completed: 4 },
+  ];
+  const max = categories[0]?.completed || 1;
+  const track = isLightDashboardTheme(theme.id) ? "bg-stone-200" : "bg-white/10";
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex flex-wrap gap-x-8 gap-y-3">
+        <div className="min-w-0">
+          <div className={`text-2xl font-semibold tabular-nums leading-none ${theme.metricValueA}`}>10</div>
+          <p className="mt-1 text-xs text-ink-muted">Completed</p>
+        </div>
+        <div className="min-w-0">
+          <CurrencyAmount
+            amount={705}
+            colorClass={theme.metricValueA}
+            className="text-2xl font-semibold tabular-nums"
+          />
+          <p className="mt-1 text-xs text-ink-muted">Completed value</p>
+        </div>
+      </div>
+      <ul className={`flex flex-col gap-1.5 border-t pt-2 ${isLightDashboardTheme(theme.id) ? theme.detailPanelBorder : "border-white/10"}`}>
+        {categories.map((item) => (
+          <li key={item.category} className="grid grid-cols-[6.75rem_1fr_1.5rem] items-center gap-2">
+            <span className="truncate text-sm font-semibold text-ink">{item.category}</span>
+            <div className={`h-1 overflow-hidden rounded-full ${track}`}>
+              <div
+                className={`h-full rounded-full ${theme.chartBar}`}
+                style={{ width: `${Math.max(8, Math.round((item.completed / max) * 100))}%` }}
+              />
             </div>
+            <span className="text-right text-sm tabular-nums text-ink">{item.completed}</span>
           </li>
         ))}
       </ul>
@@ -389,7 +431,7 @@ function PreviewInvoiceTable({
         </thead>
         <tbody className={`divide-y ${theme.widgetListDivideLight}`}>
           {PREVIEW_INVOICES.map((inv, idx) => (
-            <tr key={inv.id} className={idx % 2 === 1 ? theme.widgetListRowAlt : theme.widgetListRow}>
+            <tr key={inv.id} className={idx % 2 === 0 ? theme.widgetListRowAlt : theme.widgetListRow}>
               <td className={`font-mono font-semibold ${theme.metricValueA} ${cell}`}>{inv.id}</td>
               <td className={`truncate font-medium text-ink ${cell}`}>{inv.customer}</td>
               <td className={`text-ink-muted ${cell}`}>{inv.due}</td>
@@ -422,7 +464,6 @@ export function DashboardAppearancePreview({
   const { businessName } = useCustomerPortal();
   const resolved = resolveReportingRange("last7");
   const rangeLabel = resolved.ok ? formatRangeForDisplay(resolved.range) : "Last 7 days";
-  const headerTitle = kpiTab === "revenue" ? "Revenue & collections" : businessName;
   const sections = composition
     ? DASHBOARD_SECTIONS.filter((section) => composition.sections.includes(section.id))
     : DASHBOARD_SECTIONS;
@@ -430,14 +471,38 @@ export function DashboardAppearancePreview({
   const showJobs = !composition || composition.widgets.includes("job_activity");
   const showSchedule = !composition || composition.widgets.includes("appointments");
   const showInvoices = !composition || composition.widgets.includes("invoices");
+  const showPipeline = kpiTab === "overview" && (!composition || composition.sales);
   const visibleKpis = kpiTab === "revenue" ? visibleRevenueKpis : visibleOverviewKpis;
+  const sectionAlign = kpiTab === "overview" ? "left" : "center";
+  const chartSection = (
+    <DashboardSection
+      theme={theme}
+      compact={compact}
+      title="Collections trend"
+      subtitle={
+        <>
+          {rangeLabel} · Total{" "}
+          <CurrencyAmount
+            amount={PREVIEW_TREND_TOTAL}
+            colorClass={theme.metricValueA}
+            className="inline font-semibold"
+          />
+        </>
+      }
+      subtitleAlign={sectionAlign}
+      titleAlign={sectionAlign}
+      tightToolbar
+    >
+      <CollectionsTrendChart trend={PREVIEW_TREND} theme={theme} />
+    </DashboardSection>
+  );
 
   return (
     <div className={`rounded-2xl shadow-card ${theme.card}`} aria-label="Sample dashboard preview">
       <div
         className={`relative z-10 flex flex-wrap items-center gap-x-3 gap-y-2 overflow-visible rounded-t-2xl px-4 py-3 sm:px-5 ${theme.header} ${theme.headerText}`}
       >
-        <p className="min-w-0 truncate text-lg font-semibold leading-none sm:text-xl">{headerTitle}</p>
+        <p className="min-w-0 truncate text-lg font-semibold leading-none sm:text-xl">{businessName}</p>
         <div className="flex flex-wrap items-center gap-1" aria-hidden>
           {sections.map((section) => {
             const active =
@@ -446,21 +511,22 @@ export function DashboardAppearancePreview({
             return (
               <span
                 key={section.id}
-                className={`rounded-md px-2.5 py-1 text-sm font-semibold leading-none ${
-                  active ? theme.embeddedNavActive : "text-white/90"
+                className={`rounded-md px-2.5 py-1 text-sm font-medium leading-none ${
+                  active ? theme.embeddedNavActive : theme.headerLink
                 }`}
               >
                 {section.label}
               </span>
             );
           })}
-          <span className="px-2 py-1 text-xs font-medium text-white/70">Connections</span>
-          <span className="px-2 py-1 text-xs font-medium text-white/70">Settings</span>
+          <span className={`rounded-md px-2.5 py-1 text-sm font-medium leading-none ${theme.headerLink}`}>
+            Connections
+          </span>
+          <span className={`rounded-md px-2.5 py-1 text-sm font-medium leading-none ${theme.headerLink}`}>
+            Settings
+          </span>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${theme.badge}`}>
-            Sample data
-          </span>
           <span className="inline-flex items-center rounded-lg border border-white/30 bg-white/15 px-2.5 py-1 text-xs font-semibold text-white">
             {rangeLabel}
           </span>
@@ -468,16 +534,14 @@ export function DashboardAppearancePreview({
       </div>
 
       <div className={`overflow-hidden rounded-b-2xl ${theme.dashboardAtmosphere}`}>
-        <div className={`flex flex-col gap-4 p-4 sm:p-5 ${theme.dashboardCanvas}`}>
+        <div className={`flex flex-col gap-3 p-3 sm:p-4 ${theme.dashboardCanvas}`}>
           {composition?.promptToConnect ? (
-            <p
-              className={`px-4 py-10 text-center text-sm text-ink ${theme.sectionPanel}`}
-            >
+            <p className={`px-4 py-10 text-center text-sm text-ink ${theme.sectionPanel}`}>
               {CONNECT_SOURCE_PROMPT}
             </p>
           ) : (
             <>
-              {visibleKpis.length > 0 ? (
+              {visibleKpis.length > 0 || !showPipeline ? (
                 <PreviewMetricsGrid
                   kpiTab={kpiTab}
                   visibleOverviewKpis={visibleOverviewKpis}
@@ -486,91 +550,98 @@ export function DashboardAppearancePreview({
                   compact={compact}
                   rangeLabel={rangeLabel}
                 />
-              ) : composition?.sales ? (
-                <SalesPipelineCard view={PREVIEW_PIPELINE} theme={theme} />
-              ) : (
-                <PreviewMetricsGrid
-                  kpiTab={kpiTab}
-                  visibleOverviewKpis={visibleOverviewKpis}
-                  visibleRevenueKpis={visibleRevenueKpis}
-                  theme={theme}
-                  compact={compact}
-                  rangeLabel={rangeLabel}
-                />
-              )}
-
-              {showChart ? (
-                <DashboardSection
-                  theme={theme}
-                  compact={compact}
-                  title="Collections trend"
-                  subtitle={
-                    <>
-                      {rangeLabel} · Total{" "}
-                      <CurrencyAmount
-                        amount={PREVIEW_TREND_TOTAL}
-                        colorClass={theme.metricValueA}
-                        className="inline font-semibold"
-                      />
-                    </>
-                  }
-                  subtitleAlign="center"
-                  tightToolbar
-                >
-                  <CollectionsTrendChart trend={PREVIEW_TREND} theme={theme} />
-                </DashboardSection>
               ) : null}
 
+              {showPipeline ? (
+                <SalesPipelineCard
+                  view={PREVIEW_PIPELINE}
+                  theme={theme}
+                  action={<PreviewAction theme={theme} label="View pipeline" />}
+                />
+              ) : null}
+
+              {kpiTab === "overview" && (showChart || showSchedule) ? (
+                <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-3">
+                  {showChart ? (
+                    <div className={showSchedule ? "min-w-0 xl:col-span-2" : "min-w-0 xl:col-span-3"}>
+                      {chartSection}
+                    </div>
+                  ) : null}
+                  {showSchedule ? (
+                    <div className={showChart ? "flex min-w-0 xl:col-span-1" : "min-w-0 xl:col-span-3"}>
+                      <DashboardSection
+                        theme={theme}
+                        compact={compact}
+                        title="Next 7 days"
+                        subtitle={`2 upcoming · from ${formatCalendarDateDisplay(DEMO_AS_OF_DATE)}`}
+                        subtitleAlign="left"
+                        titleAlign="left"
+                        headerAside={<PreviewAction theme={theme} label="Schedule" />}
+                        tightToolbar
+                        fill
+                      >
+                        <PreviewScheduleList theme={theme} compact={compact} />
+                      </DashboardSection>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {kpiTab === "revenue" && showChart ? chartSection : null}
               {kpiTab === "revenue" && showChart ? (
                 <SalesInsightCards insight={PREVIEW_SALES} theme={theme} />
               ) : null}
 
-              {kpiTab === "overview" && (showJobs || showSchedule) ? (
+              {kpiTab === "overview" && (showInvoices || showJobs) ? (
                 <div
-                  className={`grid items-start gap-4 ${showJobs && showSchedule ? "lg:grid-cols-2" : ""}`}
+                  className={`grid grid-cols-1 items-stretch gap-3 ${
+                    showInvoices && showJobs ? "xl:grid-cols-2" : ""
+                  }`}
                 >
+                  {showInvoices ? (
+                    <DashboardSection
+                      theme={theme}
+                      compact={compact}
+                      title="Invoices"
+                      subtitle={`As of ${formatCalendarDateDisplay(DEMO_AS_OF_DATE)}`}
+                      subtitleAlign="left"
+                      titleAlign="left"
+                      headerAside={<PreviewAction theme={theme} label="View invoices" />}
+                      tightToolbar
+                      fill
+                    >
+                      <PreviewInvoiceSummary theme={theme} />
+                    </DashboardSection>
+                  ) : null}
                   {showJobs ? (
                     <DashboardSection
                       theme={theme}
                       compact={compact}
                       title="Job activity"
                       subtitle={rangeLabel}
-                      subtitleAlign="center"
+                      subtitleAlign="left"
+                      titleAlign="left"
+                      headerAside={<PreviewAction theme={theme} label="View jobs" />}
                       tightToolbar
+                      fill
                     >
-                      <PreviewJobList theme={theme} compact={compact} />
-                    </DashboardSection>
-                  ) : null}
-                  {showSchedule ? (
-                    <DashboardSection
-                      theme={theme}
-                      compact={compact}
-                      title="Next 7 days"
-                      subtitle={`2 upcoming · from ${formatCalendarDateDisplay(DEMO_AS_OF_DATE)}`}
-                      subtitleAlign="center"
-                      tightToolbar
-                    >
-                      <PreviewScheduleList theme={theme} compact={compact} />
+                      <PreviewJobSummary theme={theme} />
                     </DashboardSection>
                   ) : null}
                 </div>
               ) : null}
 
-              {showInvoices && (kpiTab === "revenue" || composition) ? (
+              {kpiTab === "revenue" && showInvoices ? (
                 <DashboardSection
                   theme={theme}
                   compact={compact}
-                  title="Open invoices"
-                  subtitle={rangeLabel}
+                  title="Invoices"
                   subtitleAlign="center"
+                  titleAlign="center"
                   tightToolbar
                 >
                   <PreviewInvoiceTable theme={theme} compact={compact} />
                 </DashboardSection>
-              ) : null}
-
-              {kpiTab === "overview" && (!composition || (composition.sales && visibleKpis.length > 0)) ? (
-                <SalesPipelineCard view={PREVIEW_PIPELINE} theme={theme} />
               ) : null}
             </>
           )}

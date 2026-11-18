@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import {
   DASHBOARD_SECTIONS,
   dashboardRoutesForPathname,
@@ -119,7 +119,7 @@ export function DashboardPageFrame({ children }: { children: ReactNode }) {
   );
 }
 
-/** Customer dashboard chrome: slim sidebar, and a header with the page title only. */
+/** Customer dashboard chrome: page title and section links in one top bar. */
 export function DashboardShell({
   title,
   trailing,
@@ -131,7 +131,7 @@ export function DashboardShell({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { theme, liveSamplePreview } = useCustomerPortal();
+  const { theme, liveSamplePreview, businessName } = useCustomerPortal();
   const routes = dashboardRoutesForPathname(pathname);
   const onConnections = pathname.startsWith(routes.connections);
   const onSettings = pathname.startsWith(routes.settings);
@@ -141,40 +141,20 @@ export function DashboardShell({
     onConnections || onSettings || showingSettings
       ? null
       : selectedSection ?? resolveDashboardSection(pathname, searchParams);
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const query = searchParams.toString();
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname, query]);
-
   const chrome = navChrome(theme);
 
   return (
-    <div
-      className={`flex min-h-full w-full flex-1 flex-col lg:flex-row ${theme.scopeClass} ${theme.dashboardAtmosphere}`}
-    >
-      {liveSamplePreview ? null : (
-        <aside className={`hidden w-48 shrink-0 lg:flex lg:flex-col ${chrome.aside}`}>
-          <DashboardNav activeSection={activeSection} chrome={chrome} />
-        </aside>
-      )}
+    <div className={`flex min-h-full w-full flex-1 flex-col ${theme.scopeClass} ${theme.dashboardAtmosphere}`}>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className={`relative z-30 overflow-visible ${theme.headerText}`}>
           <div aria-hidden className={`pointer-events-none absolute inset-0 ${theme.header}`} />
           <div className="relative z-10 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
+            <h1 className="min-w-0 truncate text-lg font-semibold leading-none sm:text-xl">
+              {businessName || title}
+            </h1>
             {liveSamplePreview ? null : (
-              <button
-                type="button"
-                className={`rounded-md border border-current/20 px-2.5 py-1.5 text-sm font-semibold lg:hidden ${chrome.focus} ${chrome.idle}`}
-                aria-expanded={menuOpen}
-                aria-controls="mobile-dashboard-menu"
-                onClick={() => setMenuOpen((open) => !open)}
-              >
-                {menuOpen ? "Close" : "Menu"}
-              </button>
+              <DashboardNav activeSection={activeSection} chrome={chrome} />
             )}
-            <h1 className="min-w-0 truncate text-lg font-semibold leading-none sm:text-xl">{title}</h1>
             {trailing ? (
               <div className="ml-auto flex w-full min-w-0 shrink-0 basis-full items-center justify-end gap-2 sm:w-auto sm:basis-auto">
                 {trailing}
@@ -183,18 +163,6 @@ export function DashboardShell({
           </div>
           {liveSamplePreview ? (
             <PreviewSectionLinks activeSection={activeSection ?? "overview"} />
-          ) : null}
-          {menuOpen && !liveSamplePreview ? (
-            <div
-              id="mobile-dashboard-menu"
-              className={`border-t lg:hidden ${chrome.menu} ${chrome.aside}`}
-            >
-              <DashboardNav
-                activeSection={activeSection}
-                onNavigate={() => setMenuOpen(false)}
-                chrome={chrome}
-              />
-            </div>
           ) : null}
         </div>
         <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${theme.dashboardCanvas}`}>
@@ -207,17 +175,15 @@ export function DashboardShell({
 
 function DashboardNav({
   activeSection,
-  onNavigate,
   chrome,
 }: {
   activeSection: DashboardSectionId | null;
-  onNavigate?: () => void;
   chrome: NavChrome;
 }) {
   const pathname = usePathname();
   const sectionState = useDashboardSection();
   const signedInNav = useSignedInNav();
-  const { workspaceId, navigationBase, liveSamplePreview } = useCustomerPortal();
+  const { workspaceId, navigationBase, liveSamplePreview, theme } = useCustomerPortal();
   const composition = useDashboardComposition();
   const sections = composition
     ? DASHBOARD_SECTIONS.filter((section) => composition.sections.includes(section.id))
@@ -233,7 +199,7 @@ function DashboardNav({
   const showUtility = Boolean(workspaceId) && !navigationBase && !liveSamplePreview;
   const showSignOut =
     showUtility && pathname.startsWith("/dashboard") && !pathname.startsWith(DEMO_DASHBOARD);
-  const itemClass = `rounded-md px-2.5 py-2 text-left text-sm font-medium leading-none ${chrome.focus}`;
+  const itemClass = `rounded-md px-2.5 py-1 text-sm font-medium leading-none ${chrome.focus}`;
 
   const utilityHref = (path: string) =>
     pathname.startsWith(DEMO_DASHBOARD) && workspaceId
@@ -243,49 +209,43 @@ function DashboardNav({
   if (!workspaceId) return null;
 
   return (
-    <nav aria-label="Dashboard" className="flex flex-col gap-1 p-3">
-      <p className="px-2.5 py-2 text-sm font-semibold leading-none">Dashboard</p>
-      <div className="flex flex-col gap-1 pl-3">
-        {sections.map((section) => {
-          const isActive = section.id === highlighted;
-          return (
-            <Link
-              key={section.id}
-              href={dashboardSectionHref(workspaceId, section.id, linkBase)}
-              scroll={false}
-              title={section.description}
-              aria-current={isActive ? "page" : undefined}
-              onClick={(event) => {
-                onNavigate?.();
-                if (
-                  signedInNav?.canSwap &&
-                  event.button === 0 &&
-                  !event.metaKey &&
-                  !event.ctrlKey &&
-                  !event.shiftKey &&
-                  !event.altKey
-                ) {
-                  event.preventDefault();
-                  signedInNav.showDashboard(section.id);
-                  return;
-                }
-                keepDashboardSectionClick(event, sectionState?.selectSection, section.id);
-              }}
-              className={`${itemClass} ${isActive ? chrome.active : chrome.idle}`}
-            >
-              {section.label}
-            </Link>
-          );
-        })}
-      </div>
+    <nav aria-label="Dashboard" className="flex flex-wrap items-center gap-1">
+      {sections.map((section) => {
+        const isActive = section.id === highlighted;
+        return (
+          <Link
+            key={section.id}
+            href={dashboardSectionHref(workspaceId, section.id, linkBase)}
+            scroll={false}
+            title={section.description}
+            aria-current={isActive ? "page" : undefined}
+            onClick={(event) => {
+              if (
+                signedInNav?.canSwap &&
+                event.button === 0 &&
+                !event.metaKey &&
+                !event.ctrlKey &&
+                !event.shiftKey &&
+                !event.altKey
+              ) {
+                event.preventDefault();
+                signedInNav.showDashboard(section.id);
+                return;
+              }
+              keepDashboardSectionClick(event, sectionState?.selectSection, section.id);
+            }}
+            className={`${itemClass} ${isActive ? chrome.active : theme.headerLink}`}
+          >
+            {section.label}
+          </Link>
+        );
+      })}
       {showUtility ? (
         <>
-          <span className={`mx-2 my-1 h-px ${chrome.rule}`} aria-hidden />
           <Link
             href={utilityHref(routes.connections)}
             aria-current={onConnections ? "page" : undefined}
-            onClick={onNavigate}
-            className={`${itemClass} ${onConnections ? chrome.active : chrome.idle}`}
+            className={`${itemClass} ${onConnections ? chrome.active : theme.headerLink}`}
           >
             Connections
           </Link>
@@ -293,7 +253,6 @@ function DashboardNav({
             href={utilityHref(routes.settings)}
             aria-current={onSettings ? "page" : undefined}
             onClick={(event) => {
-              onNavigate?.();
               if (
                 !signedInNav?.canSwap ||
                 event.button !== 0 ||
@@ -307,13 +266,13 @@ function DashboardNav({
               event.preventDefault();
               signedInNav.showSettings();
             }}
-            className={`${itemClass} ${onSettings ? chrome.active : chrome.idle}`}
+            className={`${itemClass} ${onSettings ? chrome.active : theme.headerLink}`}
           >
             Settings
           </Link>
           {showSignOut ? (
             <form action="/auth/logout" method="post">
-              <button type="submit" className={`${itemClass} w-full ${chrome.idle}`}>
+              <button type="submit" className={`${itemClass} ${theme.headerLink}`}>
                 Sign out
               </button>
             </form>

@@ -325,7 +325,11 @@ export function WorkspaceScheduleDashboard({
                         {visits.map((appt) => (
                           <span
                             key={appt.id}
-                            className={`truncate rounded px-1 py-0.5 text-[9px] font-medium leading-tight text-white ${theme.chartBarHi}`}
+                            className={`truncate rounded px-1 py-0.5 text-[9px] font-medium leading-tight ${
+                              theme.id === "purple"
+                                ? "bg-violet-300 text-[#312e81]"
+                                : `text-white ${theme.chartBarHi}`
+                            }`}
                           >
                             {chipLabel(appt, splitDay, timeZone)}
                           </span>

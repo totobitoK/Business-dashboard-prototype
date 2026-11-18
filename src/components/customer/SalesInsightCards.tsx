@@ -54,7 +54,7 @@ function InsightCard({
 }) {
   const rule = isLightDashboardTheme(theme.id) ? theme.detailPanelBorder : "border-white/10";
   return (
-    <article className={`flex flex-col p-4 ${theme.metricA}`}>
+    <article className={`flex flex-col p-4 ${theme.sectionPanel}`}>
       <p className="text-xs font-semibold text-ink">{label}</p>
       <div className="mt-1">{value}</div>
       <div className={`mt-3 border-t pt-3 text-sm leading-relaxed text-ink ${rule}`}>{children}</div>
