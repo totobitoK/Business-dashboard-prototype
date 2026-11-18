@@ -250,7 +250,7 @@ export function buildPipelineView(input: {
       if (!b.deal.expectedClose) return -1;
       return a.deal.expectedClose < b.deal.expectedClose ? -1 : 1;
     })
-    .slice(0, 2)
+    .slice(0, 3)
     .map(({ deal, stage }) => toRow(deal, stage, true));
 
   const stageRows: PipelineStageRow[] = [];

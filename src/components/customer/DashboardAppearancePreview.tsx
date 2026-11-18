@@ -2,7 +2,7 @@
 
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
 import { SalesInsightCards } from "@/components/customer/SalesInsightCards";
-import { SalesPipelineCard } from "@/components/customer/PipelinePanel";
+import { SalesPipelineCard, WonPeriodCard } from "@/components/customer/PipelinePanel";
 import { buildPipelineView } from "@/lib/hubspot-pipeline";
 import { SAMPLE_PIPELINE_READ } from "@/lib/hubspot-pipeline-sample";
 import type { SalesInsight } from "@/lib/sales-insight";
@@ -552,14 +552,6 @@ export function DashboardAppearancePreview({
                 />
               ) : null}
 
-              {showPipeline ? (
-                <SalesPipelineCard
-                  view={PREVIEW_PIPELINE}
-                  theme={theme}
-                  action={<PreviewAction theme={theme} label="View pipeline" />}
-                />
-              ) : null}
-
               {kpiTab === "overview" && (showChart || showSchedule) ? (
                 <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-3">
                   {showChart ? (
@@ -584,6 +576,25 @@ export function DashboardAppearancePreview({
                       </DashboardSection>
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+
+              {showPipeline ? (
+                <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
+                  <SalesPipelineCard
+                    view={PREVIEW_PIPELINE}
+                    theme={theme}
+                    action={<PreviewAction theme={theme} label="View pipeline" />}
+                  />
+                  <WonPeriodCard
+                    view={PREVIEW_PIPELINE}
+                    theme={theme}
+                    rangeLabel={formatRangeForDisplay({
+                      start: "2026-03-01",
+                      end: "2026-03-12",
+                      preset: "mtd",
+                    })}
+                  />
                 </div>
               ) : null}
 

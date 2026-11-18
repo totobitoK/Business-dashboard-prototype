@@ -37,6 +37,7 @@ function sectionUrl(section: DashboardSectionId): string {
   }
   if (section === "overview") url.searchParams.delete("section");
   else url.searchParams.set("section", section);
+  if (section !== "revenue" && url.hash === "#revenue-invoices") url.hash = "";
   return `${url.pathname}${url.search}${url.hash}`;
 }
 

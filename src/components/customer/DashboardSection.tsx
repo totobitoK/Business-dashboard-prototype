@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { LayoutCustomizeTheme } from "@/lib/layout-customize-themes";
 
 export function DashboardSection({
+  id,
   theme,
   title,
   subtitle,
@@ -16,6 +17,7 @@ export function DashboardSection({
   fill = false,
   children,
 }: {
+  id?: string;
   theme: LayoutCustomizeTheme;
   title: string;
   /** Period or counts — shown below the title. */
@@ -41,7 +43,10 @@ export function DashboardSection({
       : "text-center text-sm font-semibold tracking-tight text-ink";
 
   return (
-    <section className={`relative overflow-visible ${fill ? "h-full w-full" : ""} ${theme.sectionPanel} ${alertOverlay}`}>
+    <section
+      id={id}
+      className={`relative overflow-visible ${fill ? "h-full w-full" : ""} ${theme.sectionPanel} ${alertOverlay}`}
+    >
       <header
         className={`${padX} ${theme.sectionHeader} ${
           titleAlign === "left"

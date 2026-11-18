@@ -69,7 +69,7 @@ import {
 } from "@/lib/dashboard-section-routes";
 import { CollectionsTrendChart } from "@/components/customer/CollectionsTrendChart";
 import { SalesInsightCards } from "@/components/customer/SalesInsightCards";
-import { PipelineView, SalesPipelineCard } from "@/components/customer/PipelinePanel";
+import { PipelineView, SalesPipelineCard, WonPeriodCard } from "@/components/customer/PipelinePanel";
 import { buildPipelineView } from "@/lib/hubspot-pipeline";
 import { livePipelineRead } from "@/lib/hubspot-crm";
 import { demoPipelineRead } from "@/lib/hubspot-pipeline-sample";
@@ -351,6 +351,13 @@ export function WorkspaceSampleDashboard({
     return () => window.removeEventListener("popstate", syncRevenueView);
   }, [collectionsAvailable, pipelineAvailable, mode]);
 
+  useEffect(() => {
+    if (mode !== "revenue") return;
+    const id = window.location.hash.replace("#", "");
+    if (id !== "revenue-invoices") return;
+    document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }, [mode, revenueView]);
+
   const pipelineRead = useMemo(() => {
     if (!pipelineAvailable) return null;
     const timeZone = liveSnapshot?.timeZone ?? BUSINESS_TIMEZONE;
@@ -594,11 +601,14 @@ export function WorkspaceSampleDashboard({
   const showRevenueToggle = mode === "revenue" && collectionsAvailable && pipelineAvailable;
   const showPipelinePage = mode === "revenue" && revenueView === "pipeline" && pipelineView != null;
 
-  function openRevenue(next: "collections" | "pipeline") {
+  const revenueAvailable = !composition || composition.sections.includes("revenue");
+
+  function openRevenue(next: "collections" | "pipeline", scrollTo?: string) {
     setRevenueView(next);
     const url = new URL(window.location.href);
     url.searchParams.set("section", "revenue");
     url.searchParams.set("view", next);
+    url.hash = scrollTo ?? "";
     const nextUrl = `${url.pathname}${url.search}${url.hash}`;
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (nextUrl !== current) window.history.pushState(window.history.state, "", nextUrl);
@@ -607,19 +617,32 @@ export function WorkspaceSampleDashboard({
 
   const pipelineCard =
     mode === "overview" && pipelineView ? (
-      <SalesPipelineCard
-        view={pipelineView}
-        theme={theme}
-        action={
-          <button
-            type="button"
-            className={`text-xs font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
-            onClick={() => openRevenue("pipeline")}
-          >
-            View pipeline
-          </button>
-        }
-      />
+      <div
+        className={`grid grid-cols-1 items-stretch gap-3 ${
+          pipelineView.showFigures ? "xl:grid-cols-2" : ""
+        }`}
+      >
+        <SalesPipelineCard
+          view={pipelineView}
+          theme={theme}
+          action={
+            <button
+              type="button"
+              className={`text-xs font-semibold ${theme.linkAccent} ${theme.linkAccentHover}`}
+              onClick={() => openRevenue("pipeline")}
+            >
+              View pipeline
+            </button>
+          }
+        />
+        {pipelineView.showFigures ? (
+          <WonPeriodCard
+            view={pipelineView}
+            theme={theme}
+            rangeLabel={formatRangeForDisplay(computed.range)}
+          />
+        ) : null}
+      </div>
     ) : null;
 
   const visibleInvoices = computed.invoices.slice(0, invoiceLimit);
@@ -1051,6 +1074,7 @@ export function WorkspaceSampleDashboard({
             case "job_activity":
               return {
                 title: "Job activity",
+                sectionId: mode === "overview" ? "overview-jobs" : undefined,
                 subtitle: rangeLabel,
                 subtitleAlign: summaryAlign,
                 titleAlign: summaryAlign,
@@ -1059,7 +1083,16 @@ export function WorkspaceSampleDashboard({
                     <button
                       type="button"
                       className={summaryActionClass}
-                      onClick={() => setShowJobList((open) => !open)}
+                      onClick={() => {
+                        setShowJobList((open) => {
+                          if (!open) {
+                            requestAnimationFrame(() => {
+                              document.getElementById("overview-jobs")?.scrollIntoView({ block: "nearest" });
+                            });
+                          }
+                          return !open;
+                        });
+                      }}
                     >
                       {showJobList ? "Hide jobs" : "View jobs"}
                     </button>
@@ -1095,6 +1128,7 @@ export function WorkspaceSampleDashboard({
             case "invoices":
               return {
                 title: "Invoices",
+                sectionId: mode === "revenue" ? "revenue-invoices" : undefined,
                 subtitle:
                   mode === "overview" ? (
                     computed.live?.receivablesMessage ? (
@@ -1113,9 +1147,15 @@ export function WorkspaceSampleDashboard({
                       <button
                         type="button"
                         className={summaryActionClass}
-                        onClick={() => setShowInvoiceList((open) => !open)}
+                        onClick={() => {
+                          if (revenueAvailable) {
+                            openRevenue("collections", "revenue-invoices");
+                            return;
+                          }
+                          setShowInvoiceList((open) => !open);
+                        }}
                       >
-                        {showInvoiceList ? "Hide invoices" : "View invoices"}
+                        {revenueAvailable || !showInvoiceList ? "View invoices" : "Hide invoices"}
                       </button>
                     )
                   ) : computed.live?.receivablesMessage ? undefined : (
@@ -1500,6 +1540,7 @@ const OPERATIONS_PAIR: DashboardWidgetId[] = ["job_activity", "appointments"];
 
 type WidgetSectionMeta = {
   title: string;
+  sectionId?: string;
   subtitle?: ReactNode;
   headerAside?: ReactNode;
   accent?: "default" | "alert";
@@ -1680,6 +1721,7 @@ function renderOverviewRows(
     return (
       <DashboardSection
         key={id}
+        id={meta.sectionId}
         theme={theme}
         compact={compact}
         title={meta.title}
@@ -1703,7 +1745,6 @@ function renderOverviewRows(
       rows.push(
         <div key="metrics">{widgetBlocks.metrics}</div>
       );
-      placePipeline();
       continue;
     }
 
@@ -1726,6 +1767,7 @@ function renderOverviewRows(
           ) : null}
         </div>
       );
+      placePipeline();
       continue;
     }
 
@@ -1771,6 +1813,7 @@ function renderWidgetRows(
     return (
       <DashboardSection
         key={id}
+        id={meta.sectionId}
         theme={theme}
         compact={compact}
         title={meta.title}

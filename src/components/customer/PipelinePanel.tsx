@@ -27,6 +27,28 @@ function reported(value: string | null, fallback: string): string {
   return value?.trim() ? value : fallback;
 }
 
+function dealValue(deal: PipelineDealRow): string {
+  if (deal.amount == null) return "No amount";
+  if (!deal.currency) return "Currency not reported";
+  return money(deal.amount, deal.currency);
+}
+
+function DealLine({ deal }: { deal: PipelineDealRow }) {
+  return (
+    <li className="min-w-0 text-sm text-ink">
+      <span className="font-semibold">{deal.name}</span>
+      <span>
+        {" "}
+        · {deal.stage} ·{" "}
+        <span className={deal.amount != null && deal.currency ? "font-semibold" : undefined}>
+          {dealValue(deal)}
+        </span>{" "}
+        · <DealDate deal={deal} />
+      </span>
+    </li>
+  );
+}
+
 function DealDate({ deal }: { deal: PipelineDealRow }) {
   if (!deal.date) return <span>{deal.dateLabel} not set</span>;
   return (
@@ -47,10 +69,10 @@ export function SalesPipelineCard({
 }) {
   const rule = isLightDashboardTheme(theme.id) ? theme.detailPanelBorder : "border-white/10";
   return (
-    <article className={`flex flex-col gap-3 p-4 ${theme.sectionPanel}`}>
+    <article className={`flex h-full flex-col gap-3 p-4 ${theme.sectionPanel}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold text-ink">Sales pipeline</p>
+          <p className="text-sm font-semibold tracking-tight text-ink">Sales pipeline</p>
           <p className="text-[11px] text-ink">
             HubSpot
             {view.sampleLabel ? ` · ${view.sampleLabel}` : ""}
@@ -69,19 +91,73 @@ export function SalesPipelineCard({
           {view.closingSoon.length > 0 ? (
             <ul className="flex flex-col gap-2">
               {view.closingSoon.map((deal) => (
-                <li key={deal.id} className="min-w-0 text-sm text-ink">
-                  <span className="font-semibold">{deal.name}</span>
-                  <span className="text-ink">
-                    {" "}
-                    · {deal.stage} · <DealDate deal={deal} />
-                  </span>
-                </li>
+                <DealLine key={deal.id} deal={deal} />
               ))}
             </ul>
           ) : (
             <p className="text-sm text-ink">No open deals are waiting to close.</p>
           )}
         </>
+      ) : null}
+    </article>
+  );
+}
+
+export function WonPeriodCard({
+  view,
+  theme,
+  rangeLabel,
+}: {
+  view: PipelineView;
+  theme: LayoutCustomizeTheme;
+  rangeLabel: string;
+}) {
+  const rule = isLightDashboardTheme(theme.id) ? theme.detailPanelBorder : "border-white/10";
+  const wonDeals = view.deals.filter((deal) => deal.dateLabel === "Close date");
+  const largest = largestDeal(view.deals, "Close date");
+  const missing = missingLine(view.wonMissingAmountCount, "won");
+  return (
+    <article className={`flex h-full flex-col gap-3 p-4 ${theme.sectionPanel}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold tracking-tight text-ink">Won in selected period</p>
+          <p className="text-[11px] text-ink">{rangeLabel}</p>
+        </div>
+      </div>
+      {view.showFigures ? (
+        <>
+          <div className={`flex flex-wrap items-end justify-between gap-3 border-t pt-3 ${rule}`}>
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
+              <div>
+                <p className={`text-2xl font-semibold tabular-nums leading-none ${theme.metricValueA}`}>
+                  {view.wonCount}
+                </p>
+                <p className="mt-1 text-sm text-ink">Deals closed</p>
+              </div>
+              <p className={`text-sm font-semibold tabular-nums ${theme.metricValueA}`}>
+                Total closed: {valueLine(view.wonValue)}
+              </p>
+            </div>
+            {largest ? (
+              <p className="max-w-[14rem] text-right text-sm text-ink">
+                Largest win
+                <span className="mt-0.5 block font-semibold">{largest.name}</span>
+              </p>
+            ) : null}
+          </div>
+          {missing ? <p className="text-sm text-ink">{missing}</p> : null}
+          {wonDeals.length === 0 ? (
+            <p className="text-sm text-ink">No deals closed in this period.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {wonDeals.map((deal) => (
+                <DealLine key={deal.id} deal={deal} />
+              ))}
+            </ul>
+          )}
+        </>
+      ) : view.message ? (
+        <p className="text-sm text-ink">{view.message}</p>
       ) : null}
     </article>
   );

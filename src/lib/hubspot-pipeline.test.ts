@@ -21,6 +21,7 @@ describe("buildPipelineView", () => {
     expect(full.closingSoon.map((deal) => deal.name)).toEqual([
       "Lumen kiosk",
       "Unpriced renewal",
+      "Northwind restock",
     ]);
     expect(full.wonCount).toBe(3);
     expect(full.wonMissingAmountCount).toBe(1);
