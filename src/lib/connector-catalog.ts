@@ -114,7 +114,7 @@ export const CONNECTOR_DEFINITIONS: ConnectorDefinition[] = [
     implementationStatus: "candidate",
     implementationPriority: 9,
     publicTeaser: "hidden",
-    includeInOnboarding: true,
+    includeInOnboarding: false,
   },
   {
     id: "other",

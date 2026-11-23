@@ -131,6 +131,7 @@ export function hasCustomerScopeAcceptanceForDeposit(client: Client): boolean {
 }
 
 export function needsCustomerScopeAcceptance(client: Client): boolean {
+  if (client.adminCompletedMilestones?.includes("scope-confirmed")) return false;
   if (!hasPublishedScopeForReview(client)) {
     if (
       isLegacyAdminScopeConfirmation(client) &&

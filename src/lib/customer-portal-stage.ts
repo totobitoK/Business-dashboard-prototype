@@ -5,7 +5,6 @@ import {
   isFinalBalancePaid,
   isMilestoneComplete,
 } from "./client-milestones";
-import { isScopePricingConfirmed } from "./onboarding";
 import {
   getCurrentPreviewRevision,
   hasUnresolvedPreviewFeedback,
@@ -16,7 +15,7 @@ import type { Client } from "./types";
 
 export type CustomerPortalStage =
   | "onboarding"
-  | "scope-and-deposit"
+  | "discovery"
   | "guided-connections"
   | "building"
   | "preview-ready"
@@ -26,7 +25,7 @@ export type CustomerPortalStage =
 
 export const CUSTOMER_PORTAL_STAGE_LABELS: Record<CustomerPortalStage, string> = {
   onboarding: "Onboarding",
-  "scope-and-deposit": "Scope & deposit",
+  discovery: "Discovery Call",
   "guided-connections": "Guided connection setup",
   building: "Building your dashboard",
   "preview-ready": "Preview ready for review",
@@ -78,11 +77,11 @@ export function getCustomerPortalStage(client: Client): CustomerPortalStage {
     return "onboarding";
   }
 
-  if (!isScopePricingConfirmed(client) || (!isDepositPaid(client) && !isLiveBuildPreviewTrack(client))) {
-    return "scope-and-deposit";
+  if (!isMilestoneComplete(client, "discovery")) {
+    return "discovery";
   }
 
-  return "onboarding";
+  return "guided-connections";
 }
 
 export function showCustomerDashboardPreview(client: Client): boolean {

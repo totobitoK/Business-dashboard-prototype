@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { getMarketingPageTitle } from "@/lib/branding";
-import "../demo/onboarding/onboarding.css";
 
 export const metadata: Metadata = {
   title: `Onboarding | ${getMarketingPageTitle().split("|")[0]?.trim()}`,

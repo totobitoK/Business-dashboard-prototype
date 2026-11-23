@@ -62,7 +62,6 @@ export function PaymentPreview({ client }: { client: Client }) {
 
 export function ClientPageShell({
   children,
-  client,
 }: {
   children: React.ReactNode;
   client?: Client;
@@ -70,11 +69,8 @@ export function ClientPageShell({
   return (
     <div className="min-h-screen bg-white">
       <header className="border-b border-purple-100 px-4 py-4">
-        <div className="mx-auto flex max-w-2xl items-center justify-between">
-          <RavenViewWordmark size="md" />
-          {client && (
-            <span className="text-xs text-ink-muted">{client.company}</span>
-          )}
+        <div className="mx-auto flex max-w-2xl items-center">
+          <RavenViewWordmark size="lg" />
         </div>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-8">{children}</main>

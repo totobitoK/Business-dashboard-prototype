@@ -218,46 +218,24 @@ export function ClientOnboardingForm({
     }
   }
 
-  if (submitted && !embedded) {
-    return (
-      <div className="rounded-xl border border-purple-100 bg-purple-50/30 p-6 text-center">
-        <h1 className="text-xl font-semibold text-ink">Thank you</h1>
-        <p className="mt-3 text-sm text-ink-muted">
-          Your details have been submitted. Continue below for next steps with
-          our team.
-        </p>
-      </div>
-    );
-  }
-
-  if (submitted && embedded) {
-    return null;
-  }
-
   return (
     <div>
       {!embedded && (
         <>
-          <h1 className="text-2xl font-semibold text-ink">Client onboarding</h1>
+          <h1 className="text-2xl font-semibold text-ink">Tell us about your business</h1>
           <p className="mt-1 text-sm text-ink-muted">
             Help us understand your business so we can build your dashboard.
           </p>
         </>
       )}
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted">
-        <p>
-          Progress saves on this device only — use the same browser to resume
-          after refresh.
-        </p>
-        <p aria-live="polite">
-          {saveStatus === "saving" && "Saving…"}
-          {saveStatus === "saved" && "Saved on this device"}
-          {saveStatus === "error" && (
-            <span className="text-red-600">{saveError ?? "Save failed"}</span>
-          )}
-        </p>
-      </div>
+      <p className="mt-2 text-xs text-ink-muted" aria-live="polite">
+        {saveStatus === "saving" && "Saving…"}
+        {saveStatus === "saved" && "Saved"}
+        {saveStatus === "error" && (
+          <span className="text-red-600">{saveError ?? "Save failed"}</span>
+        )}
+      </p>
 
       {submitError && (
         <p className="mt-2 text-sm text-red-600" role="alert">
@@ -276,7 +254,7 @@ export function ClientOnboardingForm({
           return (
             <div
               key={label}
-              className={`flex-1 rounded-lg border px-2 py-2 text-center text-xs ${
+              className={`flex-1 rounded-lg border px-2 py-2 text-center text-sm ${
                 active
                   ? "border-purple bg-purple-50 text-purple"
                   : done
@@ -392,11 +370,11 @@ export function ClientOnboardingForm({
               {errors.selectedTools && (
                 <p className="mb-2 text-xs text-red-600">{errors.selectedTools}</p>
               )}
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
                 {DATA_SOURCE_TOOLS.map(({ id, label }) => (
                   <label
                     key={id}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-purple-100 px-3 py-2.5 hover:bg-purple-50/40"
+                    className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-purple-100 px-3 py-2 hover:bg-purple-50/40"
                   >
                     <input
                       type="checkbox"
@@ -409,11 +387,6 @@ export function ClientOnboardingForm({
                 ))}
               </div>
             </fieldset>
-            <p className="text-xs text-ink-subtle">
-              Checking a box captures interest for discovery and scope only. It
-              does not connect an account, start OAuth, or guarantee that provider
-              will be available on your launch date.
-            </p>
             {answers.selectedTools?.includes("other") && (
               <Field label="Describe other tool" error={errors.otherToolExplanation}>
                 <input
@@ -425,14 +398,6 @@ export function ClientOnboardingForm({
                 />
               </Field>
             )}
-            <Field label="Notes about how you use these tools">
-              <textarea
-                rows={2}
-                className={textareaClass()}
-                value={answers.toolsNotes ?? ""}
-                onChange={(e) => updateField("toolsNotes", e.target.value)}
-              />
-            </Field>
           </>
         )}
 
@@ -460,15 +425,12 @@ export function ClientOnboardingForm({
               {answers.otherToolExplanation && (
                 <p className="mt-1 text-ink-muted">{answers.otherToolExplanation}</p>
               )}
-              {answers.toolsNotes && (
-                <p className="mt-1 text-ink-muted">{answers.toolsNotes}</p>
-              )}
             </ReviewBlock>
           </div>
         )}
       </div>
 
-      <div className="mt-6 flex justify-between gap-3">
+      <div className={`flex justify-between gap-3 ${step === 3 ? "mt-4" : "mt-6"}`}>
         {step !== 1 ? (
           <button type="button" onClick={goBack} className={secondaryBtn}>
             Back

@@ -1,12 +1,10 @@
 import {
   canShowGuidedDataSetup,
   getSetupBalanceRemaining,
-  isDepositPaid,
   isFinalBalancePaid,
   isMilestoneComplete,
 } from "./client-milestones";
 import type { CustomerPortalStage } from "./customer-portal-stage";
-import { isScopePricingConfirmed } from "./onboarding";
 import { hasUnresolvedPreviewFeedback } from "./preview-review";
 import type { Client } from "./types";
 
@@ -31,19 +29,8 @@ export function getPortalCustomerBlockers(
     }
   }
 
-  if (stage === "scope-and-deposit") {
-    if (!isScopePricingConfirmed(client)) {
-      blockers.push("Scope and pricing are not confirmed yet — discovery may still be in progress.");
-    }
-    if (
-      isScopePricingConfirmed(client) &&
-      client.setupFee > 0 &&
-      !isDepositPaid(client)
-    ) {
-      blockers.push(
-        "Setup deposit has not been recorded yet — use the payment button when you are ready."
-      );
-    }
+  if (stage === "discovery") {
+    blockers.push("Book your discovery call. Scope, pricing, and the deposit are settled there.");
   }
 
   if (stage === "guided-connections") {
@@ -73,31 +60,16 @@ export function getPortalNextAction(
     case "onboarding":
       return {
         title: "Complete onboarding",
-        description:
-          "Tell us about your business, metrics, and tools so we can prepare scope and pricing.",
+        description: "Confirm your company, contact, and the tools you use.",
         primaryLabel: "Continue onboarding",
         primaryHref: `/onboarding/${client.id}`,
       };
-    case "scope-and-deposit":
-      if (!isScopePricingConfirmed(client)) {
-        return {
-          title: "Discovery & scope",
-          description:
-            "We will confirm agreed scope and setup pricing after discovery.",
-          primaryLabel: "Book a discovery call",
-          primaryExternalHref: "discovery-scheduling",
-        };
-      }
-      if (client.setupFee > 0 && !isDepositPaid(client)) {
-        return {
-          title: "Setup deposit",
-          description:
-            "Your deposit is recorded by RavenView when received — see payment status below.",
-        };
-      }
+    case "discovery":
       return {
-        title: "Scope confirmed",
-        description: "Next steps will appear when guided setup opens.",
+        title: "Discovery Call",
+        description: "Scope, pricing, and the deposit are settled on this call.",
+        primaryLabel: "Book a discovery call",
+        primaryExternalHref: "discovery-scheduling",
       };
     case "guided-connections":
       return {

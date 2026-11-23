@@ -26,7 +26,7 @@ describe("getPortalJourneyBookends", () => {
     const live = demoClients.find((c) => c.status === "active")!;
     const { nextLabel, lastCompletedLabel } = getPortalJourneyBookends(live);
     expect(nextLabel).toBe("Active");
-    expect(lastCompletedLabel).toBe("Final payment");
+    expect(lastCompletedLabel).toBe("Final Payment");
   });
 });
 
@@ -37,27 +37,24 @@ describe("deposit and guided setup gates", () => {
     expect(isDepositPaid(client)).toBe(true);
   });
 
-  it("opens guided setup when deposit is satisfied and scope is confirmed", () => {
+  it("opens guided setup after the discovery call is marked", () => {
     const client = baseClient({
-      setupFee: 0,
+      onboardingFormStatus: "submitted",
+      completedSteps: ["requirements-submitted"],
+      adminCompletedMilestones: ["discovery"],
+      setupFee: 1000,
       setupPaidAmount: 0,
-      publishedScopeRevision: undefined,
-      scopeCustomerAcceptedRevision: undefined,
-      completedSteps: ["requirements-submitted", "scope-pricing-confirmed"],
-      scopePricingConfirmedAt: "2025-08-05T10:00:00Z",
-      acceptedSourcesIn: ["QuickBooks"],
     });
     expect(canShowGuidedDataSetup(client)).toBe(true);
   });
 
-  it("requires deposit payment when setup fee is positive", () => {
+  it("keeps guided setup closed until discovery is marked", () => {
     const client = baseClient({
+      onboardingFormStatus: "submitted",
+      completedSteps: ["requirements-submitted"],
+      adminCompletedMilestones: [],
       setupFee: 1000,
       setupPaidAmount: 0,
-      publishedScopeRevision: undefined,
-      scopeCustomerAcceptedRevision: undefined,
-      completedSteps: ["requirements-submitted", "scope-pricing-confirmed"],
-      scopePricingConfirmedAt: "2025-08-05T10:00:00Z",
     });
     expect(isDepositPaid(client)).toBe(false);
     expect(canShowGuidedDataSetup(client)).toBe(false);

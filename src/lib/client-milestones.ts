@@ -9,13 +9,13 @@ import { isPreviewApprovedForCurrentRevision } from "./preview-review";
 
 export const MILESTONE_LABELS: Record<ClientMilestone, string> = {
   intake: "Intake",
-  discovery: "Discovery",
-  "scope-confirmed": "Scope confirmed",
+  discovery: "Discovery Call",
+  "scope-confirmed": "Scope and pricing",
   deposit: "Deposit",
-  "guided-data-setup": "Guided data setup",
+  "guided-data-setup": "Guided Data Setup",
   building: "Building",
   "client-review": "Client review",
-  "final-balance": "Final payment",
+  "final-balance": "Final Payment",
   active: "Active",
 };
 
@@ -30,6 +30,8 @@ export const CONNECTION_STATUS_LABELS: Record<ConnectionDemoStatus, string> = {
 
 const ADMIN_TOGGLABLE: ClientMilestone[] = [
   "discovery",
+  "scope-confirmed",
+  "deposit",
   "guided-data-setup",
   "building",
   "client-review",
@@ -75,7 +77,10 @@ export function hasIntakeComplete(client: Client): boolean {
 }
 
 export function hasScopeConfirmed(client: Client): boolean {
-  return hasCustomerScopeAcceptanceForDeposit(client);
+  return (
+    client.adminCompletedMilestones?.includes("scope-confirmed") === true ||
+    hasCustomerScopeAcceptanceForDeposit(client)
+  );
 }
 
 export function hasDiscoveryComplete(client: Client): boolean {
@@ -86,29 +91,28 @@ function hasAdminMilestone(client: Client, m: ClientMilestone): boolean {
   return client.adminCompletedMilestones?.includes(m) === true;
 }
 
-/** Journey milestones only — activation (`active` status) is completion, not a step. */
+/** Customer journey only. Scope, pricing, and deposit are admin checks. */
 export function getMilestonesForPath(client: Client): ClientMilestone[] {
-  if (client.onboardingPath === "payment-only") {
-    return [
-      "discovery",
-      "scope-confirmed",
-      "deposit",
-      "guided-data-setup",
-      "building",
-      "client-review",
-      "final-balance",
-    ];
-  }
-  return [
-    "intake",
+  const steps: ClientMilestone[] = [
     "discovery",
-    "scope-confirmed",
-    "deposit",
     "guided-data-setup",
     "building",
-    "client-review",
     "final-balance",
   ];
+  if (client.onboardingPath !== "payment-only") {
+    steps.unshift("intake");
+  }
+  return steps;
+}
+
+/** Customer steps plus the checks RavenView marks after the discovery call. */
+export function getAdminMilestones(client: Client): ClientMilestone[] {
+  const steps = [...getMilestonesForPath(client)];
+  const discoveryAt = steps.indexOf("discovery");
+  steps.splice(discoveryAt + 1, 0, "scope-confirmed", "deposit");
+  const finalAt = steps.indexOf("final-balance");
+  steps.splice(finalAt, 0, "client-review");
+  return steps;
 }
 
 export function isMilestoneComplete(client: Client, milestone: ClientMilestone): boolean {
@@ -120,6 +124,7 @@ export function isMilestoneComplete(client: Client, milestone: ClientMilestone):
     case "scope-confirmed":
       return hasScopeConfirmed(client);
     case "deposit":
+      if (hasAdminMilestone(client, "deposit")) return true;
       if (isLiveBuildPreviewTrack(client)) return hasScopeConfirmed(client);
       return isDepositPaid(client);
     case "final-balance":
@@ -215,10 +220,6 @@ export function isLiveBuildPreviewTrack(client: Client): boolean {
   return client.liveBuildPreviewTrack === true;
 }
 
-function paymentGateSatisfied(client: Client): boolean {
-  return isDepositPaid(client) || isLiveBuildPreviewTrack(client);
-}
-
 export function canShowDepositPreview(client: Client): boolean {
   if (isLiveBuildPreviewTrack(client)) return false;
   if (client.onboardingPath === "payment-only") {
@@ -239,7 +240,12 @@ export function canShowFinalPaymentPreview(client: Client): boolean {
 }
 
 export function canShowGuidedDataSetup(client: Client): boolean {
-  return paymentGateSatisfied(client) && hasScopeConfirmed(client);
+  if (!hasDiscoveryComplete(client)) return false;
+  if (client.onboardingPath === "payment-only" && !client.paymentOnlyPrepConfirmed) {
+    return false;
+  }
+  if (client.onboardingPath === "full" && !hasIntakeComplete(client)) return false;
+  return true;
 }
 
 export function syncGuidedConnectionsFromScope(client: Client): GuidedConnection[] {
@@ -262,37 +268,27 @@ export function syncGuidedConnectionsFromScope(client: Client): GuidedConnection
 export const CLIENT_PHASES = [
   {
     key: "intake",
-    title: "Tell us about your business",
+    title: "Intake",
     milestone: "intake" as ClientMilestone,
   },
   {
     key: "discovery",
-    title: "Discovery call",
+    title: "Discovery Call",
     milestone: "discovery" as ClientMilestone,
   },
   {
-    key: "scope",
-    title: "Scope and pricing",
-    milestone: "scope-confirmed" as ClientMilestone,
-  },
-  {
-    key: "deposit",
-    title: "Deposit",
-    milestone: "deposit" as ClientMilestone,
-  },
-  {
     key: "guided",
-    title: "Guided data setup",
+    title: "Guided Data Setup",
     milestone: "guided-data-setup" as ClientMilestone,
   },
   {
     key: "build",
-    title: "Build and review",
+    title: "Building",
     milestone: "building" as ClientMilestone,
   },
   {
     key: "launch",
-    title: "Final payment and launch",
+    title: "Final Payment",
     milestone: "final-balance" as ClientMilestone,
   },
 ] as const;

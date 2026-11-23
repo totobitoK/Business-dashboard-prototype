@@ -70,8 +70,7 @@ export function getPrimaryManageDrawerSection(
     if (
       action.includes("scope") ||
       action.includes("intake") ||
-      action.includes("onboarding") ||
-      action.includes("discovery")
+      action.includes("onboarding")
     ) {
       return "scope-requirements";
     }
@@ -82,8 +81,8 @@ export function getPrimaryManageDrawerSection(
   }
 
   const stage = getCustomerPortalStage(client);
-  if (stage === "scope-and-deposit" || stage === "onboarding") {
-    return "scope-requirements";
+  if (stage === "discovery" || stage === "onboarding") {
+    return "project-progress";
   }
   if (
     stage === "guided-connections" ||

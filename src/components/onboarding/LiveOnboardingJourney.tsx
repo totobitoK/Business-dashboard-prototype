@@ -6,14 +6,11 @@ import { ClientOnboardingJourney } from "@/components/onboarding/ClientOnboardin
 import { LiveBuildPreviewSection } from "@/components/onboarding/LiveBuildPreviewSection";
 import { ClientPageShell } from "@/components/onboarding/PaymentPreview";
 import {
-  customerAcceptScopeAction,
-  customerRequestScopeChangesAction,
   saveIntakeDraftAction,
   submitIntakeAction,
 } from "@/lib/actions/milestone2-rpc";
 import { LiveIntakePersistQueue } from "@/lib/onboarding-live-intake-persist";
 import type { OnboardingIntakeApi } from "@/lib/onboarding-intake-api";
-import type { OnboardingScopeApi } from "@/lib/onboarding-scope-api";
 import type { Client, ClientOnboardingAnswers, ClientOnboardingDraft } from "@/lib/types";
 import { toFullAnswers } from "@/lib/onboarding-form";
 
@@ -78,30 +75,10 @@ export function LiveOnboardingJourney({
     [queue, refresh]
   );
 
-  const scopeApi: OnboardingScopeApi = useMemo(
-    () => ({
-      async acceptCustomerScopePricing(projectId, revision, scopeRevisionRowId) {
-        const result = await customerAcceptScopeAction(
-          projectId,
-          revision,
-          scopeRevisionRowId
-        );
-        if (result.ok) refresh();
-        return result;
-      },
-      async requestCustomerScopeChanges(projectId, revision, note) {
-        const result = await customerRequestScopeChangesAction(projectId, revision, note);
-        if (result.ok) refresh();
-        return result;
-      },
-    }),
-    [refresh]
-  );
-
   return (
     <ClientPageShell client={client}>
       <div className="space-y-8">
-        <ClientOnboardingJourney client={client} intakeApi={intakeApi} scopeApi={scopeApi} />
+        <ClientOnboardingJourney client={client} intakeApi={intakeApi} />
         {googleCalendarSection}
         <LiveBuildPreviewSection client={client} />
       </div>

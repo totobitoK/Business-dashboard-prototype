@@ -14,8 +14,8 @@ import {
 import { getActivationEligibility } from "@/lib/client-activation";
 import {
   CONNECTION_STATUS_LABELS,
+  getAdminMilestones,
   getDepositAmount,
-  getMilestoneProgress,
   isMilestoneComplete,
 } from "@/lib/client-milestones";
 import { buildCustomerPortalPreviewUrl } from "@/lib/customer-portal-context";
@@ -131,8 +131,9 @@ export function ManageDrawerBody({ client }: { client: Client }) {
   };
 
   const milestoneSummary = useMemo(() => {
-    const { completed, total } = getMilestoneProgress(client);
-    return `${completed}/${total} milestones complete`;
+    const path = getAdminMilestones(client);
+    const completed = path.filter((milestone) => isMilestoneComplete(client, milestone)).length;
+    return `${completed}/${path.length} checks complete`;
   }, [client]);
 
   const scopeSummary = (() => {

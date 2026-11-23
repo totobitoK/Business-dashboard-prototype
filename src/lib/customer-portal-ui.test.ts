@@ -4,14 +4,13 @@ import { getCustomerPortalStage } from "./customer-portal-stage";
 import { getPortalCustomerBlockers, getPortalNextAction } from "./customer-portal-ui";
 
 describe("customer portal UI helpers", () => {
-  it("surfaces deposit blocker when scope confirmed but deposit unpaid", () => {
-    const alpine = {
-      ...demoClients.find((c) => c.id === "client-8")!,
-      setupPaidAmount: 0,
-      payments: [],
-    };
-    const blockers = getPortalCustomerBlockers(alpine, "scope-and-deposit");
-    expect(blockers.some((b) => b.toLowerCase().includes("deposit"))).toBe(true);
+  it("keeps discovery as the customer step after intake", () => {
+    const greenleaf = demoClients.find((c) => c.id === "client-3")!;
+    const stage = getCustomerPortalStage(greenleaf);
+    expect(stage).toBe("discovery");
+    expect(getPortalNextAction(greenleaf, stage).title).toBe("Discovery Call");
+    const blockers = getPortalCustomerBlockers(greenleaf, stage);
+    expect(blockers.some((b) => b.toLowerCase().includes("pay"))).toBe(false);
   });
 
   it("preview-ready uses in-page primary action", () => {

@@ -1,5 +1,4 @@
 import {
-  canShowDepositPreview,
   getClientPhases,
   getMilestoneProgress,
   getMilestoneProgressPercent,
@@ -8,12 +7,6 @@ import {
   isMilestoneComplete,
 } from "./client-milestones";
 import { getDiscoverySchedulingUrl, getGuidedSetupSchedulingUrl } from "./onboarding-config";
-import {
-  hasCustomerAcceptedCurrentPublishedScope,
-  hasPendingScopeChangeRequest,
-  hasPublishedScopeForReview,
-  needsCustomerScopeAcceptance,
-} from "./scope-acceptance";
 import type { Client, ClientMilestone } from "./types";
 
 export type OnboardingJourneyBlocker = {
@@ -38,45 +31,11 @@ export function getOnboardingJourneyBlockers(client: Client): OnboardingJourneyB
     });
   }
 
-  if (
-    hasPublishedScopeForReview(client) &&
-    needsCustomerScopeAcceptance(client) &&
-    !hasPendingScopeChangeRequest(client)
-  ) {
+  if (hasIntakeComplete(client) && !isMilestoneComplete(client, "discovery")) {
     blockers.push({
-      id: "scope-accept",
-      message: "Review and accept scope & pricing, or request changes.",
+      id: "discovery",
+      message: "Book your discovery call so we can align on goals.",
     });
-  }
-
-  if (hasPendingScopeChangeRequest(client)) {
-    blockers.push({
-      id: "scope-changes",
-      message: "We are reviewing your scope change request.",
-    });
-  }
-
-  if (
-    isMilestoneComplete(client, "scope-confirmed") === false &&
-    hasIntakeComplete(client) &&
-    !hasPublishedScopeForReview(client) &&
-    !needsCustomerScopeAcceptance(client)
-  ) {
-    if (client.onboardingPath === "full" || client.paymentOnlyPrepConfirmed) {
-      blockers.push({
-        id: "scope-publish",
-        message: "RavenView is preparing your proposed scope and pricing.",
-      });
-    }
-  }
-
-  if (!canShowDepositPreview(client) && isMilestoneComplete(client, "discovery") === false) {
-    if (hasIntakeComplete(client)) {
-      blockers.push({
-        id: "discovery",
-        message: "Book your discovery call so we can align on goals.",
-      });
-    }
   }
 
   return blockers;
@@ -116,7 +75,7 @@ export function getCurrentOnboardingTask(client: Client): CurrentOnboardingTask 
         phaseKey: current.key,
         title: current.title,
         milestone: current.milestone,
-        description: "Tell us about your business and reporting goals.",
+        description: "Confirm your company, contact, and the tools you use.",
         customerAction: "Complete the intake form below.",
         ravenViewAction: null,
       };
@@ -125,66 +84,23 @@ export function getCurrentOnboardingTask(client: Client): CurrentOnboardingTask 
         phaseKey: current.key,
         title: current.title,
         milestone: current.milestone,
-        description: "Align on dashboard goals and next steps.",
+        description: "Scope, pricing, and the deposit are settled on this call.",
         customerAction: getDiscoverySchedulingUrl()
           ? "Book your discovery call."
           : "Watch for RavenView to schedule your call.",
         ravenViewAction: getDiscoverySchedulingUrl() ? null : "We will reach out to schedule.",
-      };
-    case "scope":
-      if (needsCustomerScopeAcceptance(client)) {
-        return {
-          phaseKey: current.key,
-          title: current.title,
-          milestone: current.milestone,
-          description: "Review tools, screens, and fees before your deposit.",
-          customerAction: "Accept scope & pricing or request changes.",
-          ravenViewAction: null,
-        };
-      }
-      if (hasPendingScopeChangeRequest(client)) {
-        return {
-          phaseKey: current.key,
-          title: current.title,
-          milestone: current.milestone,
-          description: "Your change request is with our team.",
-          customerAction: null,
-          ravenViewAction: "Review requested scope changes and publish an update.",
-        };
-      }
-      return {
-        phaseKey: current.key,
-        title: current.title,
-        milestone: current.milestone,
-        description: "We will publish scope, tools, and pricing for your review.",
-        customerAction: null,
-        ravenViewAction: "Prepare and publish proposed scope.",
-      };
-    case "deposit":
-      return {
-        phaseKey: current.key,
-        title: current.title,
-        milestone: current.milestone,
-        description: "Secure your build slot with the agreed deposit.",
-        customerAction: hasCustomerAcceptedCurrentPublishedScope(client)
-          ? "Complete deposit payment."
-          : "Accept scope & pricing first.",
-        ravenViewAction: null,
       };
     case "guided":
       return {
         phaseKey: current.key,
         title: current.title,
         milestone: current.milestone,
-        description: "Connect the tools in your agreed scope on a live call with RavenView.",
-        customerAction:
-          isMilestoneComplete(client, "guided-data-setup")
-            ? null
-            : isMilestoneComplete(client, "deposit")
-              ? getGuidedSetupSchedulingUrl()
-                ? "Schedule guided setup."
-                : "We will contact you to arrange setup."
-              : "Available after deposit.",
+        description: "Connect your tools on a live call with RavenView.",
+        customerAction: isMilestoneComplete(client, "guided-data-setup")
+          ? null
+          : getGuidedSetupSchedulingUrl()
+            ? "Schedule guided data setup."
+            : "We will contact you to arrange setup.",
         ravenViewAction: isMilestoneComplete(client, "guided-data-setup")
           ? null
           : "We will not mark setup complete until after the call.",
@@ -207,7 +123,7 @@ export function getCurrentOnboardingTask(client: Client): CurrentOnboardingTask 
         phaseKey: current.key,
         title: current.title,
         milestone: current.milestone,
-        description: "Pay remaining setup balance and go live.",
+        description: "Pay the remaining setup balance and go live.",
         customerAction: isMilestoneComplete(client, "client-review")
           ? "Pay remaining setup balance."
           : "Approve your dashboard preview first.",
@@ -230,6 +146,6 @@ export function getOnboardingProgressSummary(client: Client): {
     label:
       client.status === "active"
         ? "Live"
-        : `${completed} of ${total} milestones complete`,
+        : `${completed} of ${total} steps complete`,
   };
 }

@@ -156,7 +156,7 @@ function PortalProgressSummary({
   const barValue = isLive ? 100 : percent;
   const countLabel = isLive
     ? "Launch complete"
-    : `${completed} of ${total} milestones`;
+    : `${completed} of ${total} steps`;
 
   return (
     <div className="mt-2 space-y-3">
